@@ -24,6 +24,8 @@ data class ReminderEntity(
     @ColumnInfo(name = "target_day") val targetDay: Int? = null,
     @ColumnInfo(name = "holiday_name") val holidayName: String? = null,
     @ColumnInfo(name = "advance_days") val advanceDays: Int = 3,
+    @ColumnInfo(name = "reminder_hour") val reminderHour: Int = 9,
+    @ColumnInfo(name = "reminder_minute") val reminderMinute: Int = 0,
 
     // === 通用字段 ===
     @ColumnInfo(name = "title") val title: String,

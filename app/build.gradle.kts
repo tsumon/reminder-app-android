@@ -75,6 +75,10 @@ dependencies {
     // Core
     implementation("androidx.core:core-ktx:1.12.0")
 
+    // OkHttp + Gson (AI API calls)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.google.code.gson:gson:2.10.1")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

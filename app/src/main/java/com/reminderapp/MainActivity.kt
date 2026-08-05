@@ -31,7 +31,9 @@ class MainActivity : ComponentActivity() {
                         navController = navController,
                         database = app.database,
                         scheduler = app.scheduler,
-                        notificationMgr = app.notificationManager
+                        notificationMgr = app.notificationManager,
+                        aiService = app.aiService,
+                        aiSettings = app.aiSettings
                     )
                 }
             }

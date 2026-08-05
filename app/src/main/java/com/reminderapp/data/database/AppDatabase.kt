@@ -11,7 +11,7 @@ import com.reminderapp.data.entity.ReminderRecordEntity
 
 @Database(
     entities = [ReminderEntity::class, ReminderRecordEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

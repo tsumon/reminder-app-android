@@ -16,12 +16,20 @@ class ReminderApp : Application() {
     lateinit var notificationManager: NotificationManager
         private set
 
+    lateinit var aiService: AIService
+        private set
+
+    lateinit var aiSettings: AISettings
+        private set
+
     override fun onCreate() {
         super.onCreate()
         instance = this
         database = AppDatabase.getInstance(this)
         scheduler = ReminderScheduler(this)
         notificationManager = NotificationManager(this)
+        aiService = AIService()
+        aiSettings = AISettings(this)
     }
 
     companion object {

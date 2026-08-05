@@ -26,4 +26,12 @@ interface ReminderDao {
 
     @Query("UPDATE reminders SET is_active = 0 WHERE id = :id")
     suspend fun softDelete(id: Long)
+
+    @Query("SELECT * FROM reminders WHERE is_active = 1 ORDER BY next_trigger_at ASC")
+    suspend fun getAllSync(): List<ReminderEntity>
+
+    @Query("DELETE FROM reminders WHERE id = :id")
+    suspend fun delete(reminder: ReminderEntity) {
+        deleteById(reminder.id)
+    }
 }
