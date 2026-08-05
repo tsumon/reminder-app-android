@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.reminderapp.ReminderApp
 import com.reminderapp.data.database.AppDatabase
 import com.reminderapp.data.entity.ReminderEntity
 import com.reminderapp.model.ReminderStatus
@@ -61,7 +62,7 @@ fun AIChatScreen(
 ) {
     val scope = rememberCoroutineScope()
     val gson = remember { Gson() }
-    val voiceService = remember { VoiceService(App.instance) }
+    val voiceService = remember { VoiceService(ReminderApp.instance) }
     val context = LocalContext.current
 
     var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
@@ -342,7 +343,9 @@ private suspend fun sendToAI(
     gson: Gson,
     onMessages: (List<ChatMessage>) -> Unit
 ) {
-    var msgs = onMessages
+    var msgs = mutableListOf(
+        ChatMessage(role = ChatMessage.Role.USER, content = userText)
+    )
     var loading = true
 
     val conversation = mutableListOf<Map<String, Any?>>(
@@ -373,20 +376,20 @@ private suspend fun sendToAI(
             }
 
             val content = reply.content ?: "好的，已处理。"
-            msgs = msgs + ChatMessage(role = ChatMessage.Role.ASSISTANT, content = content)
+            msgs.add(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = content))
             loading = false
             onMessages(msgs)
             return
 
         } catch (e: Exception) {
-            msgs = msgs + ChatMessage(role = ChatMessage.Role.ASSISTANT, content = "❌ ${e.message}")
+            msgs.add(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = "❌ ${e.message}"))
             loading = false
             onMessages(msgs)
             return
         }
     }
 
-    msgs = msgs + ChatMessage(role = ChatMessage.Role.ASSISTANT, content = "对话轮次过多，请重新描述你的需求。")
+    msgs.add(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = "对话轮次过多，请重新描述你的需求。"))
     onMessages(msgs)
 }
 
@@ -438,7 +441,7 @@ private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase,
         dateType = dateType, targetMonth = targetMonth, targetDay = targetDay,
         advanceDays = advanceDays, reminderHour = reminderHour, reminderMinute = reminderMinute,
         holidayName = holidayName, firstTriggerAt = firstTrigger, nextTriggerAt = firstTrigger,
-        status = ReminderStatus.PENDING.name.lowercase(), retryCount = 0, isEnabled = true
+        status = ReminderStatus.PENDING.name.lowercase(), retryCount = 0, isActive = true
     )
 
     val id = database.reminderDao().insert(entity)
