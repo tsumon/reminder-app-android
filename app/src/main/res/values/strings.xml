@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">循环提醒器</string>
+    <string name="tab_reminding">提醒中</string>
+    <string name="tab_waiting">等待中</string>
+    <string name="tab_completed">已完成</string>
+    <string name="create_reminder">新建提醒</string>
+    <string name="edit_reminder">编辑提醒</string>
+    <string name="confirm_done">确认完成</string>
+    <string name="snooze">稍后提醒</string>
+    <string name="save">保存</string>
+    <string name="cancel">取消</string>
+    <string name="delete">删除</string>
+    <string name="title">标题</string>
+    <string name="note">备注（可选）</string>
+    <string name="reminder_type">提醒类型</string>
+    <string name="cycle_reminder">周期提醒</string>
+    <string name="date_reminder">日期提醒</string>
+    <string name="cycle_daily">每天</string>
+    <string name="cycle_weekly">每周</string>
+    <string name="cycle_biweekly">每两周</string>
+    <string name="cycle_monthly">每月</string>
+    <string name="cycle_quarterly">每季度</string>
+    <string name="cycle_yearly">每年</string>
+    <string name="cycle_custom">自定义天数</string>
+    <string name="solar_birthday">新历生日</string>
+    <string name="lunar_birthday">农历生日</string>
+    <string name="holiday">节假日</string>
+    <string name="advance_days">提前提醒天数</string>
+    <string name="first_trigger_time">首次提醒时间</string>
+    <string name="reminder_date">提醒日期</string>
+    <string name="reminder_time">提醒时间</string>
+    <string name="notification_channel_name">循环提醒</string>
+    <string name="notification_channel_desc">提醒事项通知，含确认和稍后操作</string>
+    <string name="advance_channel_name">提前预告</string>
+    <string name="advance_channel_desc">日期提醒的提前预告通知</string>
+    <string name="confirm_action">确认完成</string>
+    <string name="snooze_action">稍后提醒</string>
+    <string name="no_reminders">暂无提醒</string>
+    <string name="empty_hint">点击右下角 + 创建新提醒</string>
+</resources>
