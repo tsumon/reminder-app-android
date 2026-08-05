@@ -12,6 +12,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,7 +37,9 @@ fun HomeScreen(
     onAIChat: () -> Unit,
     onDeleteReminder: (Long) -> Unit,
     onExport: () -> Unit = {},
-    onImport: () -> Unit = {}
+    onImport: () -> Unit = {},
+    onOpenSyncSettings: () -> Unit = {},
+    onSyncNow: () -> Unit = {}
 ) {
     val grouped by viewModel.groupedReminders.collectAsState()
     val allReminders by viewModel.allReminders.collectAsState()
@@ -72,6 +76,23 @@ fun HomeScreen(
                             expanded = menuExpanded,
                             onDismissRequest = { menuExpanded = false }
                         ) {
+                            DropdownMenuItem(
+                                text = { Text("立即同步") },
+                                leadingIcon = { Icon(Icons.Default.Sync, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onSyncNow()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("同步设置") },
+                                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onOpenSyncSettings()
+                                }
+                            )
+                            Divider()
                             DropdownMenuItem(
                                 text = { Text("导入提醒") },
                                 leadingIcon = { Icon(Icons.Default.FileDownload, contentDescription = null) },
