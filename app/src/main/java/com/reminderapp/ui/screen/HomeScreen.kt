@@ -1,6 +1,7 @@
 package com.reminderapp.ui.screen
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,15 +23,20 @@ import com.reminderapp.ui.viewmodel.HomeViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
     onCreateReminder: () -> Unit,
     onReminderClick: (Long) -> Unit,
-    onAIChat: () -> Unit
+    onAIChat: () -> Unit,
+    onDeleteReminder: (Long) -> Unit
 ) {
     val grouped by viewModel.groupedReminders.collectAsState()
+    val allReminders by viewModel.allReminders.collectAsState()
+
+    // 长按删除确认框状态
+    var pendingDelete by remember { mutableStateOf<ReminderEntity?>(null) }
 
     Scaffold(
         topBar = {
@@ -64,45 +70,50 @@ fun HomeScreen(
         val waiting = grouped.waiting
         val completed = grouped.completed
 
-        if (reminding.isEmpty() && waiting.isEmpty() && completed.isEmpty()) {
-            // 空状态
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        "📭",
-                        style = MaterialTheme.typography.headlineLarge
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "暂无提醒",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        "点击右下角 + 创建新提醒",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // 日历卡片（始终显示）
+            item { CalendarCard(reminders = allReminders) }
+
+            if (reminding.isEmpty() && waiting.isEmpty() && completed.isEmpty()) {
+                // 空状态
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 48.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "📭",
+                                style = MaterialTheme.typography.headlineLarge
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                "暂无提醒",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "点击右下角 + 创建新提醒",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            } else {
                 // 提醒中
                 if (reminding.isNotEmpty()) {
                     item { SectionHeader("提醒中", StatusReminding) }
                     items(reminding, key = { it.id }) { reminder ->
-                        ReminderCard(reminder, StatusReminding) { onReminderClick(reminder.id) }
+                        ReminderCard(reminder, StatusReminding, onDelete = { pendingDelete = reminder }) { onReminderClick(reminder.id) }
                     }
                 }
 
@@ -110,7 +121,7 @@ fun HomeScreen(
                 if (waiting.isNotEmpty()) {
                     item { SectionHeader("等待中", StatusWaiting) }
                     items(waiting, key = { it.id }) { reminder ->
-                        ReminderCard(reminder, StatusWaiting) { onReminderClick(reminder.id) }
+                        ReminderCard(reminder, StatusWaiting, onDelete = { pendingDelete = reminder }) { onReminderClick(reminder.id) }
                     }
                 }
 
@@ -118,11 +129,35 @@ fun HomeScreen(
                 if (completed.isNotEmpty()) {
                     item { SectionHeader("已完成", StatusCompleted) }
                     items(completed, key = { it.id }) { reminder ->
-                        ReminderCard(reminder, StatusCompleted) { onReminderClick(reminder.id) }
+                        ReminderCard(reminder, StatusCompleted, onDelete = { pendingDelete = reminder }) { onReminderClick(reminder.id) }
                     }
                 }
             }
         }
+    }
+
+    // 删除确认对话框
+    pendingDelete?.let { reminder ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("删除提醒") },
+            text = { Text("确定要删除「${reminder.title}」吗？此操作不可恢复。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteReminder(reminder.id)
+                        pendingDelete = null
+                    }
+                ) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 }
 
@@ -136,8 +171,26 @@ fun SectionHeader(title: String, color: Color) {
     )
 }
 
+/** 规则提醒的显示文本，如「每季度第2周周二」 */
+fun ruleLabel(reminder: ReminderEntity): String {
+    val periodLabel = when (reminder.rulePeriod) {
+        "monthly" -> "每月"
+        "yearly" -> "每年"
+        else -> "每季度"
+    }
+    val weekday = arrayOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+        .getOrElse((reminder.ruleWeekday ?: 1) - 1) { "周${reminder.ruleWeekday}" }
+    return "${periodLabel}第${reminder.ruleWeek ?: 1}周$weekday"
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ReminderCard(reminder: ReminderEntity, statusColor: Color, onClick: () -> Unit) {
+fun ReminderCard(
+    reminder: ReminderEntity,
+    statusColor: Color,
+    onDelete: () -> Unit,
+    onClick: () -> Unit
+) {
     val dateFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
     val statusText = when (reminder.status) {
         "notifying" -> "需要确认"
@@ -149,13 +202,17 @@ fun ReminderCard(reminder: ReminderEntity, statusColor: Color, onClick: () -> Un
         reminder.kind == "date" && reminder.dateType == "holiday" -> "🎉${reminder.holidayName ?: ""}"
         reminder.kind == "date" && reminder.dateType == "lunar_birthday" -> "🌙农历生日"
         reminder.kind == "date" && reminder.dateType == "solar_birthday" -> "🎂生日"
+        reminder.kind == "rule" -> ruleLabel(reminder)
         else -> reminder.cycle
     }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onDelete
+            ),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),

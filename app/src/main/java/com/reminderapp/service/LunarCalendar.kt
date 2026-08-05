@@ -50,6 +50,79 @@ object LunarCalendar {
     )
 
     /**
+     * 农历日期结构
+     */
+    data class LunarDate(
+        val year: Int,
+        val month: Int,
+        val day: Int,
+        val isLeapMonth: Boolean
+    ) {
+        /** 中文描述，如「正月初一」「闰四月初五」 */
+        val description: String
+            get() {
+                val monthNames = arrayOf("正", "二", "三", "四", "五", "六", "七", "八", "九", "十", "冬", "腊")
+                val prefix = if (isLeapMonth) "闰" else ""
+                return "$prefix${monthNames[month - 1]}月${lunarDayNames[day]}"
+            }
+    }
+
+    /**
+     * 将公历时间戳转换为农历日期
+     */
+    fun solarToLunar(timestamp: Long): LunarDate? {
+        val cal = Calendar.getInstance().apply { timeInMillis = timestamp }
+        val year = cal.get(Calendar.YEAR)
+        if (year < START_YEAR || year > END_YEAR) return null
+
+        // 基准日：1900-01-31 是农历庚子年正月初一
+        val baseCal = Calendar.getInstance().apply {
+            set(1900, Calendar.JANUARY, 31, 0, 0, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val offset = ((timestamp - baseCal.timeInMillis) / 86400000L).toInt()
+        if (offset < 0) return null
+
+        // 定位农历年
+        var lunarYear = START_YEAR
+        var daysRemaining = offset
+        while (lunarYear <= END_YEAR) {
+            val yearDays = getLunarYearDays(lunarYear)
+            if (daysRemaining < yearDays) break
+            daysRemaining -= yearDays
+            lunarYear++
+        }
+        if (lunarYear > END_YEAR) return null
+
+        val info = lunarInfo[lunarYear - START_YEAR]
+        val leapMonth = (info and 0xf0000) shr 16
+
+        // 定位农历月（含闰月）
+        var lunarMonth = 1
+        var isLeap = false
+        var m = 1
+        while (m <= 12) {
+            val monthDays = getLunarMonthDays(lunarYear, m, false)
+            if (daysRemaining < monthDays) break
+            daysRemaining -= monthDays
+
+            // 该月有闰月
+            if (leapMonth == m) {
+                val leapDays = getLunarMonthDays(lunarYear, m, true)
+                if (daysRemaining < leapDays) {
+                    lunarMonth = m
+                    isLeap = true
+                    return LunarDate(lunarYear, lunarMonth, daysRemaining + 1, isLeap)
+                }
+                daysRemaining -= leapDays
+            }
+            m++
+        }
+        lunarMonth = m
+        return LunarDate(lunarYear, lunarMonth, daysRemaining + 1, isLeap)
+    }
+
+    /**
      * 将农历月日转换为当年公历日期
      * @return 公历日期的毫秒时间戳，如果该年没有该农历日期则返回 null
      */

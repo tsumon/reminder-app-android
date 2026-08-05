@@ -13,6 +13,9 @@ data class Reminder(
     val targetDay: Int?,
     val holidayName: String?,
     val advanceDays: Int,
+    val rulePeriod: RulePeriod? = null,
+    val ruleWeek: Int? = null,
+    val ruleWeekday: Int? = null,
     val title: String,
     val note: String,
     val status: ReminderStatus,
@@ -23,7 +26,17 @@ data class Reminder(
     val createdAt: Long
 )
 
-enum class ReminderKind { CYCLE, DATE }
+enum class ReminderKind { CYCLE, DATE, RULE }
+
+enum class RulePeriod(val label: String) {
+    MONTHLY("每月"),
+    QUARTERLY("每季度"),
+    YEARLY("每年")
+}
+
+// 周一=1 ... 周日=7
+val weekdayLabels = arrayOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+val weekLabels = arrayOf("第1周", "第2周", "第3周", "第4周", "第5周")
 
 enum class Cycle(val label: String) {
     DAILY("每天"),
