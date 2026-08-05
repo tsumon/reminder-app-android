@@ -47,6 +47,7 @@ class HomeViewModel(
             scheduler.cancel(id)
             recordDao.deleteByReminderId(id)
             dao.softDelete(id)
+            com.reminderapp.service.SyncStore.touchLocalChange()
             com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
         }
     }
@@ -88,6 +89,7 @@ class ReminderDetailViewModel(
             scheduler.schedule(updated)
             notificationMgr.cancelReminderNotifications(r.id)
             _reminder.value = updated
+            com.reminderapp.service.SyncStore.touchLocalChange()
             com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
         }
     }
@@ -126,6 +128,7 @@ class ReminderDetailViewModel(
             scheduler.cancel(r.id)
             recordDao.deleteByReminderId(r.id)
             dao.softDelete(r.id)
+            com.reminderapp.service.SyncStore.touchLocalChange()
             com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
         }
     }

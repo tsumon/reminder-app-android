@@ -20,6 +20,18 @@ class MainActivity : ComponentActivity() {
 
         val app = application as ReminderApp
 
+        // 启动时自动同步（如果开启了且已配置）
+        if (com.reminderapp.service.SyncStore.autoSync &&
+            com.reminderapp.service.SyncStore.isConfigured
+        ) {
+            Thread {
+                Thread.sleep(2000) // 等待界面就绪
+                kotlinx.coroutines.runBlocking {
+                    com.reminderapp.service.WebDavSync.syncNow(applicationContext)
+                }
+            }.start()
+        }
+
         setContent {
             ReminderAppTheme {
                 Surface(

@@ -13,6 +13,7 @@ import com.reminderapp.service.ReminderScheduler
 import com.reminderapp.ui.screen.CreateReminderScreen
 import com.reminderapp.ui.screen.HomeScreen
 import com.reminderapp.ui.screen.ReminderDetailScreen
+import com.reminderapp.ui.screen.SyncSettingsScreen
 import com.reminderapp.ui.screen.AIChatScreen
 import com.reminderapp.ui.screen.AISettingsScreen
 import com.reminderapp.ui.viewmodel.HomeViewModel
@@ -68,10 +69,14 @@ fun NavGraph(
                             val newId = database.reminderDao().insert(r)
                             scheduler.schedule(r.copy(id = newId))
                         }
+                        com.reminderapp.service.SyncStore.touchLocalChange()
                         com.reminderapp.receiver.ReminderWidgetProvider.refresh(context)
                     }
                 }
             }
+
+            // 立即同步
+            val scope2 = rememberCoroutineScope()
 
             HomeScreen(
                 viewModel = viewModel,
@@ -80,7 +85,18 @@ fun NavGraph(
                 onAIChat = { navController.navigate("chat") },
                 onDeleteReminder = { id -> viewModel.deleteReminder(id) },
                 onExport = { exportLauncher.launch("reminder_backup_${System.currentTimeMillis() / 1000}.json") },
-                onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }
+                onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
+                onOpenSyncSettings = { navController.navigate("sync_settings") },
+                onSyncNow = {
+                    scope2.launch {
+                        val result = com.reminderapp.service.WebDavSync.syncNow(context)
+                        val msg = when (result) {
+                            is com.reminderapp.service.WebDavSync.SyncResult.Success -> "同步完成"
+                            is com.reminderapp.service.WebDavSync.SyncResult.Error -> result.message
+                        }
+                        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
             )
         }
 
@@ -103,6 +119,13 @@ fun NavGraph(
             )
         }
 
+        composable("sync_settings") {
+            SyncSettingsScreen(
+                onBack = { navController.popBackStack() },
+                onSyncResult = {}
+            )
+        }
+
         composable("create") {
             val scope = rememberCoroutineScope()
             val context = androidx.compose.ui.platform.LocalContext.current
@@ -112,6 +135,7 @@ fun NavGraph(
                         val id = database.reminderDao().insert(entity)
                         val saved = entity.copy(id = id)
                         scheduler.schedule(saved)
+                        com.reminderapp.service.SyncStore.touchLocalChange()
                         com.reminderapp.receiver.ReminderWidgetProvider.refresh(context)
                         navController.popBackStack()
                     }
