@@ -12,6 +12,9 @@ import androidx.compose.ui.unit.dp
 import com.reminderapp.data.entity.ReminderEntity
 import com.reminderapp.model.Cycle
 import com.reminderapp.model.DateReminderType
+import com.reminderapp.model.RulePeriod
+import com.reminderapp.model.weekLabels
+import com.reminderapp.model.weekdayLabels
 import com.reminderapp.service.HolidayService
 import com.reminderapp.service.LunarCalendar
 import com.reminderapp.service.ReminderEngine
@@ -29,6 +32,7 @@ fun CreateReminderScreen(
     var title by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var isDateMode by remember { mutableStateOf(false) }
+    var isRuleMode by remember { mutableStateOf(false) }
     var selectedCycle by remember { mutableStateOf(Cycle.WEEKLY) }
     var customDays by remember { mutableIntStateOf(1) }
     var selectedDateType by remember { mutableStateOf<DateReminderType?>(null) }
@@ -36,6 +40,10 @@ fun CreateReminderScreen(
     var targetDay by remember { mutableIntStateOf(1) }
     var selectedHolidayName by remember { mutableStateOf<String?>(null) }
     var advanceDays by remember { mutableIntStateOf(3) }
+    // 规则提醒字段
+    var rulePeriod by remember { mutableStateOf(RulePeriod.QUARTERLY) }
+    var ruleWeek by remember { mutableIntStateOf(2) }
+    var ruleWeekday by remember { mutableIntStateOf(2) } // 周二
 
     // 日期时间选择
     val now = Calendar.getInstance()
@@ -45,9 +53,13 @@ fun CreateReminderScreen(
     var triggerHour by remember { mutableIntStateOf(9) }
     var triggerMinute by remember { mutableIntStateOf(0) }
 
+    // 下拉展开状态
     var cycleExpanded by remember { mutableStateOf(false) }
     var dateTypeExpanded by remember { mutableStateOf(false) }
     var holidayExpanded by remember { mutableStateOf(false) }
+    var rulePeriodExpanded by remember { mutableStateOf(false) }
+    var ruleWeekExpanded by remember { mutableStateOf(false) }
+    var ruleWeekdayExpanded by remember { mutableStateOf(false) }
 
     fun buildFirstTriggerAt(): Long {
         val cal = Calendar.getInstance()
@@ -81,6 +93,20 @@ fun CreateReminderScreen(
                                     targetDay = targetDay,
                                     holidayName = selectedHolidayName,
                                     advanceDays = advanceDays,
+                                    title = title.trim(),
+                                    note = note.trim(),
+                                    firstTriggerAt = firstTrigger,
+                                    nextTriggerAt = firstTrigger
+                                )
+                            } else if (isRuleMode) {
+                                ReminderEntity(
+                                    kind = "rule",
+                                    cycle = "monthly",
+                                    rulePeriod = rulePeriod.name.lowercase(),
+                                    ruleWeek = ruleWeek,
+                                    ruleWeekday = ruleWeekday,
+                                    reminderHour = triggerHour,
+                                    reminderMinute = triggerMinute,
                                     title = title.trim(),
                                     note = note.trim(),
                                     firstTriggerAt = firstTrigger,
@@ -138,19 +164,110 @@ fun CreateReminderScreen(
             Text("提醒类型", style = MaterialTheme.typography.labelLarge)
             Row {
                 FilterChip(
-                    selected = !isDateMode,
-                    onClick = { isDateMode = false },
+                    selected = !isDateMode && !isRuleMode,
+                    onClick = { isDateMode = false; isRuleMode = false },
                     label = { Text("周期提醒") },
                     modifier = Modifier.padding(end = 8.dp)
                 )
                 FilterChip(
                     selected = isDateMode,
-                    onClick = { isDateMode = true },
-                    label = { Text("日期提醒") }
+                    onClick = { isDateMode = true; isRuleMode = false },
+                    label = { Text("日期提醒") },
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                FilterChip(
+                    selected = isRuleMode,
+                    onClick = { isDateMode = false; isRuleMode = true },
+                    label = { Text("规则提醒") }
                 )
             }
 
-            if (!isDateMode) {
+            if (isRuleMode) {
+                // === 规则提醒：每月/每季度/每年 第N周 周X ===
+                Text("频率", style = MaterialTheme.typography.labelLarge)
+                ExposedDropdownMenuBox(
+                    expanded = rulePeriodExpanded,
+                    onExpandedChange = { rulePeriodExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = rulePeriod.label,
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = rulePeriodExpanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = rulePeriodExpanded,
+                        onDismissRequest = { rulePeriodExpanded = false }
+                    ) {
+                        RulePeriod.entries.forEach { period ->
+                            DropdownMenuItem(
+                                text = { Text(period.label) },
+                                onClick = {
+                                    rulePeriod = period
+                                    rulePeriodExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Text("第几周", style = MaterialTheme.typography.labelLarge)
+                ExposedDropdownMenuBox(
+                    expanded = ruleWeekExpanded,
+                    onExpandedChange = { ruleWeekExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = weekLabels.getOrElse(ruleWeek - 1) { "第${ruleWeek}周" },
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = ruleWeekExpanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = ruleWeekExpanded,
+                        onDismissRequest = { ruleWeekExpanded = false }
+                    ) {
+                        (1..5).forEach { w ->
+                            DropdownMenuItem(
+                                text = { Text("第${w}周") },
+                                onClick = {
+                                    ruleWeek = w
+                                    ruleWeekExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Text("星期几", style = MaterialTheme.typography.labelLarge)
+                ExposedDropdownMenuBox(
+                    expanded = ruleWeekdayExpanded,
+                    onExpandedChange = { ruleWeekdayExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = weekdayLabels.getOrElse(ruleWeekday - 1) { "周${ruleWeekday}" },
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = ruleWeekdayExpanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = ruleWeekdayExpanded,
+                        onDismissRequest = { ruleWeekdayExpanded = false }
+                    ) {
+                        (1..7).forEach { w ->
+                            DropdownMenuItem(
+                                text = { Text(weekdayLabels[w - 1]) },
+                                onClick = {
+                                    ruleWeekday = w
+                                    ruleWeekdayExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            } else if (!isDateMode) {
                 // === 周期提醒 ===
                 // 周期选择
                 Text("周期", style = MaterialTheme.typography.labelLarge)

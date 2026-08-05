@@ -6,6 +6,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Snooze
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -55,6 +56,7 @@ fun ReminderDetailScreen(
 
     val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
     val shortFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -63,6 +65,15 @@ fun ReminderDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showDeleteDialog = true }) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "删除",
+                            tint = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             )
@@ -152,6 +163,16 @@ fun ReminderDetailScreen(
                             infoRow("日期", "${currentReminder.targetMonth ?: 0}月${currentReminder.targetDay ?: 0}日")
                         }
                         infoRow("提前提醒", "${currentReminder.advanceDays} 天")
+                    } else if (currentReminder.kind == "rule") {
+                        infoRow("类型", "规则提醒")
+                        infoRow("频率", when (currentReminder.rulePeriod) {
+                            "monthly" -> "每月"
+                            "yearly" -> "每年"
+                            else -> "每季度"
+                        })
+                        infoRow("周次", "第${currentReminder.ruleWeek ?: 1}周")
+                        infoRow("星期", arrayOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+                            .getOrElse((currentReminder.ruleWeekday ?: 1) - 1) { "周${currentReminder.ruleWeekday}" })
                     } else {
                         infoRow("周期", currentReminder.cycle)
                     }
@@ -203,6 +224,19 @@ fun ReminderDetailScreen(
             }
         }
     }
+
+    // 删除确认对话框
+    if (showDeleteDialog) {
+        DeleteConfirmDialog(
+            title = currentReminder.title,
+            onConfirm = {
+                showDeleteDialog = false
+                viewModel.delete()
+                onBack()
+            },
+            onDismiss = { showDeleteDialog = false }
+        )
+    }
 }
 
 @Composable
@@ -222,4 +256,28 @@ private fun infoRow(label: String, value: String) {
             fontWeight = FontWeight.Medium
         )
     }
+}
+
+// 删除确认对话框（挂在整个 Scaffold 之外）
+@Composable
+private fun DeleteConfirmDialog(
+    title: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("删除提醒") },
+        text = { Text("确定要删除「$title」吗？此操作不可恢复。") },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("删除", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
 }

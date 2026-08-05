@@ -43,7 +43,8 @@ fun NavGraph(
                 viewModel = viewModel,
                 onCreateReminder = { navController.navigate("create") },
                 onReminderClick = { id -> navController.navigate("detail/$id") },
-                onAIChat = { navController.navigate("chat") }
+                onAIChat = { navController.navigate("chat") },
+                onDeleteReminder = { id -> viewModel.deleteReminder(id) }
             )
         }
 

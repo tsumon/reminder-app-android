@@ -31,8 +31,71 @@ object ReminderEngine {
         return when (reminder.kind) {
             "cycle" -> calculateCycleNextTrigger(reminder, now)
             "date" -> calculateDateNextTrigger(reminder, now)
+            "rule" -> calculateRuleNextTrigger(reminder, now)
             else -> now + 86400_000L
         }
+    }
+
+    /**
+     * 规则提醒：每月/每季度/每年 第 N 周 周 X
+     * 例如「每季度第二周周二」→ rulePeriod=quarterly, ruleWeek=2, ruleWeekday=2
+     */
+    private fun calculateRuleNextTrigger(reminder: ReminderEntity, now: Long): Long {
+        val period = reminder.rulePeriod ?: "quarterly"
+        val week = (reminder.ruleWeek ?: 1).coerceIn(1, 5)
+        val weekday = (reminder.ruleWeekday ?: 1).coerceIn(1, 7) // 1=周一 ... 7=周日
+        val hour = reminder.reminderHour.coerceIn(0, 23)
+        val minute = reminder.reminderMinute.coerceIn(0, 59)
+
+        val cal = Calendar.getInstance().apply { timeInMillis = now }
+        val year = cal.get(Calendar.YEAR)
+        val month = cal.get(Calendar.MONTH) + 1
+
+        val monthStep = when (period) {
+            "monthly" -> 1
+            "yearly" -> 12
+            else -> 3 // quarterly
+        }
+        // 当前周期单位的起始月
+        val startMonth = when (period) {
+            "monthly" -> month
+            "yearly" -> 1
+            else -> ((month - 1) / 3) * 3 + 1 // 1月/4月/7月/10月
+        }
+
+        // 从当前周期开始向后找（最多 16 步，覆盖多年）
+        for (i in 0..16) {
+            val candMonth = startMonth + i * monthStep
+            val candYear = year + (candMonth - 1) / 12
+            val m = (candMonth - 1) % 12 + 1
+
+            val target = ruleDateInMonth(candYear, m, week, weekday, hour, minute) ?: continue
+            if (target > now) return target
+        }
+        return now + 86400_000L // fallback：明天
+    }
+
+    /**
+     * 计算某年某月「第 week 周的 weekday」的日期时间戳
+     * 如果该月不存在第 N 个该星期（如第 5 周溢出），返回 null
+     */
+    private fun ruleDateInMonth(
+        year: Int, month: Int, week: Int, weekday: Int, hour: Int, minute: Int
+    ): Long? {
+        val cal = Calendar.getInstance()
+        cal.clear()
+        cal.set(year, month - 1, 1, hour, minute, 0)
+
+        // Calendar.DAY_OF_WEEK: 1=周日...7=周六 → 统一为 周一=1...周日=7
+        val firstDayWeek = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7 + 1
+        val day = 1 + ((weekday - firstDayWeek + 7) % 7) + (week - 1) * 7
+
+        val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+        if (day > maxDay) return null
+
+        cal.set(Calendar.DAY_OF_MONTH, day)
+        cal.set(Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
     }
 
     /**

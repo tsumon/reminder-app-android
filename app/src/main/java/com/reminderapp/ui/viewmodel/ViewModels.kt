@@ -116,4 +116,14 @@ class ReminderDetailViewModel(
             _reminder.value = updated
         }
     }
+
+    /** 删除提醒（取消调度 + 删除记录 + 软删除） */
+    fun delete() {
+        viewModelScope.launch {
+            val r = _reminder.value ?: return@launch
+            scheduler.cancel(r.id)
+            recordDao.deleteByReminderId(r.id)
+            dao.softDelete(r.id)
+        }
+    }
 }

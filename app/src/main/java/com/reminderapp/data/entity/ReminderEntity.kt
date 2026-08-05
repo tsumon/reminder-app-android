@@ -18,6 +18,11 @@ data class ReminderEntity(
     @ColumnInfo(name = "cycle") val cycle: String = "weekly",
     @ColumnInfo(name = "custom_days") val customDays: Int = 0,
 
+    // === 规则提醒字段（kind = "rule"：每月/每季度/每年 第N周周X）===
+    @ColumnInfo(name = "rule_period") val rulePeriod: String? = null,   // monthly / quarterly / yearly
+    @ColumnInfo(name = "rule_week") val ruleWeek: Int? = null,          // 第几周 1-5
+    @ColumnInfo(name = "rule_weekday") val ruleWeekday: Int? = null,    // 周几 1=周一 ... 7=周日
+
     // === 日期提醒字段 ===
     @ColumnInfo(name = "date_type") val dateType: String? = null,
     @ColumnInfo(name = "target_month") val targetMonth: Int? = null,
