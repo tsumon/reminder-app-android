@@ -148,6 +148,11 @@ fun ReminderDetailScreen(
             // 信息卡片
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    infoRow("优先级", when (currentReminder.priority) {
+                        "high" -> "🔴 高"
+                        "low" -> "⚪ 低"
+                        else -> "🟢 中"
+                    })
                     if (currentReminder.kind == "date") {
                         infoRow("类型", "日期提醒")
                         val dateTypeLabel = when (currentReminder.dateType) {

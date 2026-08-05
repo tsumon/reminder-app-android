@@ -38,13 +38,49 @@ fun NavGraph(
                 recordDao = database.reminderRecordDao(),
                 scheduler = scheduler
             )
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val scope = rememberCoroutineScope()
+
+            // 导出：创建 JSON 文件
+            val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")
+            ) { uri ->
+                if (uri != null) {
+                    scope.launch {
+                        val reminders = database.reminderDao().getAllSync()
+                        val json = com.reminderapp.service.BackupService.exportToJson(reminders)
+                        com.reminderapp.service.BackupService.writeToUri(context, uri, json)
+                    }
+                }
+            }
+
+            // 导入：打开 JSON 文件
+            val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+            ) { uri ->
+                if (uri != null) {
+                    scope.launch {
+                        val json = com.reminderapp.service.BackupService.readFromUri(context, uri)
+                            ?: return@launch
+                        val reminders = com.reminderapp.service.BackupService.importFromJson(json)
+                            ?: return@launch
+                        reminders.forEach { r ->
+                            val newId = database.reminderDao().insert(r)
+                            scheduler.schedule(r.copy(id = newId))
+                        }
+                        com.reminderapp.receiver.ReminderWidgetProvider.refresh(context)
+                    }
+                }
+            }
 
             HomeScreen(
                 viewModel = viewModel,
                 onCreateReminder = { navController.navigate("create") },
                 onReminderClick = { id -> navController.navigate("detail/$id") },
                 onAIChat = { navController.navigate("chat") },
-                onDeleteReminder = { id -> viewModel.deleteReminder(id) }
+                onDeleteReminder = { id -> viewModel.deleteReminder(id) },
+                onExport = { exportLauncher.launch("reminder_backup_${System.currentTimeMillis() / 1000}.json") },
+                onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }
             )
         }
 
@@ -69,12 +105,14 @@ fun NavGraph(
 
         composable("create") {
             val scope = rememberCoroutineScope()
+            val context = androidx.compose.ui.platform.LocalContext.current
             CreateReminderScreen(
                 onSave = { entity ->
                     scope.launch {
                         val id = database.reminderDao().insert(entity)
                         val saved = entity.copy(id = id)
                         scheduler.schedule(saved)
+                        com.reminderapp.receiver.ReminderWidgetProvider.refresh(context)
                         navController.popBackStack()
                     }
                 },

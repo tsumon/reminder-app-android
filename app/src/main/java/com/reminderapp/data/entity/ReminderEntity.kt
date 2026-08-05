@@ -35,6 +35,7 @@ data class ReminderEntity(
     // === 通用字段 ===
     @ColumnInfo(name = "title") val title: String,
     @ColumnInfo(name = "note") val note: String = "",
+    @ColumnInfo(name = "priority") val priority: String = "normal", // high / normal / low
     @ColumnInfo(name = "status") val status: String = "idle",
     @ColumnInfo(name = "first_trigger_at") val firstTriggerAt: Long,
     @ColumnInfo(name = "next_trigger_at") val nextTriggerAt: Long,

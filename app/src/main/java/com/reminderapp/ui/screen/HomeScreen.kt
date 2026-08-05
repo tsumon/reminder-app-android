@@ -9,6 +9,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,13 +33,16 @@ fun HomeScreen(
     onCreateReminder: () -> Unit,
     onReminderClick: (Long) -> Unit,
     onAIChat: () -> Unit,
-    onDeleteReminder: (Long) -> Unit
+    onDeleteReminder: (Long) -> Unit,
+    onExport: () -> Unit = {},
+    onImport: () -> Unit = {}
 ) {
     val grouped by viewModel.groupedReminders.collectAsState()
     val allReminders by viewModel.allReminders.collectAsState()
 
     // 长按删除确认框状态
     var pendingDelete by remember { mutableStateOf<ReminderEntity?>(null) }
+    var menuExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -53,7 +59,38 @@ fun HomeScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
-                )
+                ),
+                actions = {
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(
+                                Icons.Default.MoreVert,
+                                contentDescription = "更多"
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("导入提醒") },
+                                leadingIcon = { Icon(Icons.Default.FileDownload, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onImport()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("导出提醒") },
+                                leadingIcon = { Icon(Icons.Default.FileUpload, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onExport()
+                                }
+                            )
+                        }
+                    }
+                }
             )
         },
         floatingActionButton = {
@@ -205,6 +242,11 @@ fun ReminderCard(
         reminder.kind == "rule" -> ruleLabel(reminder)
         else -> reminder.cycle
     }
+    val priorityLabel = when (reminder.priority) {
+        "high" -> "🔴高"
+        "low" -> "⚪低"
+        else -> "🟢中"
+    }
 
     Card(
         modifier = Modifier
@@ -246,7 +288,7 @@ fun ReminderCard(
                 Spacer(modifier = Modifier.height(4.dp))
                 Row {
                     Text(
-                        text = kindLabel,
+                        text = "$priorityLabel · $kindLabel",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
