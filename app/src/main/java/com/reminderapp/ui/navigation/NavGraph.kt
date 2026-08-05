@@ -13,8 +13,12 @@ import com.reminderapp.service.ReminderScheduler
 import com.reminderapp.ui.screen.CreateReminderScreen
 import com.reminderapp.ui.screen.HomeScreen
 import com.reminderapp.ui.screen.ReminderDetailScreen
+import com.reminderapp.ui.screen.AIChatScreen
+import com.reminderapp.ui.screen.AISettingsScreen
 import com.reminderapp.ui.viewmodel.HomeViewModel
 import com.reminderapp.ui.viewmodel.ReminderDetailViewModel
+import com.reminderapp.service.AISettings
+import com.reminderapp.service.AIService
 import kotlinx.coroutines.launch
 
 @Composable
@@ -22,7 +26,9 @@ fun NavGraph(
     navController: NavHostController,
     database: AppDatabase,
     scheduler: ReminderScheduler,
-    notificationMgr: NotificationManager
+    notificationMgr: NotificationManager,
+    aiService: AIService,
+    aiSettings: AISettings
 ) {
     NavHost(navController = navController, startDestination = "home") {
 
@@ -36,7 +42,27 @@ fun NavGraph(
             HomeScreen(
                 viewModel = viewModel,
                 onCreateReminder = { navController.navigate("create") },
-                onReminderClick = { id -> navController.navigate("detail/$id") }
+                onReminderClick = { id -> navController.navigate("detail/$id") },
+                onAIChat = { navController.navigate("chat") }
+            )
+        }
+
+        composable("chat") {
+            AIChatScreen(
+                settings = aiSettings,
+                aiService = aiService,
+                database = database,
+                scheduler = scheduler,
+                notificationMgr = notificationMgr,
+                onBack = { navController.popBackStack() },
+                onNavigateSettings = { navController.navigate("ai_settings") }
+            )
+        }
+
+        composable("ai_settings") {
+            AISettingsScreen(
+                settings = aiSettings,
+                onBack = { navController.popBackStack() }
             )
         }
 

@@ -26,7 +26,8 @@ import java.util.*
 fun HomeScreen(
     viewModel: HomeViewModel,
     onCreateReminder: () -> Unit,
-    onReminderClick: (Long) -> Unit
+    onReminderClick: (Long) -> Unit,
+    onAIChat: () -> Unit
 ) {
     val grouped by viewModel.groupedReminders.collectAsState()
 
@@ -34,6 +35,15 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = { Text("循环提醒器", style = MaterialTheme.typography.headlineMedium) },
+                navigationIcon = {
+                    IconButton(onClick = onAIChat) {
+                        Icon(
+                            Icons.Filled.AutoAwesome,
+                            contentDescription = "AI 助手",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
                 )
