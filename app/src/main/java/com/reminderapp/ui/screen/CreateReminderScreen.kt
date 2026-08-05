@@ -45,6 +45,9 @@ fun CreateReminderScreen(
     var ruleWeek by remember { mutableIntStateOf(2) }
     var ruleWeekday by remember { mutableIntStateOf(2) } // 周二
 
+    // 优先级
+    var priority by remember { mutableStateOf("normal") } // high / normal / low
+
     // 日期时间选择
     val now = Calendar.getInstance()
     var triggerYear by remember { mutableIntStateOf(now.get(Calendar.YEAR)) }
@@ -93,6 +96,7 @@ fun CreateReminderScreen(
                                     targetDay = targetDay,
                                     holidayName = selectedHolidayName,
                                     advanceDays = advanceDays,
+                                    priority = priority,
                                     title = title.trim(),
                                     note = note.trim(),
                                     firstTriggerAt = firstTrigger,
@@ -107,6 +111,7 @@ fun CreateReminderScreen(
                                     ruleWeekday = ruleWeekday,
                                     reminderHour = triggerHour,
                                     reminderMinute = triggerMinute,
+                                    priority = priority,
                                     title = title.trim(),
                                     note = note.trim(),
                                     firstTriggerAt = firstTrigger,
@@ -117,6 +122,7 @@ fun CreateReminderScreen(
                                     kind = "cycle",
                                     cycle = selectedCycle.name.lowercase(),
                                     customDays = customDays,
+                                    priority = priority,
                                     title = title.trim(),
                                     note = note.trim(),
                                     firstTriggerAt = firstTrigger,
@@ -431,6 +437,28 @@ fun CreateReminderScreen(
                         )
                     }
                 }
+            }
+
+            // 优先级
+            Text("优先级", style = MaterialTheme.typography.labelLarge)
+            Row {
+                FilterChip(
+                    selected = priority == "high",
+                    onClick = { priority = "high" },
+                    label = { Text("🔴 高") },
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                FilterChip(
+                    selected = priority == "normal",
+                    onClick = { priority = "normal" },
+                    label = { Text("🟢 中") },
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                FilterChip(
+                    selected = priority == "low",
+                    onClick = { priority = "low" },
+                    label = { Text("⚪ 低") }
+                )
             }
 
             // 提醒时间

@@ -38,4 +38,5 @@
     <string name="snooze_action">稍后提醒</string>
     <string name="no_reminders">暂无提醒</string>
     <string name="empty_hint">点击右下角 + 创建新提醒</string>
+    <string name="widget_description">显示未处理提醒数和最近提醒</string>
 </resources>
