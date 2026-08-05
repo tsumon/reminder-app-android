@@ -216,7 +216,7 @@ fun AISettingsScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(tpl.name, modifier = Modifier.weight(1f))
+                        Text(tpl.displayName, modifier = Modifier.weight(1f))
                         Text(tpl.model, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -234,7 +234,7 @@ fun AISettingsScreen(
                         Column(modifier = Modifier.padding(12.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(p.name, fontWeight = FontWeight.SemiBold)
-                                Spacer()
+                                Spacer(modifier = Modifier.weight(1f))
                                 Surface(color = Color(0xFF4CAF50).copy(alpha = 0.15f), shape = MaterialTheme.shapes.small) {
                                     Text("免费额度", modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                         style = MaterialTheme.typography.labelSmall, color = Color(0xFF4CAF50))
@@ -273,7 +273,7 @@ fun AISettingsScreen(
     }
 }
 
-enum class ProviderTemplate(val endpoint: String, val model: String, val name: String) {
+enum class ProviderTemplate(val endpoint: String, val model: String, val displayName: String) {
     OPENAI("https://api.openai.com/v1", "gpt-4o-mini", "OpenAI"),
     DEEPSEEK("https://api.deepseek.com/v1", "deepseek-chat", "DeepSeek"),
     QWEN("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", "通义千问"),

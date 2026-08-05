@@ -2,6 +2,8 @@ package com.reminderapp
 
 import android.app.Application
 import com.reminderapp.data.database.AppDatabase
+import com.reminderapp.service.AIService
+import com.reminderapp.service.AISettings
 import com.reminderapp.service.NotificationManager
 import com.reminderapp.service.ReminderScheduler
 

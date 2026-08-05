@@ -105,7 +105,7 @@ fun CreateReminderScreen(
                         Text("保存", color = MaterialTheme.colorScheme.primary)
                     }
                 }
-            }
+            )
         }
     ) { padding ->
         Column(
