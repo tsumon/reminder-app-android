@@ -151,6 +151,21 @@ object ReminderEngine {
             attempts++
             if (attempts > 1200) break // 防御：最多推进 100 年
         }
+        // yearly + 2/29：主循环可能停在「非闰年的 2/28」就退出（cursor > now），
+        // 必须继续逐月 +12 找到下一个闰年 2/29，否则提醒永久漂移到 28 号
+        if (cycle == "yearly" && anchorDay == 29 &&
+            cal.get(Calendar.DAY_OF_MONTH) != 29) {
+            var leapAttempts = 0
+            while (cal.get(Calendar.DAY_OF_MONTH) != 29) {
+                cal.add(Calendar.MONTH, 12)
+                if (cal.getActualMaximum(Calendar.DAY_OF_MONTH) >= 29) {
+                    cal.set(Calendar.DAY_OF_MONTH, 29)
+                    break
+                }
+                leapAttempts++
+                if (leapAttempts > 1200) break
+            }
+        }
         return cal.timeInMillis
     }
 
