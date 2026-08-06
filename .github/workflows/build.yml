@@ -27,15 +27,15 @@ jobs:
       - name: Install SDK packages
         run: sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
 
-      - name: Decode signing key (if secret provided)
-        if: ${{ secrets.SIGNING_KEY != '' }}
-        run: echo "${{ secrets.SIGNING_KEY }}" | base64 -d > release.keystore
+      - name: Prepare signing key
         env:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-
-      - name: Generate signing key (fallback)
-        if: ${{ secrets.SIGNING_KEY == '' }}
-        run: keytool -genkey -v -keystore release.keystore -alias reminder -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Reminder App, OU=Dev, O=ReminderApp, L=Unknown, ST=Unknown, C=CN" -storepass android -keypass android
+        run: |
+          if [ -n "$SIGNING_KEY" ]; then
+            echo "$SIGNING_KEY" | base64 -d > release.keystore
+          else
+            keytool -genkey -v -keystore release.keystore -alias reminder -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Reminder App, OU=Dev, O=ReminderApp, L=Unknown, ST=Unknown, C=CN" -storepass android -keypass android
+          fi
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
