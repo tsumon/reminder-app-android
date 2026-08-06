@@ -104,6 +104,7 @@ fun HomeScreen(
     onOpenSyncSettings: () -> Unit = {},
     onOpenStats: () -> Unit = {},
     onExportICS: () -> Unit = {},
+    onCheckUpdate: () -> Unit = {},
     onSyncNow: () -> Unit = {}
 ) {
     val grouped by viewModel.groupedReminders.collectAsState()
@@ -202,6 +203,16 @@ fun HomeScreen(
                                 onClick = {
                                     menuExpanded = false
                                     onExportICS()
+                                }
+                            )
+                            Divider()
+                            // v1.9.0: 主动检查更新
+                            DropdownMenuItem(
+                                text = { Text("检查更新") },
+                                leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onCheckUpdate()
                                 }
                             )
                         }
