@@ -40,6 +40,9 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
+      - name: Run unit tests (lunar calendar regression)
+        run: ./gradlew testDebugUnitTest --no-daemon
+
       - name: Build Release APK
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/release.keystore
