@@ -1,5 +1,6 @@
 package com.reminderapp.ui.screen
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -71,6 +72,10 @@ fun CreateReminderScreen(
     var rulePeriodExpanded by remember { mutableStateOf(false) }
     var ruleWeekExpanded by remember { mutableStateOf(false) }
     var ruleWeekdayExpanded by remember { mutableStateOf(false) }
+
+    // 日期/时间选择弹窗状态
+    var showDateDialog by remember { mutableStateOf(false) }
+    var showTimeDialog by remember { mutableStateOf(false) }
 
     fun buildFirstTriggerAt(): Long {
         val cal = Calendar.getInstance()
@@ -587,25 +592,102 @@ fun CreateReminderScreen(
             }
 
             // 提醒时间
-            Text("提醒时间", style = MaterialTheme.typography.labelLarge)
+            Text("提醒时间（点击选择）", style = MaterialTheme.typography.labelLarge)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = String.format("%02d:%02d", triggerHour, triggerMinute),
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("时间") },
-                    modifier = Modifier.weight(1f)
-                )
-                OutlinedTextField(
-                    value = "${triggerMonth}月${triggerDay}日",
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("日期") },
-                    modifier = Modifier.weight(1f)
-                )
+                Card(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { showDateDialog = true },
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            "日期",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            "${triggerYear}年${triggerMonth}月${triggerDay}日",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                    }
+                }
+                Card(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { showTimeDialog = true },
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            "时间",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            String.format("%02d:%02d", triggerHour, triggerMinute),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
+        }
+
+        // 日期选择弹窗
+        if (showDateDialog) {
+            val initialMillis = Calendar.getInstance().apply {
+                set(triggerYear, triggerMonth - 1, triggerDay)
+            }.timeInMillis
+            val dateState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
+            DatePickerDialog(
+                onDismissRequest = { showDateDialog = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        dateState.selectedDateMillis?.let { millis ->
+                            val cal = Calendar.getInstance().apply { timeInMillis = millis }
+                            triggerYear = cal.get(Calendar.YEAR)
+                            triggerMonth = cal.get(Calendar.MONTH) + 1
+                            triggerDay = cal.get(Calendar.DAY_OF_MONTH)
+                        }
+                        showDateDialog = false
+                    }) { Text("确定") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDateDialog = false }) { Text("取消") }
+                }
+            ) {
+                DatePicker(state = dateState)
+            }
+        }
+
+        // 时间选择弹窗
+        if (showTimeDialog) {
+            val timeState = rememberTimePickerState(
+                initialHour = triggerHour,
+                initialMinute = triggerMinute
+            )
+            AlertDialog(
+                onDismissRequest = { showTimeDialog = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        triggerHour = timeState.hour
+                        triggerMinute = timeState.minute
+                        showTimeDialog = false
+                    }) { Text("确定") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showTimeDialog = false }) { Text("取消") }
+                },
+                text = { TimePicker(state = timeState) }
+            )
         }
     }
 }
