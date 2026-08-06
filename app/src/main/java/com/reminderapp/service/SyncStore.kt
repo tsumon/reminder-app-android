@@ -27,8 +27,17 @@ object SyncStore {
         set(value) = prefs(ReminderApp.instance).edit().putString(KEY_USER, value.trim()).apply()
 
     var password: String
-        get() = prefs(ReminderApp.instance).getString(KEY_PASS, "") ?: ""
-        set(value) = prefs(ReminderApp.instance).edit().putString(KEY_PASS, value).apply()
+        get() {
+            val raw = prefs(ReminderApp.instance).getString(KEY_PASS, "") ?: ""
+            if (raw.isEmpty()) return ""
+            // 兼容升级前的明文：首次读取时透明迁移为加密存储
+            if (!raw.contains(":")) {
+                prefs(ReminderApp.instance).edit().putString(KEY_PASS, CryptoHelper.encrypt(raw)).apply()
+                return raw
+            }
+            return CryptoHelper.decrypt(raw)
+        }
+        set(value) = prefs(ReminderApp.instance).edit().putString(KEY_PASS, CryptoHelper.encrypt(value)).apply()
 
     var autoSync: Boolean
         get() = prefs(ReminderApp.instance).getBoolean(KEY_AUTO_SYNC, false)

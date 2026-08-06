@@ -60,7 +60,10 @@ object WebDavSync {
             }
 
             val remoteVersion = try {
-                JSONObject(remoteJson).optLong("exportedAt", 0L)
+                val raw = JSONObject(remoteJson).optLong("exportedAt", 0L)
+                // 统一时间戳单位：iOS 导出的是「秒」，Android 内部用「毫秒」。
+                // 秒级时间戳远小于 1e12（约 33658 年之前都成立），据此归一化为毫秒。
+                if (raw > 0L && raw < 1_000_000_000_000L) raw * 1000 else raw
             } catch (e: Exception) {
                 0L
             }
@@ -117,13 +120,27 @@ object WebDavSync {
         }
     }
 
-    /** 用远程数据整体替换本地（先软删全部，再插入） */
+    /** 用远程数据整体替换本地（先软删全部，再插入，最后重新调度全部提醒） */
     private suspend fun replaceLocal(
         dao: com.reminderapp.data.dao.ReminderDao,
         items: List<com.reminderapp.data.entity.ReminderEntity>
     ) {
         dao.getAllSync().forEach { dao.softDelete(it.id) }
-        items.forEach { dao.insert(it) }
+
+        // 重新计算下次触发时间，避免导入的陈旧时间戳导致「立即触发」或「永不触发」，
+        // 同时保留已完成状态。
+        val toInsert = items.map { entity ->
+            val next = ReminderEngine.calculateNextTrigger(entity)
+            entity.copy(
+                nextTriggerAt = next,
+                status = if (entity.status == "confirmed") "confirmed" else "pending",
+                retryCount = 0
+            )
+        }
+        toInsert.forEach { dao.insert(it) }
+
+        // 关键：下载覆盖本地后必须重新调度，否则所有提醒不再响，直到重启。
+        ReminderScheduler(ReminderApp.instance).rescheduleAll(toInsert)
         com.reminderapp.receiver.ReminderWidgetProvider.refresh(ReminderApp.instance)
     }
 

@@ -101,6 +101,13 @@ fun HomeScreen(
     val grouped by viewModel.groupedReminders.collectAsState()
     val allReminders by viewModel.allReminders.collectAsState()
 
+    // 进入首页时：确保所有提醒都有排期 + 补偿检测遗漏提醒
+    // （系统可能清理掉 WorkManager 任务，不重排的话提醒就再也不响了）
+    LaunchedEffect(Unit) {
+        viewModel.ensureSchedules()
+        viewModel.checkMissed()
+    }
+
     // 长按删除确认框状态
     var pendingDelete by remember { mutableStateOf<ReminderEntity?>(null) }
     var menuExpanded by remember { mutableStateOf(false) }

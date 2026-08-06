@@ -32,13 +32,34 @@ class HomeViewModel(
         }
     }
 
+    /**
+     * 检查遗漏提醒
+     *
+     * 除了把状态标为「提醒中」，还必须重新排期：
+     * 到点没响通常意味着 WorkManager 任务已经丢失（进程被杀 / 系统清理），
+     * 只改状态的话这条提醒就永远不会再响了。
+     *
+     * 已经是 notifying 的说明上一轮已经补过一次，跳过重排，
+     * 避免一次性提醒每次进入 App 都重复弹通知。
+     */
     fun checkMissed() {
         viewModelScope.launch {
             val all = dao.getDueReminders(System.currentTimeMillis())
             val missed = ReminderEngine.checkMissed(all, System.currentTimeMillis())
             missed.forEach { r ->
-                dao.update(r.copy(status = "notifying"))
+                val alreadyNotifying = r.status == "notifying"
+                val updated = r.copy(status = "notifying")
+                dao.update(updated)
+                if (!alreadyNotifying) scheduler.schedule(updated)
             }
+        }
+    }
+
+    /** App 启动时确保所有活跃提醒都有 WorkManager 排期 */
+    fun ensureSchedules() {
+        viewModelScope.launch {
+            val active = dao.getAllSync()
+            if (active.isNotEmpty()) scheduler.ensureScheduled(active)
         }
     }
 
