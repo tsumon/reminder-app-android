@@ -2,6 +2,7 @@ package com.reminderapp.ui.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reminderapp.data.entity.ReminderEntity
 import com.reminderapp.service.LunarCalendar
+import com.reminderapp.service.ReminderEngine
 import com.reminderapp.ui.theme.Primary
 import java.text.SimpleDateFormat
 import java.util.*
@@ -31,7 +33,8 @@ import java.util.*
 @Composable
 fun CalendarCard(
     reminders: List<ReminderEntity>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onDateClick: (Long) -> Unit = {}
 ) {
     val todayCal = remember { Calendar.getInstance() }
     val todayDate = remember {
@@ -39,14 +42,20 @@ fun CalendarCard(
     }
     var displayYear by remember { mutableIntStateOf(todayCal.get(Calendar.YEAR)) }
     var displayMonth by remember { mutableIntStateOf(todayCal.get(Calendar.MONTH)) } // 0-based
+    var selectedDateKey by remember { mutableStateOf<String?>(null) }
 
-    // 任务日期 → 数量映射
-    val taskDates = remember(reminders) {
-        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        reminders
-            .filter { it.isActive }
-            .groupBy { fmt.format(Date(it.nextTriggerAt)) }
-            .mapValues { it.value.size }
+    // 任务日期 → 数量映射（按 displayed 月份逐日判断是否触发，贴合所显示月份）
+    val taskDates = remember(reminders, displayYear, displayMonth) {
+        val map = mutableMapOf<String, Int>()
+        val cal = Calendar.getInstance().apply { set(displayYear, displayMonth, 1) }
+        val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+        for (d in 1..daysInMonth) {
+            val count = reminders.count { it.isActive && ReminderEngine.occursOn(it, displayYear, displayMonth + 1, d) }
+            if (count > 0) {
+                map[String.format(Locale.getDefault(), "%04d-%02d-%02d", displayYear, displayMonth + 1, d)] = count
+            }
+        }
+        map
     }
 
     // 今天农历 + 星期
@@ -138,14 +147,24 @@ fun CalendarCard(
                     weekRow.forEach { dayNum ->
                         Box(modifier = Modifier.weight(1f)) {
                             if (dayNum != null) {
+                                val key = dateKey(displayYear, displayMonth, dayNum)
                                 DayCell(
                                     day = dayNum,
                                     isToday = displayYear == todayCal.get(Calendar.YEAR) &&
                                         displayMonth == todayCal.get(Calendar.MONTH) &&
                                         dayNum == todayCal.get(Calendar.DAY_OF_MONTH),
+                                    isSelected = selectedDateKey == key,
                                     lunarText = lunarTextFor(displayYear, displayMonth, dayNum),
-                                    taskCount = taskDates[dateKey(displayYear, displayMonth, dayNum)] ?: 0,
-                                    isFutureMonth = false
+                                    taskCount = taskDates[key] ?: 0,
+                                    isFutureMonth = false,
+                                    onClick = {
+                                        selectedDateKey = key
+                                        val t = Calendar.getInstance().apply {
+                                            set(displayYear, displayMonth, dayNum, 0, 0, 0)
+                                            set(Calendar.MILLISECOND, 0)
+                                        }.timeInMillis
+                                        onDateClick(t)
+                                    }
                                 )
                             } else {
                                 Spacer(modifier = Modifier.height(52.dp))
@@ -165,13 +184,16 @@ fun CalendarCard(
 private fun DayCell(
     day: Int,
     isToday: Boolean,
+    isSelected: Boolean,
     lunarText: String,
     taskCount: Int,
-    isFutureMonth: Boolean
+    isFutureMonth: Boolean,
+    onClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .padding(vertical = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -179,15 +201,18 @@ private fun DayCell(
             modifier = Modifier
                 .size(32.dp)
                 .clip(CircleShape)
-                .background(if (isToday) Primary else Color.Transparent),
+                .background(if (isToday) Primary else if (isSelected) Primary.copy(alpha = 0.15f) else Color.Transparent)
+                .then(if (isSelected && !isToday) Modifier.border(1.5.dp, Primary, CircleShape) else Modifier)
+                .padding(1.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = day.toString(),
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+                fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
                 color = when {
                     isToday -> Color.White
+                    isSelected -> Primary
                     isFutureMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                     else -> MaterialTheme.colorScheme.onSurface
                 }
