@@ -69,6 +69,8 @@ class HomeViewModel(
             val updated = ReminderEngine.confirm(reminder)
             dao.update(updated)
             recordDao.insert(ReminderRecordEntity(reminderId = reminder.id, action = "confirmed"))
+            // v1.9.6 fix: 确认后取消已显示的通知，避免通知栏残留
+            com.reminderapp.service.NotificationManager(com.reminderapp.ReminderApp.instance).cancelReminderNotifications(reminder.id)
             scheduler.schedule(updated)
             com.reminderapp.service.SyncStore.touchLocalChange()
             com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)

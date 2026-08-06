@@ -3,6 +3,8 @@ package com.reminderapp.ui.screen
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -77,6 +79,43 @@ fun AIChatScreen(
     var isListening by remember { mutableStateOf(false) }
     var showNoApiSheet by remember { mutableStateOf(false) }
     var webViewUrl by remember { mutableStateOf<String?>(null) }
+    fun startListening() {
+        if (isListening) return
+        isListening = true
+        scope.launch {
+            voiceService.recognize().fold(
+                onSuccess = { text ->
+                    if (text.isNotBlank()) {
+                        if (settings.useNoAPIMode) {
+                            handleNoAPISend(text, settings, context, messages, { messages = it }) { url -> webViewUrl = url }
+                        } else {
+                            scope.launch {
+                                sendToAI(
+                                    text, settings, aiService, database, scheduler, notificationMgr, gson,
+                                    history = messages,
+                                    onMessages = { newMsgs -> messages = messages + newMsgs },
+                                    onLoading = { isLoading = it }
+                                )
+                            }
+                        }
+                    }
+                },
+                onFailure = { e -> errorMsg = e.message }
+            )
+            isListening = false
+        }
+    }
+    // v1.9.6 fix: RECORD_AUDIO 是危险权限，Android 12+ 不申请 SpeechRecognizer 必失败
+    val recordPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            startListening()
+        } else {
+            Toast.makeText(context, "需要录音权限才能使用语音输入", Toast.LENGTH_SHORT).show()
+        }
+    }
+
 
     val listState = rememberLazyListState()
 
@@ -131,29 +170,15 @@ fun AIChatScreen(
                         // 语音按钮
                         IconButton(
                             onClick = {
-                                if (isListening) return@IconButton
-                                isListening = true
-                                scope.launch {
-                                    voiceService.recognize().fold(
-                                        onSuccess = { text ->
-                                            if (text.isNotBlank()) {
-                                                if (settings.useNoAPIMode) {
-                                                    handleNoAPISend(text, settings, context, messages, { messages = it }) { url -> webViewUrl = url }
-                                                } else {
-                                                    scope.launch {
-                                                        sendToAI(
-                                                            text, settings, aiService, database, scheduler, notificationMgr, gson,
-                                                            onMessages = { messages = it },
-                                                            onLoading = { isLoading = it }
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        onFailure = { e -> errorMsg = e.message }
-                                    )
-                                    isListening = false
+                                // v1.9.6 fix: 先检查录音权限，未授权先申请再识别
+                                val hasMic = androidx.core.content.ContextCompat.checkSelfPermission(
+                                    context, android.Manifest.permission.RECORD_AUDIO
+                                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                if (!hasMic) {
+                                    recordPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                    return@IconButton
                                 }
+                                startListening()
                             },
                             modifier = Modifier.size(40.dp)
                         ) {
@@ -196,7 +221,8 @@ fun AIChatScreen(
                                     scope.launch {
                                         sendToAI(
                                             userMsg, settings, aiService, database, scheduler, notificationMgr, gson,
-                                            onMessages = { messages = it },
+                                            history = messages,
+                                            onMessages = { newMsgs -> messages = messages + newMsgs },
                                             onLoading = { isLoading = it }
                                         )
                                     }
@@ -403,18 +429,24 @@ private suspend fun sendToAI(
     scheduler: ReminderScheduler,
     notificationMgr: NotificationManager,
     gson: Gson,
+    history: List<ChatMessage> = emptyList(),
     onMessages: (List<ChatMessage>) -> Unit,
     onLoading: (Boolean) -> Unit = {}
 ) {
-    var msgs = mutableListOf(
-        ChatMessage(role = ChatMessage.Role.USER, content = userText)
-    )
+    // v1.9.6 fix: msgs 只放本轮 assistant 回复（user 消息由调用方上屏），
+    // onMessages 语义为「追加」——原实现整体替换导致多轮历史清空
+    var msgs = mutableListOf<ChatMessage>()
     var loading = true
 
     val conversation = mutableListOf<Map<String, Any?>>(
-        mapOf("role" to "system", "content" to AITools.systemPrompt),
-        mapOf("role" to "user", "content" to userText)
+        mapOf("role" to "system", "content" to AITools.systemPrompt)
     )
+    // v1.9.6 fix: 携带完整历史（截断最近 20 条）——否则「确认喝水」「再提醒一次」
+    // 这类依赖上下文的指令永远失联（原实现只发 system+当前 user）
+    history.takeLast(20).forEach { msg ->
+        conversation.add(mapOf("role" to msg.role.name.lowercase(), "content" to msg.content))
+    }
+    conversation.add(mapOf("role" to "user", "content" to userText))
 
     var maxTurns = 5
 
@@ -595,6 +627,8 @@ private suspend fun handleConfirm(args: Map<String, Any?>, database: AppDatabase
     val match = list.find { it.title.lowercase().contains(keyword) } ?: return "未找到包含「$keyword」的提醒"
     val updated = ReminderEngine.confirm(match)
     database.reminderDao().update(updated)
+    // v1.9.6 fix: 确认后取消已显示的通知，避免通知栏残留可反复点击
+    notificationMgr.cancelReminderNotifications(match.id)
     scheduler.schedule(updated)
     com.reminderapp.service.SyncStore.touchLocalChange()
     com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)

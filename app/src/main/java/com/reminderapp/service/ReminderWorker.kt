@@ -68,15 +68,22 @@ class ReminderWorker(
         // 周期 / 日期 / 规则提醒：到点后推进到下一次并重新调度
         runBlocking(Dispatchers.IO) {
             try {
-                val shouldReschedule = when (reminder.kind) {
-                    "cycle" -> reminder.cycle != "once"
+                // v1.9.6 fix TOCTOU: 发通知后用户可能已点「确认/稍后」（写库+重排），
+                // 必须重读最新状态，避免用过期快照覆盖用户操作
+                val latest = dao.getById(reminderId) ?: return@runBlocking
+                if (!latest.isActive ||
+                    latest.status == ReminderStatus.CONFIRMED.name.lowercase() ||
+                    latest.status == "overdue") return@runBlocking
+
+                val shouldReschedule = when (latest.kind) {
+                    "cycle" -> latest.cycle != "once"
                     "date" -> true   // 生日 / 节假日每年重复
                     "rule" -> true
                     else -> false
                 }
                 if (shouldReschedule) {
-                    val next = ReminderEngine.calculateNextTrigger(reminder)
-                    val updated = reminder.copy(
+                    val next = ReminderEngine.calculateNextTrigger(latest)
+                    val updated = latest.copy(
                         status = ReminderStatus.PENDING.name.lowercase(),
                         nextTriggerAt = next,
                         retryCount = 0
@@ -85,8 +92,12 @@ class ReminderWorker(
                     ReminderScheduler(applicationContext).schedule(updated)
                 } else {
                     // once：触发即归档，不重排（nextTriggerAt 是过去值，schedule 会立即再弹）
-                    dao.update(reminder.copy(status = ReminderStatus.CONFIRMED.name.lowercase()))
+                    dao.update(latest.copy(status = ReminderStatus.CONFIRMED.name.lowercase()))
                 }
+                // v1.9.6 fix: Worker 是后台主路径——推进/归档必须参与同步版本号，
+                // 否则这些状态变化永远不上传（另一设备同步会把推进回滚）
+                SyncStore.touchLocalChange()
+                com.reminderapp.receiver.ReminderWidgetProvider.refresh(applicationContext)
             } catch (e: Exception) {
                 // 通知已经发出，调度失败不影响本次提醒
             }

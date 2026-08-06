@@ -348,7 +348,15 @@ object ReminderEngine {
             // 月末对齐：锚点 31 号在 2 月触发日是 28/29，日历标记必须用同一规则
             "monthly" -> day == effectiveAnchorDay(year, month, aD)
             "quarterly" -> (month - aM) % 3 == 0 && day == effectiveAnchorDay(year, month, aD)
-            "yearly" -> month == aM && day == effectiveAnchorDay(year, month, aD)
+            "yearly" -> {
+                // 2/29 锚点：非闰年 2 月调度侧跳过（不触发）→ 这里也不显示，避免「显示但不响」幻影
+                if (aD == 29 && aM == 2) {
+                    if (month != 2) return false
+                    val isLeap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+                    return isLeap && day == 29
+                }
+                month == aM && day == effectiveAnchorDay(year, month, aD)
+            }
             "custom" -> {
                 val cd = reminder.customDays
                 // P2 修复：每 N 天提醒不能要求同星期 —— 每 3 天第 2 次起星期必然不同，

@@ -35,7 +35,9 @@ object StatsService {
 
         val confirmDays = confirmTimes.map { startOfDay(it) }.toSet()
         val confirmCount = confirmDays.size
-        val missedCount = missed.size
+        // v1.9.6 fix: missed 按天去重——同一天多次重试/多次通知只算一次漏掉，
+        // 否则「每次发通知都记 notified」会让按时确认的用户完成率只有 ~50%
+        val missedCount = missed.map { startOfDay(it.timestamp) }.toSet().size
         val completionRate: Double? = if (confirmCount + missedCount > 0) {
             confirmCount.toDouble() / (confirmCount + missedCount)
         } else null

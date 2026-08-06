@@ -40,6 +40,8 @@ class WidgetActionReceiver : BroadcastReceiver() {
                 val reminder = db.reminderDao().getById(reminderId) ?: return@launch
                 val updated = ReminderEngine.confirm(reminder)
                 db.reminderDao().update(updated)
+                // v1.9.6 fix: 完成确认后取消已显示的通知
+                com.reminderapp.service.NotificationManager(appContext).cancelReminderNotifications(reminderId)
                 scheduler.schedule(updated)
                 // v1.9.6 fix: 漏 touchLocalChange → 本地新数据被远程旧数据覆盖
                 SyncStore.touchLocalChange()

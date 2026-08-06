@@ -256,7 +256,11 @@ fun HomeScreen(
             item {
                 OverviewCard(
                     unhandledCount = allReminders.count { it.isActive && it.status != "confirmed" },
-                    nextReminder = allReminders.filter { it.isActive }.minByOrNull { it.nextTriggerAt }
+                    // v1.9.6 fix: 过滤已确认/已过期——is_active=1 包含 confirmed 的 once 提醒
+                    // （nextTriggerAt 是过去值），会被误选成「下一条提醒」显示历史时间
+                    nextReminder = allReminders
+                        .filter { it.isActive && it.status != "confirmed" && it.nextTriggerAt > System.currentTimeMillis() }
+                        .minByOrNull { it.nextTriggerAt }
                 )
             }
 

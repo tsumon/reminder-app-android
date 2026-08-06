@@ -77,8 +77,29 @@ fun CreateReminderScreen(
     var showDateDialog by remember { mutableStateOf(false) }
     var showTimeDialog by remember { mutableStateOf(false) }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     fun buildFirstTriggerAt(): Long {
         val cal = Calendar.getInstance()
+        // v1.9.6 fix: 每月X号锚点必须用 targetDay（自然语言「每月15号」不能落在今天日期）。
+        // 从今天起逐月找「有 targetDay 且时间在未来」的月份作为锚点，
+        // 避免锚点被钳到短月末（2月31号→28号）导致永久漂移。
+        if (selectedCycle == Cycle.MONTHLY && !isDateMode && !isRuleMode && targetDay in 1..31) {
+            var tries = 0
+            while (tries < 12) {
+                val maxD = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                if (targetDay <= maxD) {
+                    cal.set(Calendar.DAY_OF_MONTH, targetDay)
+                    cal.set(Calendar.HOUR_OF_DAY, triggerHour)
+                    cal.set(Calendar.MINUTE, triggerMinute)
+                    cal.set(Calendar.SECOND, 0)
+                    cal.set(Calendar.MILLISECOND, 0)
+                    if (cal.timeInMillis > System.currentTimeMillis()) return cal.timeInMillis
+                }
+                cal.add(Calendar.MONTH, 1)
+                tries++
+            }
+        }
         cal.set(triggerYear, triggerMonth - 1, triggerDay, triggerHour, triggerMinute, 0)
         cal.set(Calendar.MILLISECOND, 0)
         return cal.timeInMillis
@@ -97,6 +118,24 @@ fun CreateReminderScreen(
                     TextButton(
                         onClick = {
                             if (title.isBlank()) return@TextButton
+                            // v1.9.6 fix: date 模式必须选类型、holiday 必须选节日名——
+                            // 否则 computeDateForYear 返回 null → 一年后随机时刻触发的幽灵提醒
+                            if (isDateMode && selectedDateType == null) {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "请选择日期类型（公历生日/农历生日/节假日）",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                                return@TextButton
+                            }
+                            if (isDateMode && selectedDateType == DateReminderType.HOLIDAY && selectedHolidayName.isNullOrBlank()) {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "请选择节假日",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                                return@TextButton
+                            }
 
                             val firstTrigger = buildFirstTriggerAt()
 
@@ -249,6 +288,8 @@ fun CreateReminderScreen(
                                         "monthly" -> {
                                             isDateMode = false; isRuleMode = false
                                             selectedCycle = Cycle.MONTHLY
+                                            // v1.9.6 fix: 应用「每月X号」的 targetDay（否则锚点落今天日期）
+                                            val nlDay = p.targetDay; if (nlDay != null && nlDay in 1..31) targetDay = nlDay
                                         }
                                         else -> {
                                             isDateMode = false; isRuleMode = false
