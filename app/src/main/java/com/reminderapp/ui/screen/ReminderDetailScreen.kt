@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Snooze
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,6 +38,7 @@ fun ReminderDetailScreen(
 
     val statusColor = when (currentReminder.status) {
         "notifying" -> StatusReminding
+        "overdue" -> StatusOverdue   // v1.9.7: 递增重试到上限
         "pending" -> StatusWaiting
         "confirmed" -> StatusCompleted
         else -> StatusWaiting
@@ -44,6 +46,7 @@ fun ReminderDetailScreen(
 
     val statusBg = when (currentReminder.status) {
         "notifying" -> StatusReminding.copy(alpha = 0.1f)
+        "overdue" -> StatusOverdue.copy(alpha = 0.1f)
         "pending" -> StatusWaiting.copy(alpha = 0.1f)
         "confirmed" -> StatusCompleted.copy(alpha = 0.1f)
         else -> StatusWaiting.copy(alpha = 0.1f)
@@ -51,6 +54,7 @@ fun ReminderDetailScreen(
 
     val statusLabel = when (currentReminder.status) {
         "notifying" -> "需要确认"
+        "overdue" -> "已逾期"
         "pending" -> "等待中"
         "confirmed" -> "已完成"
         else -> "等待中"
@@ -58,6 +62,7 @@ fun ReminderDetailScreen(
 
     val statusIcon = when (currentReminder.status) {
         "notifying" -> Icons.Default.Notifications
+        "overdue" -> Icons.Default.Warning
         "confirmed" -> Icons.Default.CheckCircle
         else -> Icons.Default.Snooze
     }

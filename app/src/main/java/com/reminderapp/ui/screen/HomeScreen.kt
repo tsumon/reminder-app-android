@@ -335,7 +335,8 @@ fun HomeScreen(
                     items(reminding, key = { it.id }) { reminder ->
                         SwipeableReminderCard(
                             reminder = reminder,
-                            statusColor = StatusReminding,
+                            // v1.9.7: overdue 用更深一档红色区分
+                            statusColor = if (reminder.status == "overdue") StatusOverdue else StatusReminding,
                             onComplete = { viewModel.confirmReminder(reminder) },
                             onDelete = { pendingDelete = reminder },
                             onClick = { onReminderClick(reminder.id) },
@@ -668,6 +669,7 @@ fun ReminderCard(
     val dateFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
     val statusText = when (reminder.status) {
         "notifying" -> "需要确认"
+        "overdue" -> "已逾期"   // v1.9.7: 递增重试到上限
         "idle", "pending" -> "等待中"
         "confirmed" -> "已完成"
         else -> ""

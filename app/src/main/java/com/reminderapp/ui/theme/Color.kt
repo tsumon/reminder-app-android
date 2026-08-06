@@ -12,6 +12,7 @@ val Secondary = Color(0xFFFFA07A)
 val StatusReminding = Tokens.StatusReminding
 val StatusWaiting = Tokens.StatusWaiting
 val StatusCompleted = Tokens.StatusCompleted
+val StatusOverdue = Tokens.StatusOverdue
 
 // 表面和背景
 val Surface = Color(0xFFFFFFFF)

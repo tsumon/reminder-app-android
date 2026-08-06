@@ -21,6 +21,7 @@ object Tokens {
     val StatusReminding = Color(0xFFE74C3C)
     val StatusWaiting = Color(0xFF3498DB)
     val StatusCompleted = Color(0xFF27AE60)
+    val StatusOverdue = Color(0xFFC0392B)   // v1.9.7: 递增重试到上限（比提醒中更深一档的红色）
 
     // ── 节假日「休/班」──
     val HolidayRest = Color(0xFFD32F2F)
