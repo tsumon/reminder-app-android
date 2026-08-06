@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
@@ -97,6 +98,7 @@ fun HomeScreen(
     onExport: () -> Unit = {},
     onImport: () -> Unit = {},
     onOpenSyncSettings: () -> Unit = {},
+    onOpenStats: () -> Unit = {},
     onSyncNow: () -> Unit = {}
 ) {
     val grouped by viewModel.groupedReminders.collectAsState()
@@ -159,6 +161,16 @@ fun HomeScreen(
                                 onClick = {
                                     menuExpanded = false
                                     onOpenSyncSettings()
+                                }
+                            )
+                            Divider()
+                            // v1.8.7 任务③: 统计洞察
+                            DropdownMenuItem(
+                                text = { Text("统计洞察") },
+                                leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onOpenStats()
                                 }
                             )
                             Divider()
