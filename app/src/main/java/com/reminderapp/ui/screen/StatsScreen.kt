@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reminderapp.data.entity.ReminderRecordEntity
 import com.reminderapp.service.StatsService
+import com.reminderapp.ui.theme.Tokens
 import java.util.Calendar
 import java.util.Locale
 
@@ -144,8 +145,8 @@ private fun CompletionCard(summary: StatsService.Summary) {
             }
             Spacer(modifier = Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                LabelChip("确认 ${summary.confirmCount}", Icons.Filled.CheckCircle, Color(0xFF43A047))
-                LabelChip("漏掉 ${summary.missedCount}", Icons.Filled.Notifications, Color(0xFFE53935))
+                LabelChip("确认 ${summary.confirmCount}", Icons.Filled.CheckCircle, Tokens.StatusCompleted)
+                LabelChip("漏掉 ${summary.missedCount}", Icons.Filled.Notifications, Tokens.StatusReminding)
             }
         }
     }
@@ -329,7 +330,7 @@ private fun HeatmapCard(
     }
 }
 
-/** 0=无，1=1次，2=2-3次，3=4+次 */
+/** 0=无，1=1次，2=2-3次，3=4+次（色阶令牌化，与 iOS 一致） */
 private fun heatLevel(count: Int): Int = when {
     count <= 0 -> 0
     count == 1 -> 1
@@ -338,8 +339,8 @@ private fun heatLevel(count: Int): Int = when {
 }
 
 private fun heatColor(level: Int): Color = when (level) {
-    0 -> Color(0x1F9E9E9E) // 透明灰
-    1 -> Color(0x402B66C4)
-    2 -> Color(0x802B66C4)
-    else -> Color(0xFF2B66C4)
+    0 -> Tokens.Heatmap0
+    1 -> Tokens.Heatmap1
+    2 -> Tokens.Heatmap2
+    else -> Tokens.Heatmap3
 }

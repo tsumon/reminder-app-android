@@ -24,6 +24,7 @@ import com.reminderapp.service.HolidayRemoteService
 import com.reminderapp.service.LunarCalendar
 import com.reminderapp.service.ReminderEngine
 import com.reminderapp.ui.theme.Primary
+import com.reminderapp.ui.theme.Tokens
 import androidx.compose.ui.platform.LocalContext
 import java.text.SimpleDateFormat
 import java.util.*
@@ -250,8 +251,8 @@ private fun DayCell(
         // 休/班角标：放假红「休」、调休上班橙「班」；普通日占位保持对齐（v1.8.7 任务②）
         Text(
             text = holidayStatus?.let { if (it.isHoliday) "休" else "班" } ?: "",
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
-            color = if (holidayStatus?.isHoliday == true) Color(0xFFD32F2F) else Color(0xFFEF6C00),
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = Tokens.FontTiny, fontWeight = FontWeight.Bold),
+            color = if (holidayStatus?.isHoliday == true) Tokens.HolidayRest else Tokens.HolidayWork,
             maxLines = 1
         )
     }
