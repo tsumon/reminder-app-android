@@ -34,11 +34,15 @@ fun NavGraph(
     NavHost(navController = navController, startDestination = "home") {
 
         composable("home") {
-            val viewModel = HomeViewModel(
-                dao = database.reminderDao(),
-                recordDao = database.reminderRecordDao(),
-                scheduler = scheduler
-            )
+            // 必须 remember：否则每次重组都会新建 ViewModel，
+            // StateFlow 被重建、订阅重启，首页会反复闪烁并重复触发副作用
+            val viewModel = androidx.compose.runtime.remember {
+                HomeViewModel(
+                    dao = database.reminderDao(),
+                    recordDao = database.reminderRecordDao(),
+                    scheduler = scheduler
+                )
+            }
             val context = androidx.compose.ui.platform.LocalContext.current
             val scope = rememberCoroutineScope()
 

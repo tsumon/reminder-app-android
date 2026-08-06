@@ -31,6 +31,7 @@ object BackupService {
         val arr = JSONArray()
         reminders.forEach { r ->
             val obj = JSONObject()
+            obj.put("id", r.id)
             obj.put("title", r.title)
             obj.put("note", r.note)
             obj.put("kind", r.kind)
@@ -66,6 +67,7 @@ object BackupService {
             for (i in 0 until arr.length()) {
                 val o = arr.getJSONObject(i)
                 val entity = ReminderEntity(
+                    id = o.optLong("id", 0),
                     title = o.optString("title", "未命名提醒"),
                     note = o.optString("note", ""),
                     kind = o.optString("kind", "cycle"),

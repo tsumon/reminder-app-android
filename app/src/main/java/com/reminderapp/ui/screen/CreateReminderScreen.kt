@@ -5,8 +5,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.reminderapp.data.entity.ReminderEntity
@@ -17,6 +19,7 @@ import com.reminderapp.model.weekLabels
 import com.reminderapp.model.weekdayLabels
 import com.reminderapp.service.HolidayService
 import com.reminderapp.service.LunarCalendar
+import com.reminderapp.service.NaturalDateParser
 import com.reminderapp.service.ReminderEngine
 import java.util.*
 
@@ -47,6 +50,11 @@ fun CreateReminderScreen(
 
     // 优先级
     var priority by remember { mutableStateOf("normal") } // high / normal / low
+
+    // 自然语言快速创建
+    var nlText by remember { mutableStateOf("") }
+    var nlHint by remember { mutableStateOf<String?>(null) }
+    var nlError by remember { mutableStateOf(false) }
 
     // 日期时间选择
     val now = Calendar.getInstance()
@@ -148,6 +156,123 @@ fun CreateReminderScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // === 自然语言快速创建 ===
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            "一句话创建",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                    OutlinedTextField(
+                        value = nlText,
+                        onValueChange = { nlText = it; nlHint = null; nlError = false },
+                        placeholder = { Text("明天下午3点开会 / 每周一9点晨会 / 农历8月15 中秋") },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 2
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = {
+                                val p = NaturalDateParser.parse(nlText)
+                                if (p == null) {
+                                    nlError = true
+                                    nlHint = "没听懂，换个说法试试～"
+                                } else {
+                                    nlError = false
+                                    // 标题
+                                    if (title.isBlank()) title = p.title
+                                    // 触发时间
+                                    val c = Calendar.getInstance().apply { timeInMillis = p.nextTriggerAt }
+                                    triggerYear = c.get(Calendar.YEAR)
+                                    triggerMonth = c.get(Calendar.MONTH) + 1
+                                    triggerDay = c.get(Calendar.DAY_OF_MONTH)
+                                    triggerHour = c.get(Calendar.HOUR_OF_DAY)
+                                    triggerMinute = c.get(Calendar.MINUTE)
+                                    // 重复模式 → 表单
+                                    when (p.repeatMode) {
+                                        "lunar" -> {
+                                            isDateMode = true; isRuleMode = false
+                                            selectedDateType = DateReminderType.LUNAR_BIRTHDAY
+                                            p.targetMonth?.let { targetMonth = it }
+                                            p.targetDay?.let { targetDay = it }
+                                        }
+                                        "yearly" -> {
+                                            if (p.dateType == "solar_birthday") {
+                                                isDateMode = true; isRuleMode = false
+                                                selectedDateType = DateReminderType.SOLAR_BIRTHDAY
+                                                p.targetMonth?.let { targetMonth = it }
+                                                p.targetDay?.let { targetDay = it }
+                                            } else {
+                                                isDateMode = false; isRuleMode = false
+                                                selectedCycle = Cycle.YEARLY
+                                            }
+                                        }
+                                        "daily" -> {
+                                            isDateMode = false; isRuleMode = false
+                                            selectedCycle = Cycle.DAILY
+                                        }
+                                        "weekly" -> {
+                                            isDateMode = false; isRuleMode = false
+                                            selectedCycle = Cycle.WEEKLY
+                                        }
+                                        "monthly" -> {
+                                            isDateMode = false; isRuleMode = false
+                                            selectedCycle = Cycle.MONTHLY
+                                        }
+                                        else -> {
+                                            isDateMode = false; isRuleMode = false
+                                            selectedCycle = Cycle.ONCE
+                                        }
+                                    }
+                                    val cycleText = when (p.repeatMode) {
+                                        "lunar" -> "农历每年"
+                                        "yearly" -> "每年"
+                                        "daily" -> "每天"
+                                        "weekly" -> "每周"
+                                        "monthly" -> "每月"
+                                        else -> "仅一次"
+                                    }
+                                    nlHint = "「${p.title}」· $cycleText · ${p.label}"
+                                }
+                            },
+                            enabled = nlText.isNotBlank()
+                        ) {
+                            Text("智能识别")
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        nlHint?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (nlError) MaterialTheme.colorScheme.error
+                                        else MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
+                }
+            }
+
             // 标题
             OutlinedTextField(
                 value = title,

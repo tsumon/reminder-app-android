@@ -100,21 +100,48 @@ object ReminderEngine {
 
     /**
      * 周期提醒：锚点法防漂移
+     *
+     * 注意：月/季/年用「按日历月累加」而非固定天数，避免 30 天/90 天/365 天在大月小月、
+     * 闰月、闰年下逐渐漂移（例如「每月 31 号」在 2 月不会错位成月初）。
      */
     private fun calculateCycleNextTrigger(reminder: ReminderEntity, now: Long): Long {
         val anchor = reminder.firstTriggerAt
-        var nextTime = anchor
         val interval = getCycleIntervalMs(reminder.cycle, reminder.customDays)
 
-        while (nextTime <= now) {
-            nextTime += interval
-        }
+        // 一次性提醒（或非法周期）：不前进，直接返回锚点，避免死循环
+        if (interval <= 0L) return anchor
 
-        return nextTime
+        return when (reminder.cycle) {
+            "monthly", "quarterly", "yearly" -> advanceByCalendarMonths(reminder.cycle, anchor, now)
+            else -> {
+                var nextTime = anchor
+                while (nextTime <= now) {
+                    nextTime += interval
+                }
+                nextTime
+            }
+        }
+    }
+
+    /**
+     * 按日历月累加推进（每月 / 每季度 / 每年），自动处理月末对齐与闰年
+     */
+    private fun advanceByCalendarMonths(cycle: String, anchor: Long, now: Long): Long {
+        val amount = when (cycle) {
+            "monthly" -> 1
+            "quarterly" -> 3
+            else -> 12
+        }
+        val cal = Calendar.getInstance().apply { timeInMillis = anchor }
+        while (cal.timeInMillis <= now) {
+            cal.add(Calendar.MONTH, amount)
+        }
+        return cal.timeInMillis
     }
 
     private fun getCycleIntervalMs(cycle: String, customDays: Int): Long {
         return when (cycle) {
+            "once" -> 0L
             "daily" -> 86400_000L
             "weekly" -> 604800_000L
             "biweekly" -> 1209600_000L
@@ -195,6 +222,14 @@ object ReminderEngine {
      * 确认完成 → 周期前进
      */
     fun confirm(reminder: ReminderEntity): ReminderEntity {
+        // 一次性提醒：确认后直接归档为「已完成」，不再前进周期
+        if (reminder.kind == "cycle" && reminder.cycle == "once") {
+            return reminder.copy(
+                status = ReminderStatus.CONFIRMED.name.lowercase(),
+                lastConfirmedAt = System.currentTimeMillis(),
+                retryCount = 0
+            )
+        }
         val nextTrigger = calculateNextTrigger(reminder)
         return reminder.copy(
             status = ReminderStatus.PENDING.name.lowercase(),
@@ -277,6 +312,7 @@ object ReminderEngine {
         if (diff < 0) return false
 
         return when (reminder.cycle) {
+            "once" -> diff == 0
             "daily" -> true
             "weekly" -> targetWeekday == aWeekday
             "biweekly" -> targetWeekday == aWeekday && diff % 14 == 0

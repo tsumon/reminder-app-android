@@ -39,6 +39,7 @@ val weekdayLabels = arrayOf("周一", "周二", "周三", "周四", "周五", "�
 val weekLabels = arrayOf("第1周", "第2周", "第3周", "第4周", "第5周")
 
 enum class Cycle(val label: String) {
+    ONCE("仅一次"),
     DAILY("每天"),
     WEEKLY("每周"),
     BIWEEKLY("每两周"),
