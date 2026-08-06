@@ -33,8 +33,9 @@ object Tokens {
     val Heatmap3 = Color(0xFF2B66C4)
 
     // ── 圆角 ──
-    val RadiusCard = 16.dp
-    val RadiusCell = 6.dp
+    val RadiusCard = 20.dp      // 液态玻璃大圆角（与 iOS glassCard 24 近似）
+    val RadiusCell = 10.dp
+    val RadiusLarge = 28.dp     // 弹窗/大组件
 
     // ── 字号（sp）──
     val FontTiny = 9.sp   // 日历农历/休班角标
