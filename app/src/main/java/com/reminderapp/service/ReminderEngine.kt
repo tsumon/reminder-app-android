@@ -106,6 +106,9 @@ object ReminderEngine {
         var nextTime = anchor
         val interval = getCycleIntervalMs(reminder.cycle, reminder.customDays)
 
+        // 一次性提醒（或非法周期）：不前进，直接返回锚点，避免死循环
+        if (interval <= 0L) return anchor
+
         while (nextTime <= now) {
             nextTime += interval
         }
@@ -115,6 +118,7 @@ object ReminderEngine {
 
     private fun getCycleIntervalMs(cycle: String, customDays: Int): Long {
         return when (cycle) {
+            "once" -> 0L
             "daily" -> 86400_000L
             "weekly" -> 604800_000L
             "biweekly" -> 1209600_000L
@@ -195,6 +199,14 @@ object ReminderEngine {
      * 确认完成 → 周期前进
      */
     fun confirm(reminder: ReminderEntity): ReminderEntity {
+        // 一次性提醒：确认后直接归档为「已完成」，不再前进周期
+        if (reminder.kind == "cycle" && reminder.cycle == "once") {
+            return reminder.copy(
+                status = ReminderStatus.CONFIRMED.name.lowercase(),
+                lastConfirmedAt = System.currentTimeMillis(),
+                retryCount = 0
+            )
+        }
         val nextTrigger = calculateNextTrigger(reminder)
         return reminder.copy(
             status = ReminderStatus.PENDING.name.lowercase(),
@@ -277,6 +289,7 @@ object ReminderEngine {
         if (diff < 0) return false
 
         return when (reminder.cycle) {
+            "once" -> diff == 0
             "daily" -> true
             "weekly" -> targetWeekday == aWeekday
             "biweekly" -> targetWeekday == aWeekday && diff % 14 == 0

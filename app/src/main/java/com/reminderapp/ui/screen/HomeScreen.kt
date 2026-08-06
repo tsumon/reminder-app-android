@@ -1,26 +1,37 @@
 package com.reminderapp.ui.screen
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.reminderapp.data.entity.ReminderEntity
 import com.reminderapp.service.ReminderEngine
@@ -28,6 +39,51 @@ import com.reminderapp.ui.theme.*
 import com.reminderapp.ui.viewmodel.HomeViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.roundToInt
+
+/** 智能清单：按时间/优先级/状态快速筛选 */
+enum class SmartList(val label: String) {
+    ALL("全部"),
+    TODAY("今天"),
+    TOMORROW("明天"),
+    WEEK("本周"),
+    MONTH("本月"),
+    HIGH("高优先级"),
+    DONE("已完成")
+}
+
+/** 判断提醒是否在 [fromDay, toDay] 天偏移范围内会发生 */
+private fun occursWithinDays(reminder: ReminderEntity, fromDay: Int, toDay: Int): Boolean {
+    if (toDay < fromDay) return false
+    for (i in fromDay..toDay) {
+        val c = Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, i) }
+        if (ReminderEngine.occursOn(
+                reminder,
+                c.get(Calendar.YEAR),
+                c.get(Calendar.MONTH) + 1,
+                c.get(Calendar.DAY_OF_MONTH)
+            )
+        ) return true
+    }
+    return false
+}
+
+/** 本月剩余天数（含今天） */
+private fun daysLeftInMonth(): Int {
+    val c = Calendar.getInstance()
+    return c.getActualMaximum(Calendar.DAY_OF_MONTH) - c.get(Calendar.DAY_OF_MONTH)
+}
+
+/** 智能清单过滤条件 */
+private fun matchSmartList(reminder: ReminderEntity, list: SmartList): Boolean = when (list) {
+    SmartList.ALL -> true
+    SmartList.TODAY -> occursWithinDays(reminder, 0, 0)
+    SmartList.TOMORROW -> occursWithinDays(reminder, 1, 1)
+    SmartList.WEEK -> occursWithinDays(reminder, 0, 6)
+    SmartList.MONTH -> occursWithinDays(reminder, 0, daysLeftInMonth())
+    SmartList.HIGH -> reminder.priority == "high"
+    SmartList.DONE -> reminder.status == "confirmed"
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -50,6 +106,8 @@ fun HomeScreen(
     var menuExpanded by remember { mutableStateOf(false) }
     // 点击日历某天 → 查看当日任务
     var selectedDate by remember { mutableStateOf<Long?>(null) }
+    // 智能清单
+    var smartList by remember { mutableStateOf(SmartList.ALL) }
 
     Scaffold(
         topBar = {
@@ -127,9 +185,9 @@ fun HomeScreen(
             }
         }
     ) { padding ->
-        val reminding = grouped.reminding
-        val waiting = grouped.waiting
-        val completed = grouped.completed
+        val reminding = grouped.reminding.filter { matchSmartList(it, smartList) }
+        val waiting = grouped.waiting.filter { matchSmartList(it, smartList) }
+        val completed = grouped.completed.filter { matchSmartList(it, smartList) }
 
         LazyColumn(
             modifier = Modifier
@@ -149,6 +207,17 @@ fun HomeScreen(
             // 日历卡片（始终显示）
             item { CalendarCard(reminders = allReminders, onDateClick = { selectedDate = it }) }
 
+            // 智能清单筛选条
+            item {
+                SmartListBar(
+                    selected = smartList,
+                    counts = SmartList.entries.associateWith { sl ->
+                        allReminders.count { matchSmartList(it, sl) }
+                    },
+                    onSelect = { smartList = it }
+                )
+            }
+
             if (reminding.isEmpty() && waiting.isEmpty() && completed.isEmpty()) {
                 // 空状态
                 item {
@@ -165,12 +234,12 @@ fun HomeScreen(
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                "暂无提醒",
+                                if (smartList == SmartList.ALL) "暂无提醒" else "「${smartList.label}」没有提醒",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                "点击右下角 + 创建新提醒",
+                                if (smartList == SmartList.ALL) "点击右下角 + 创建新提醒" else "换个清单看看",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -182,7 +251,13 @@ fun HomeScreen(
                 if (reminding.isNotEmpty()) {
                     item { SectionHeader("提醒中", StatusReminding) }
                     items(reminding, key = { it.id }) { reminder ->
-                        ReminderCard(reminder, StatusReminding, onDelete = { pendingDelete = reminder }) { onReminderClick(reminder.id) }
+                        SwipeableReminderCard(
+                            reminder = reminder,
+                            statusColor = StatusReminding,
+                            onComplete = { viewModel.confirmReminder(reminder) },
+                            onDelete = { pendingDelete = reminder },
+                            onClick = { onReminderClick(reminder.id) }
+                        )
                     }
                 }
 
@@ -190,7 +265,13 @@ fun HomeScreen(
                 if (waiting.isNotEmpty()) {
                     item { SectionHeader("等待中", StatusWaiting) }
                     items(waiting, key = { it.id }) { reminder ->
-                        ReminderCard(reminder, StatusWaiting, onDelete = { pendingDelete = reminder }) { onReminderClick(reminder.id) }
+                        SwipeableReminderCard(
+                            reminder = reminder,
+                            statusColor = StatusWaiting,
+                            onComplete = { viewModel.confirmReminder(reminder) },
+                            onDelete = { pendingDelete = reminder },
+                            onClick = { onReminderClick(reminder.id) }
+                        )
                     }
                 }
 
@@ -198,7 +279,13 @@ fun HomeScreen(
                 if (completed.isNotEmpty()) {
                     item { SectionHeader("已完成", StatusCompleted) }
                     items(completed, key = { it.id }) { reminder ->
-                        ReminderCard(reminder, StatusCompleted, onDelete = { pendingDelete = reminder }) { onReminderClick(reminder.id) }
+                        SwipeableReminderCard(
+                            reminder = reminder,
+                            statusColor = StatusCompleted,
+                            onComplete = { viewModel.reopenReminder(reminder) },
+                            onDelete = { pendingDelete = reminder },
+                            onClick = { onReminderClick(reminder.id) }
+                        )
                     }
                 }
             }
@@ -286,6 +373,117 @@ fun SectionHeader(title: String, color: Color) {
     )
 }
 
+/** 智能清单筛选条：横向可滚动的 Chip 列表 */
+@Composable
+fun SmartListBar(
+    selected: SmartList,
+    counts: Map<SmartList, Int>,
+    onSelect: (SmartList) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        SmartList.entries.forEach { item ->
+            val count = counts[item] ?: 0
+            FilterChip(
+                selected = selected == item,
+                onClick = { onSelect(item) },
+                label = {
+                    Text(if (count > 0) "${item.label} $count" else item.label)
+                }
+            )
+        }
+    }
+}
+
+/**
+ * 支持滑动手势的提醒卡片
+ *  - 右滑：完成（已完成项则为「撤销」）
+ *  - 左滑：删除
+ */
+@Composable
+fun SwipeableReminderCard(
+    reminder: ReminderEntity,
+    statusColor: Color,
+    onComplete: () -> Unit,
+    onDelete: () -> Unit,
+    onClick: () -> Unit
+) {
+    val isDone = reminder.status == "confirmed"
+    val density = LocalDensity.current
+    val maxOffset = with(density) { 120.dp.toPx() }
+    val threshold = with(density) { 72.dp.toPx() }
+
+    var offsetX by remember(reminder.id) { mutableStateOf(0f) }
+    val animated by animateFloatAsState(targetValue = offsetX, label = "swipeOffset")
+
+    val completeColor = if (isDone) StatusWaiting else StatusCompleted
+    val deleteColor = MaterialTheme.colorScheme.error
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        // 滑动背景层
+        if (animated != 0f) {
+            Row(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(if (animated > 0f) completeColor else deleteColor)
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = if (animated > 0f) Arrangement.Start else Arrangement.End
+            ) {
+                Icon(
+                    imageVector = when {
+                        animated > 0f && isDone -> Icons.Default.Refresh
+                        animated > 0f -> Icons.Default.Check
+                        else -> Icons.Default.Delete
+                    },
+                    contentDescription = null,
+                    tint = Color.White
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = when {
+                        animated > 0f && isDone -> "撤销"
+                        animated > 0f -> "完成"
+                        else -> "删除"
+                    },
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
+        }
+
+        // 前景卡片
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(animated.roundToInt(), 0) }
+                .pointerInput(reminder.id) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            when {
+                                offsetX >= threshold -> onComplete()
+                                offsetX <= -threshold -> onDelete()
+                            }
+                            offsetX = 0f
+                        },
+                        onDragCancel = { offsetX = 0f },
+                        onHorizontalDrag = { change, drag ->
+                            change.consume()
+                            offsetX = (offsetX + drag).coerceIn(-maxOffset, maxOffset)
+                        }
+                    )
+                }
+        ) {
+            ReminderCard(reminder, statusColor, onDelete = onDelete, onClick = onClick)
+        }
+    }
+}
+
 /** 首页概览卡片：待处理数量 + 最近一次提醒（参考滴答清单） */
 @Composable
 fun OverviewCard(unhandledCount: Int, nextReminder: ReminderEntity?) {
@@ -355,7 +553,17 @@ fun ReminderCard(
         reminder.kind == "date" && reminder.dateType == "lunar_birthday" -> "🌙农历生日"
         reminder.kind == "date" && reminder.dateType == "solar_birthday" -> "🎂生日"
         reminder.kind == "rule" -> ruleLabel(reminder)
-        else -> reminder.cycle
+        else -> when (reminder.cycle) {
+            "once" -> "仅一次"
+            "daily" -> "每天"
+            "weekly" -> "每周"
+            "biweekly" -> "每两周"
+            "monthly" -> "每月"
+            "quarterly" -> "每季度"
+            "yearly" -> "每年"
+            "custom" -> "每${reminder.customDays}天"
+            else -> reminder.cycle
+        }
     }
     val priorityLabel = when (reminder.priority) {
         "high" -> "🔴高"

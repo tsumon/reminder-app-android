@@ -42,6 +42,31 @@ class HomeViewModel(
         }
     }
 
+    /** 滑动完成：确认当前提醒（周期类自动前进到下一次；一次性提醒归档） */
+    fun confirmReminder(reminder: ReminderEntity) {
+        viewModelScope.launch {
+            val updated = ReminderEngine.confirm(reminder)
+            dao.update(updated)
+            recordDao.insert(ReminderRecordEntity(reminderId = reminder.id, action = "confirmed"))
+            scheduler.schedule(updated)
+            com.reminderapp.service.SyncStore.touchLocalChange()
+            com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+        }
+    }
+
+    /** 撤销完成：把提醒放回等待中 */
+    fun reopenReminder(reminder: ReminderEntity) {
+        viewModelScope.launch {
+            val next = if (reminder.nextTriggerAt <= System.currentTimeMillis())
+                ReminderEngine.calculateNextTrigger(reminder) else reminder.nextTriggerAt
+            val updated = reminder.copy(status = "pending", nextTriggerAt = next, retryCount = 0)
+            dao.update(updated)
+            scheduler.schedule(updated)
+            com.reminderapp.service.SyncStore.touchLocalChange()
+            com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+        }
+    }
+
     fun deleteReminder(id: Long) {
         viewModelScope.launch {
             scheduler.cancel(id)
