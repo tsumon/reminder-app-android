@@ -55,5 +55,10 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_reminder_info" />
         </receiver>
+
+        <!-- 小组件「完成」按钮动作接收器 -->
+        <receiver
+            android:name=".receiver.WidgetActionReceiver"
+            android:exported="false" />
     </application>
 </manifest>

@@ -30,8 +30,10 @@ class ReminderWidgetProvider : AppWidgetProvider() {
     /** 小组件要展示的最小数据集，在 IO 线程算好再回主线程渲染 */
     private data class WidgetData(
         val unhandledCount: Int,
+        val lunarText: String,
         val nextTitle: String?,
-        val nextTimeText: String?
+        val nextTimeText: String?,
+        val completeReminderId: Long?
     )
 
     override fun onUpdate(
@@ -52,7 +54,7 @@ class ReminderWidgetProvider : AppWidgetProvider() {
                 withContext(Dispatchers.Main) {
                     applyData(
                         context, appWidgetManager, appWidgetIds,
-                        WidgetData(0, null, null)
+                        WidgetData(0, "", null, null, "", null)
                     )
                 }
             } finally {
@@ -91,6 +93,7 @@ class ReminderWidgetProvider : AppWidgetProvider() {
         views.setOnClickPendingIntent(R.id.widget_next_label, pendingIntent)
 
         views.setTextViewText(R.id.widget_unhandled_count, data.unhandledCount.toString())
+        views.setTextViewText(R.id.widget_lunar, data.lunarText)
 
         if (data.nextTitle != null) {
             views.setTextViewText(R.id.widget_next_title, data.nextTitle)
@@ -98,6 +101,25 @@ class ReminderWidgetProvider : AppWidgetProvider() {
         } else {
             views.setTextViewText(R.id.widget_next_title, "暂无提醒")
             views.setTextViewText(R.id.widget_next_time, "")
+        }
+
+        // 快捷完成按钮：只有存在「即将到来的提醒」时才显示
+        val completeId = data.completeReminderId
+        if (completeId != null) {
+            val completeIntent = Intent(context, WidgetActionReceiver::class.java).apply {
+                action = WidgetActionReceiver.ACTION_COMPLETE
+                putExtra(WidgetActionReceiver.EXTRA_REMINDER_ID, completeId)
+            }
+            val completePi = PendingIntent.getBroadcast(
+                context,
+                completeId.toInt() and 0x7FFFFFFF,
+                completeIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            views.setOnClickPendingIntent(R.id.widget_complete_btn, completePi)
+            views.setViewVisibility(R.id.widget_complete_btn, android.view.View.VISIBLE)
+        } else {
+            views.setViewVisibility(R.id.widget_complete_btn, android.view.View.GONE)
         }
 
         return views
@@ -123,12 +145,35 @@ class ReminderWidgetProvider : AppWidgetProvider() {
                     .minByOrNull { it.nextTriggerAt }
 
                 val fmt = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+
+                // 今天农历（系统历法，离线可用）
+                val lunar = com.reminderapp.service.LunarCalendar.solarToLunar(now)
+                val lunarText = lunar?.description?.let { "农历 $it" } ?: ""
+
+                // 下一次提醒：绝对时间 + 倒计时
+                val nextTimeText = next?.let { r ->
+                    val countdown = countdownText(r.nextTriggerAt - now)
+                    "${fmt.format(Date(r.nextTriggerAt))} · $countdown"
+                }
+
                 WidgetData(
                     unhandledCount = unhandled,
+                    lunarText = lunarText,
                     nextTitle = next?.title,
-                    nextTimeText = next?.let { fmt.format(Date(it.nextTriggerAt)) }
+                    nextTimeText = nextTimeText,
+                    completeReminderId = next?.id
                 )
             }
+
+        /** 生成倒计时文案：2小时15分后 / 3天2小时后 / 45天后 */
+        private fun countdownText(diffMillis: Long): String {
+            val minutes = diffMillis / 60000L
+            if (minutes < 60) return "${minutes.coerceAtLeast(0)}分钟后"
+            val hours = minutes / 60
+            if (hours < 24) return "${hours}小时${minutes % 60}分后"
+            val days = hours / 24
+            return "${days}天${hours % 24}小时后"
+        }
 
         /** App 数据变化后调用，刷新所有已添加的小组件（异步，绝不阻塞调用方） */
         fun refresh(context: Context) {
