@@ -72,6 +72,11 @@ class HomeViewModel(
             scheduler.schedule(updated)
             com.reminderapp.service.SyncStore.touchLocalChange()
             com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+            // v1.8.7 任务⑥: 埋点
+            com.reminderapp.service.TelemetryService.logEvent(
+                "confirm",
+                mapOf("kind" to reminder.kind, "cycle" to reminder.cycle)
+            )
         }
     }
 

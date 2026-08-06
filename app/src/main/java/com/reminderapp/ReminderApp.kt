@@ -7,6 +7,7 @@ import com.reminderapp.service.AISettings
 import com.reminderapp.service.HolidayRemoteService
 import com.reminderapp.service.NotificationManager
 import com.reminderapp.service.ReminderScheduler
+import com.reminderapp.service.TelemetryService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,6 +34,10 @@ class ReminderApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+
+        // v1.8.7 任务⑥: 崩溃监控 + 埋点基础设施（必须先于业务初始化）
+        TelemetryService.install()
+
         database = AppDatabase.getInstance(this)
         scheduler = ReminderScheduler(this)
         notificationManager = NotificationManager(this)
