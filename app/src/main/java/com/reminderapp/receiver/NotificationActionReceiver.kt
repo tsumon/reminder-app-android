@@ -37,8 +37,18 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     NotificationManager.ACTION_CONFIRM -> {
                         val updated = ReminderEngine.confirm(reminder)
                         db.reminderDao().update(updated)
-                        // 重新调度下一次触发，避免从通知栏确认后周期断链
-                        scheduler.schedule(updated)
+                        // v1.9.6 fix: once 提醒确认后归档，不重排——
+                        // nextTriggerAt 是过去值，schedule 会 delay=0 立即再弹一条「已完成」
+                        if (updated.cycle != "once") {
+                            scheduler.schedule(updated)
+                        }
+                        // v1.9.6 fix: 写操作记录（通知栏确认是常用路径，统计依赖它）
+                        try {
+                            db.reminderRecordDao().insert(
+                                com.reminderapp.data.entity.ReminderRecordEntity(reminderId = reminderId, action = "confirmed")
+                            )
+                        } catch (_: Exception) {
+                        }
                         // v1.9.6 fix: 漏 touchLocalChange → 本地新数据被远程旧数据覆盖 / AI 新建不同步
                         SyncStore.touchLocalChange()
                         ReminderWidgetProvider.refresh(context)
@@ -48,6 +58,12 @@ class NotificationActionReceiver : BroadcastReceiver() {
                         db.reminderDao().update(updated)
                         // snooze 已把 nextTriggerAt 设成 15 分钟后，交给 scheduler 定时重推。
                         scheduler.schedule(updated)
+                        try {
+                            db.reminderRecordDao().insert(
+                                com.reminderapp.data.entity.ReminderRecordEntity(reminderId = reminderId, action = "snoozed")
+                            )
+                        } catch (_: Exception) {
+                        }
                         SyncStore.touchLocalChange()
                         ReminderWidgetProvider.refresh(context)
                     }

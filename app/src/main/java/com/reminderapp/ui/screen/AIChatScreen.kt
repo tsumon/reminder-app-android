@@ -513,10 +513,13 @@ private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase,
     if (kind == "cycle" && cycle !in setOf("daily", "weekly", "biweekly", "monthly", "quarterly", "yearly", "custom", "once")) {
         return "周期类型无效（$cycle），只支持：每天/每周/每两周/每月/每季度/每年/自定义/一次。"
     }
-    if (kind == "date" && dateType != null &&
-        dateType !in setOf("solar_birthday", "lunar_birthday", "holiday")
-    ) {
-        return "日期类型无效（$dateType），只支持：公历生日/农历生日/节假日。"
+    // v1.9.6 fix: kind=date 必须带 dateType——null 会退化成「一年后随机时刻」的幽灵提醒
+    if (kind == "date" && dateType !in setOf("solar_birthday", "lunar_birthday", "holiday")) {
+        return "日期提醒需要指定类型（公历生日/农历生日/节假日），例如：农历八月十五。请补充类型，我再为你创建。"
+    }
+    // v1.9.6 fix: cycle=custom 必须 customDays>=1，否则 interval=0 → Worker 立即重触发死循环
+    if (cycle == "custom" && customDays < 1) {
+        return "自定义周期需要指定间隔天数（如：每3天），custom_days 至少为 1。"
     }
 
     val now = System.currentTimeMillis()
@@ -616,9 +619,12 @@ private suspend fun handleDelete(args: Map<String, Any?>, database: AppDatabase)
     if (keyword.isEmpty()) return "请指定要删除的提醒标题（如：删除「交房租」）。"
     val list = database.reminderDao().getAllSync()
     val match = list.find { it.title.lowercase().contains(keyword) } ?: return "未找到包含「$keyword」的提醒"
-    // 删除前取消已排期的通知，避免幽灵提醒
+    // v1.9.6 fix: 必须先取消 WorkManager 排期 + 已显示通知，再用软删。
+    // 原实现物理 delete：遗留任务触发时 Worker 先发通知才查库 → 幽灵通知；
+    // 且物理删会级联清掉统计记录（与 UI 路径软删不一致）
+    ReminderScheduler(com.reminderapp.ReminderApp.instance).cancel(match.id)
     NotificationManager(com.reminderapp.ReminderApp.instance).cancelReminderNotifications(match.id)
-    database.reminderDao().delete(match)
+    database.reminderDao().softDelete(match.id)
     com.reminderapp.service.SyncStore.touchLocalChange()
     com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
     return "已删除「${match.title}」"

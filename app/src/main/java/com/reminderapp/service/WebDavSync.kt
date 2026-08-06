@@ -1,6 +1,7 @@
 package com.reminderapp.service
 
 import android.content.Context
+import androidx.room.withTransaction
 import com.reminderapp.ReminderApp
 import com.reminderapp.data.database.AppDatabase
 import kotlinx.coroutines.Dispatchers
@@ -45,7 +46,8 @@ object WebDavSync {
             return@withContext SyncResult.Error("请先配置 WebDAV 服务器")
         }
 
-        val dao = AppDatabase.getInstance(context).reminderDao()
+        val db = AppDatabase.getInstance(context)
+        val dao = db.reminderDao()
         val localVersion = SyncStore.lastLocalChange
 
         try {
@@ -75,7 +77,7 @@ object WebDavSync {
                     if (items == null) {
                         SyncResult.Error("远程文件解析失败")
                     } else {
-                        replaceLocal(dao, items)
+                        replaceLocal(db, items)
                         SyncStore.lastLocalChange = remoteVersion
                         SyncStore.lastSyncAt = System.currentTimeMillis()
                         SyncResult.Success
@@ -120,30 +122,36 @@ object WebDavSync {
         }
     }
 
-    /** 用远程数据整体替换本地（先软删全部，再插入，最后重新调度全部提醒） */
+    /** 用远程数据整体替换本地（事务内：软删全部 → 插入 → 调度；失败回滚不丢本地数据） */
     private suspend fun replaceLocal(
-        dao: com.reminderapp.data.dao.ReminderDao,
+        db: AppDatabase,
         items: List<com.reminderapp.data.entity.ReminderEntity>
     ) {
-        dao.getAllSync().forEach { dao.softDelete(it.id) }
+        val dao = db.reminderDao()
+        // v1.9.6 fix: 事务包裹——原来先全量软删再逐条插入，中途失败本地全丢
+        db.withTransaction {
+            dao.getAllSync().forEach { dao.softDelete(it.id) }
 
-        // 重新计算下次触发时间，避免导入的陈旧时间戳导致「立即触发」或「永不触发」，
-        // 同时保留已完成状态。
-        val toInsert = items.map { entity ->
-            val next = ReminderEngine.calculateNextTrigger(entity)
-            // id=0 强制自增：远程 JSON 保留了上传时的原 id，软删行仍占用这些主键，
-            // 直接插入会 SQLiteConstraintException 导致整个同步失败
-            entity.copy(
-                id = 0,
-                nextTriggerAt = next,
-                status = if (entity.status == "confirmed") "confirmed" else "pending",
-                retryCount = 0
-            )
+            // 重新计算下次触发时间，避免导入的陈旧时间戳导致「立即触发」或「永不触发」，
+            // 同时保留已完成状态。
+            val toInsert = items.map { entity ->
+                val next = ReminderEngine.calculateNextTrigger(entity)
+                // id=0 强制自增：远程 JSON 保留了上传时的原 id，软删行仍占用这些主键，
+                // 直接插入会 SQLiteConstraintException 导致整个同步失败
+                entity.copy(
+                    id = 0,
+                    nextTriggerAt = next,
+                    status = if (entity.status == "confirmed") "confirmed" else "pending",
+                    retryCount = 0
+                )
+            }
+            // ⚠️ 必须用 insert 返回的新 id 调度：直接传 id=0 的实体，
+            // 所有提醒的 uniqueName/tag 都是 "reminder_0" → 互相覆盖，只剩最后一条会响一次
+            val inserted = toInsert.map { it.copy(id = dao.insert(it)) }
+
+            // 关键：下载覆盖本地后必须重新调度，否则所有提醒不再响，直到重启。
+            ReminderScheduler(ReminderApp.instance).rescheduleAll(inserted)
         }
-        toInsert.forEach { dao.insert(it) }
-
-        // 关键：下载覆盖本地后必须重新调度，否则所有提醒不再响，直到重启。
-        ReminderScheduler(ReminderApp.instance).rescheduleAll(toInsert)
         com.reminderapp.receiver.ReminderWidgetProvider.refresh(ReminderApp.instance)
     }
 
