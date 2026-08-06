@@ -3,6 +3,7 @@ package com.reminderapp.ui.screen
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
@@ -250,6 +251,16 @@ fun HomeScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(onClick = onCreateReminder) {
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("创建提醒")
+                            }
                         }
                     }
                 }
@@ -263,7 +274,8 @@ fun HomeScreen(
                             statusColor = StatusReminding,
                             onComplete = { viewModel.confirmReminder(reminder) },
                             onDelete = { pendingDelete = reminder },
-                            onClick = { onReminderClick(reminder.id) }
+                            onClick = { onReminderClick(reminder.id) },
+                            modifier = Modifier.animateItemPlacement()
                         )
                     }
                 }
@@ -277,7 +289,8 @@ fun HomeScreen(
                             statusColor = StatusWaiting,
                             onComplete = { viewModel.confirmReminder(reminder) },
                             onDelete = { pendingDelete = reminder },
-                            onClick = { onReminderClick(reminder.id) }
+                            onClick = { onReminderClick(reminder.id) },
+                            modifier = Modifier.animateItemPlacement()
                         )
                     }
                 }
@@ -291,7 +304,8 @@ fun HomeScreen(
                             statusColor = StatusCompleted,
                             onComplete = { viewModel.reopenReminder(reminder) },
                             onDelete = { pendingDelete = reminder },
-                            onClick = { onReminderClick(reminder.id) }
+                            onClick = { onReminderClick(reminder.id) },
+                            modifier = Modifier.animateItemPlacement()
                         )
                     }
                 }
@@ -418,7 +432,8 @@ fun SwipeableReminderCard(
     statusColor: Color,
     onComplete: () -> Unit,
     onDelete: () -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val isDone = reminder.status == "confirmed"
     val density = LocalDensity.current
@@ -431,7 +446,7 @@ fun SwipeableReminderCard(
     val completeColor = if (isDone) StatusWaiting else StatusCompleted
     val deleteColor = MaterialTheme.colorScheme.error
 
-    Box(modifier = Modifier.fillMaxWidth()) {
+    Box(modifier = modifier.fillMaxWidth()) {
         // 滑动背景层
         if (animated != 0f) {
             Row(
@@ -583,7 +598,9 @@ fun ReminderCard(
             .fillMaxWidth()
             .combinedClickable(
                 onClick = onClick,
-                onLongClick = onDelete
+                onLongClick = onDelete,
+                onClickLabel = "打开详情",
+                onLongClickLabel = "长按删除"
             ),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -599,14 +616,9 @@ fun ReminderCard(
             Box(
                 modifier = Modifier
                     .size(8.dp)
-                    .padding(end = 8.dp)
-            ) {
-                Surface(
-                    modifier = Modifier.size(8.dp),
-                    shape = MaterialTheme.shapes.small,
-                    color = statusColor
-                ) {}
-            }
+                    .clip(CircleShape)
+                    .background(statusColor)
+            )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(

@@ -1,5 +1,6 @@
 package com.reminderapp.ui.screen
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -7,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Snooze
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -54,9 +56,17 @@ fun ReminderDetailScreen(
         else -> "等待中"
     }
 
+    val statusIcon = when (currentReminder.status) {
+        "notifying" -> Icons.Default.Notifications
+        "confirmed" -> Icons.Default.CheckCircle
+        else -> Icons.Default.Snooze
+    }
+
     val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
     val shortFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var appeared by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { appeared = true }
 
     Scaffold(
         topBar = {
@@ -87,34 +97,46 @@ fun ReminderDetailScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 状态大卡片
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = statusBg)
+            // 状态大卡片（入场动画）
+            AnimatedVisibility(
+                visible = appeared,
+                enter = fadeIn() + slideInVertically(initialOffsetY = { it / 4 })
             ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = statusBg)
                 ) {
-                    Text(
-                        text = currentReminder.title,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = statusLabel,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = statusColor,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    if (currentReminder.note.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = statusIcon,
+                            contentDescription = null,
+                            tint = statusColor,
+                            modifier = Modifier.size(40.dp)
+                        )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = currentReminder.note,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = currentReminder.title,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = statusLabel,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = statusColor,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (currentReminder.note.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = currentReminder.note,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }

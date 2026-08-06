@@ -46,7 +46,20 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'android' }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'reminder' }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'android' }}
-        run: ./gradlew assembleRelease --no-daemon
+        # 依赖下载偶发网络抖动（502/超时）会直接判死，重试两次再放弃
+        run: |
+          for attempt in 1 2 3; do
+            echo "::group::Gradle build attempt $attempt"
+            if ./gradlew assembleRelease --no-daemon; then
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "::endgroup::"
+            echo "构建失败（第 $attempt 次），10 秒后重试..."
+            sleep 10
+          done
+          echo "三次尝试均失败"
+          exit 1
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
