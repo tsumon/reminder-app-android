@@ -37,6 +37,7 @@ import com.reminderapp.service.*
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -199,6 +200,9 @@ fun AIChatScreen(
                                             onLoading = { isLoading = it }
                                         )
                                     }
+                                } else {
+                                    // 既未配置 API 也未开免 API 模式：解锁发送按钮，避免永久卡死
+                                    isLoading = false
                                 }
                             },
                             enabled = inputText.isNotBlank() && !isLoading,
@@ -417,7 +421,9 @@ private suspend fun sendToAI(
     while (maxTurns > 0) {
         maxTurns--
         try {
-            val reply = aiService.chat(settings.model, conversation, settings.apiEndpoint, settings.apiKey)
+            val reply = withTimeout(30_000) {
+                aiService.chat(settings.model, conversation, settings.apiEndpoint, settings.apiKey)
+            }
 
             if (!reply.tool_calls.isNullOrEmpty()) {
                 for (tc in reply.tool_calls) {
@@ -480,8 +486,16 @@ private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase,
     val cycle = (args["cycle"] as? String) ?: "weekly"
     val customDays = (args["custom_days"] as? Double)?.toInt() ?: 0
     val dateType = args["date_type"] as? String
-    val targetMonth = (args["target_month"] as? Double)?.toInt() ?: 1
-    val targetDay = (args["target_day"] as? Double)?.toInt() ?: 1
+    // 注意：这里不能给月/日一个「看起来合法」的缺省值（如 1），
+    // 否则 AI 漏传参数时会被静默当成 1月1日，绕过下面的合法性守卫。
+    val targetMonthRaw = (args["target_month"] as? Double)?.toInt()
+        ?: (args["target_month"] as? Int)
+        ?: (args["target_month"] as? String)?.toIntOrNull()
+    val targetDayRaw = (args["target_day"] as? Double)?.toInt()
+        ?: (args["target_day"] as? Int)
+        ?: (args["target_day"] as? String)?.toIntOrNull()
+    val targetMonth = targetMonthRaw ?: 0
+    val targetDay = targetDayRaw ?: 0
     val advanceDays = (args["advance_days"] as? Double)?.toInt() ?: 3
     val reminderHour = (args["reminder_hour"] as? Double)?.toInt() ?: 9
     val reminderMinute = (args["reminder_minute"] as? Double)?.toInt() ?: 0
@@ -498,6 +512,18 @@ private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase,
     cal.set(Calendar.MILLISECOND, 0)
     if (cal.timeInMillis <= now) cal.add(Calendar.DAY_OF_MONTH, 1)
     val anchorNext = cal.timeInMillis
+
+    // 日期类提醒必须带有合法的月日，否则引擎无法算出正确触发时间，
+    // 会退化成「立刻触发一次就完事」。AI 无法自行推算农历/公历生日，
+    // 此时请用户补充月日，而不是创建一个会误触发的提醒。
+    if (kind == "date" && dateType != "holiday" &&
+        (targetMonth !in 1..12 || targetDay !in 1..31)
+    ) {
+        return "需要具体的公历/农历月日才能创建日期提醒（例如：农历八月十五、公历5月1日）。请补充月日，我再为你创建。"
+    }
+    if (kind == "date" && dateType == "holiday" && holidayName.isNullOrBlank()) {
+        return "需要指定节假日名称（例如：春节、中秋节）才能创建节假日提醒。"
+    }
 
     val entity = ReminderEntity(
         title = title, note = note, kind = kind, cycle = cycle, customDays = customDays,
