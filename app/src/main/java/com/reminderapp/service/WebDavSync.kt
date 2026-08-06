@@ -131,7 +131,10 @@ object WebDavSync {
         // 同时保留已完成状态。
         val toInsert = items.map { entity ->
             val next = ReminderEngine.calculateNextTrigger(entity)
+            // id=0 强制自增：远程 JSON 保留了上传时的原 id，软删行仍占用这些主键，
+            // 直接插入会 SQLiteConstraintException 导致整个同步失败
             entity.copy(
+                id = 0,
                 nextTriggerAt = next,
                 status = if (entity.status == "confirmed") "confirmed" else "pending",
                 retryCount = 0

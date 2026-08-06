@@ -75,10 +75,14 @@ object UpdateService {
     private fun parseAtom(body: String): UpdateInfo? {
         val entry = Regex("<entry>(.*?)</entry>", RegexOption.DOT_MATCHES_ALL)
             .find(body)?.groupValues?.get(1) ?: return null
-        val tag = Regex("<title[^>]*>(.*?)</title>", RegexOption.DOT_MATCHES_ALL)
-            .find(entry)?.groupValues?.get(1)?.trim() ?: return null
         val link = Regex("href=\"([^\"]*releases/tag/[^\"]*)\"")
             .find(entry)?.groupValues?.get(1) ?: return null
+        // tag 优先从 link 的 /releases/tag/<tag> 提取：
+        // atom 的 <title> 是 release 的 name（填了中文/描述名时会拿到非版本串）
+        val tag = Regex("releases/tag/([^/\"?]+)").find(link)?.groupValues?.get(1)
+            ?: Regex("<title[^>]*>(.*?)</title>", RegexOption.DOT_MATCHES_ALL)
+                .find(entry)?.groupValues?.get(1)?.trim()
+            ?: return null
         return UpdateInfo(
             latestVersion = tag.removePrefix("v"),
             apkUrl = APK_ASSET_URL,

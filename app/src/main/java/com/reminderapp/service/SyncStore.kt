@@ -35,7 +35,10 @@ object SyncStore {
                 prefs(ReminderApp.instance).edit().putString(KEY_PASS, CryptoHelper.encrypt(raw)).apply()
                 return raw
             }
-            return CryptoHelper.decrypt(raw)
+            val decrypted = CryptoHelper.decrypt(raw)
+            // 明文密码本身含冒号（如 abc:def）会被误判为密文 → 解密失败时回退明文，
+            // 否则 isConfigured 判 false，同步不可用
+            return if (decrypted.isEmpty()) raw else decrypted
         }
         set(value) = prefs(ReminderApp.instance).edit().putString(KEY_PASS, CryptoHelper.encrypt(value)).apply()
 

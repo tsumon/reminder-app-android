@@ -81,7 +81,14 @@ fun NavGraph(
                         val reminders = com.reminderapp.service.BackupService.importFromJson(json)
                             ?: return@launch
                         reminders.forEach { r ->
-                            val newId = database.reminderDao().insert(r)
+                            // 强制 id=0 让 Room 重新自增：备份 JSON 保留了原 id，
+                            // 直接插入会与现有行（含软删行）主键冲突 → SQLiteConstraintException 崩溃
+                            val newId = try {
+                                database.reminderDao().insert(r.copy(id = 0))
+                            } catch (e: Exception) {
+                                android.util.Log.e("NavGraph", "导入单条失败: ${e.message}")
+                                return@forEach
+                            }
                             scheduler.schedule(r.copy(id = newId))
                         }
                         com.reminderapp.service.SyncStore.touchLocalChange()
@@ -292,13 +299,16 @@ fun NavGraph(
         ) { backStackEntry ->
             val reminderId = backStackEntry.arguments?.getLong("reminderId") ?: return@composable
 
-            val viewModel = ReminderDetailViewModel(
-                reminderId = reminderId,
-                dao = database.reminderDao(),
-                recordDao = database.reminderRecordDao(),
-                scheduler = scheduler,
-                notificationMgr = notificationMgr
-            )
+            // 必须 remember：每次重组 new 会让 VM 初始状态变 null → 详情页闪空白反复加载
+            val viewModel = remember(reminderId) {
+                ReminderDetailViewModel(
+                    reminderId = reminderId,
+                    dao = database.reminderDao(),
+                    recordDao = database.reminderRecordDao(),
+                    scheduler = scheduler,
+                    notificationMgr = notificationMgr
+                )
+            }
 
             ReminderDetailScreen(
                 viewModel = viewModel,

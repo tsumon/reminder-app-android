@@ -505,6 +505,20 @@ private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase,
     val ruleWeek = (args["rule_week"] as? Double)?.toInt() ?: (args["rule_week"] as? Int)
     val ruleWeekday = (args["rule_weekday"] as? Double)?.toInt() ?: (args["rule_weekday"] as? Int)
 
+    // v1.9.6 fix: kind/cycle/dateType 白名单校验。
+    // 非法值会静默降级（调度走 else 分支、日历不显示）→「创建成功但永远不对」的幽灵提醒
+    if (kind !in setOf("cycle", "date", "rule")) {
+        return "提醒类型无效（$kind），只支持：周期(cycle)/日期(date)/规则(rule)。"
+    }
+    if (kind == "cycle" && cycle !in setOf("daily", "weekly", "biweekly", "monthly", "quarterly", "yearly", "custom", "once")) {
+        return "周期类型无效（$cycle），只支持：每天/每周/每两周/每月/每季度/每年/自定义/一次。"
+    }
+    if (kind == "date" && dateType != null &&
+        dateType !in setOf("solar_birthday", "lunar_birthday", "holiday")
+    ) {
+        return "日期类型无效（$dateType），只支持：公历生日/农历生日/节假日。"
+    }
+
     val now = System.currentTimeMillis()
 
     // 首次锚点：下一个到达 reminderHour:reminderMinute 的时刻
@@ -549,6 +563,9 @@ private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase,
 
     val id = database.reminderDao().insert(finalEntity)
     scheduler.schedule(finalEntity.copy(id = id))
+    // v1.9.6 fix: 漏 touchLocalChange → AI 新建的提醒永远不同步 / 被远程旧数据覆盖
+    com.reminderapp.service.SyncStore.touchLocalChange()
+    com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
     return "已创建提醒：「$title」"
 }
 
@@ -569,28 +586,40 @@ private suspend fun handleList(database: AppDatabase): String {
 
 private suspend fun handleConfirm(args: Map<String, Any?>, database: AppDatabase, scheduler: ReminderScheduler, notificationMgr: NotificationManager): String {
     val keyword = (args["title_keyword"] as? String ?: "").lowercase()
+    // 空关键词 contains("") 恒 true 会命中第一条无关提醒 → 必须守卫
+    if (keyword.isEmpty()) return "请指定要确认的提醒标题（如：确认「交房租」）。"
     val list = database.reminderDao().getAllSync()
     val match = list.find { it.title.lowercase().contains(keyword) } ?: return "未找到包含「$keyword」的提醒"
     val updated = ReminderEngine.confirm(match)
     database.reminderDao().update(updated)
     scheduler.schedule(updated)
+    com.reminderapp.service.SyncStore.touchLocalChange()
+    com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
     return "已确认「${match.title}」，下次提醒时间已更新。"
 }
 
 private suspend fun handleSnooze(args: Map<String, Any?>, database: AppDatabase, scheduler: ReminderScheduler, notificationMgr: NotificationManager): String {
     val keyword = (args["title_keyword"] as? String ?: "").lowercase()
+    if (keyword.isEmpty()) return "请指定要推迟的提醒标题（如：推迟「交房租」）。"
     val list = database.reminderDao().getAllSync()
     val match = list.find { it.title.lowercase().contains(keyword) } ?: return "未找到包含「$keyword」的提醒"
     val updated = ReminderEngine.snooze(match)
     database.reminderDao().update(updated)
     scheduler.schedule(updated)
+    com.reminderapp.service.SyncStore.touchLocalChange()
+    com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
     return "已推迟「${match.title}」，15 分钟后再次提醒。"
 }
 
 private suspend fun handleDelete(args: Map<String, Any?>, database: AppDatabase): String {
     val keyword = (args["title_keyword"] as? String ?: "").lowercase()
+    if (keyword.isEmpty()) return "请指定要删除的提醒标题（如：删除「交房租」）。"
     val list = database.reminderDao().getAllSync()
     val match = list.find { it.title.lowercase().contains(keyword) } ?: return "未找到包含「$keyword」的提醒"
+    // 删除前取消已排期的通知，避免幽灵提醒
+    NotificationManager(com.reminderapp.ReminderApp.instance).cancelReminderNotifications(match.id)
     database.reminderDao().delete(match)
+    com.reminderapp.service.SyncStore.touchLocalChange()
+    com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
     return "已删除「${match.title}」"
 }
