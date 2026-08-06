@@ -103,6 +103,7 @@ fun HomeScreen(
     onImport: () -> Unit = {},
     onOpenSyncSettings: () -> Unit = {},
     onOpenStats: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     onExportICS: () -> Unit = {},
     onCheckUpdate: () -> Unit = {},
     onSyncNow: () -> Unit = {}
@@ -213,6 +214,16 @@ fun HomeScreen(
                                 onClick = {
                                     menuExpanded = false
                                     onCheckUpdate()
+                                }
+                            )
+                            Divider()
+                            // v1.9.2: 设置（版本号/更新日志/AI/同步）
+                            DropdownMenuItem(
+                                text = { Text("设置") },
+                                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onOpenSettings()
                                 }
                             )
                         }
