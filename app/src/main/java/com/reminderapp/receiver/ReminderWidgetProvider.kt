@@ -54,7 +54,7 @@ class ReminderWidgetProvider : AppWidgetProvider() {
                 withContext(Dispatchers.Main) {
                     applyData(
                         context, appWidgetManager, appWidgetIds,
-                        WidgetData(0, "", null, null, "", null)
+                        WidgetData(0, "", null, null, null)
                     )
                 }
             } finally {
@@ -188,7 +188,8 @@ class ReminderWidgetProvider : AppWidgetProvider() {
                 val data = try {
                     loadData(appContext)
                 } catch (e: Exception) {
-                    WidgetData(0, null, null)
+                    // 兜底：v1.8.7 小组件增强后 WidgetData 扩为 5 字段（lunarText 非空）
+                    WidgetData(0, "", null, null, null)
                 }
                 withContext(Dispatchers.Main) {
                     val provider = ReminderWidgetProvider()
