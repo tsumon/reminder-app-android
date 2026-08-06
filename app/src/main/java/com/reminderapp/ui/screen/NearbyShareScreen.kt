@@ -44,6 +44,7 @@ fun NearbyShareScreen(
     var mode by remember { mutableStateOf("发送") }
     var server by remember { mutableStateOf<ServerSocket?>(null) }
     var serverLog by remember { mutableStateOf("") }
+    var serverLogIsError by remember { mutableStateOf(false) }
     var receiveIP by remember { mutableStateOf("") }
     var isReceiving by remember { mutableStateOf(false) }
     var resultMsg by remember { mutableStateOf<String?>(null) }
@@ -52,7 +53,7 @@ fun NearbyShareScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            server?.close()
+            NearbyShareService.stopServer(server)
         }
     }
 
@@ -116,18 +117,29 @@ fun NearbyShareScreen(
                 if (server != null) {
                     if (serverLog.isNotEmpty()) {
                         Text(serverLog, style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.tertiary)
+                            color = if (serverLogIsError) MaterialTheme.colorScheme.error
+                                    else MaterialTheme.colorScheme.tertiary)
                     }
                     Button(
-                        onClick = { server?.close(); server = null },
+                        onClick = {
+                            NearbyShareService.stopServer(server)
+                            server = null
+                        },
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                     ) {
                         Text("停止共享")
                     }
                 } else {
+                    if (serverLog.isNotEmpty()) {
+                        // 启动失败等错误日志在未运行时也显示
+                        Text(serverLog, style = MaterialTheme.typography.bodySmall,
+                            color = if (serverLogIsError) MaterialTheme.colorScheme.error
+                                    else MaterialTheme.colorScheme.tertiary)
+                    }
                     Button(
                         onClick = {
                             serverLog = ""
+                            serverLogIsError = false
                             server = NearbyShareService.startServer(
                                 jsonProvider = {
                                     // 每次请求拉最新数据（DAO 是挂起函数，这里同步拉取）
@@ -135,8 +147,11 @@ fun NearbyShareScreen(
                                         BackupService.exportToJson(database.reminderDao().getAllSync())
                                     }
                                 },
-                                onEvent = { msg ->
-                                    scope.launch { serverLog = msg }
+                                onEvent = { msg, isErr ->
+                                    scope.launch {
+                                        serverLog = msg
+                                        serverLogIsError = isErr
+                                    }
                                 }
                             )
                             ipAddress = NearbyShareService.localIpAddress()
@@ -193,15 +208,17 @@ fun NearbyShareScreen(
                                     resultMsg = "数据解析失败"
                                     return@launch
                                 }
-                                // 导入（去重：id + 标题|触发时间指纹）
-                                val existing = database.reminderDao().getAllSync()
-                                val existingIds = existing.map { it.id }.toSet()
-                                val existingFp = existing.map { "${it.title}|${it.nextTriggerAt}" }.toSet()
+                                // 导入去重：⚠️ 不能用 id——发送方的 id 是它本地自增的，
+                                // 接收端已有 id 1..N 时会把对方同 id 的提醒误跳过（丢数据）。
+                                // 只用指纹（title|nextTriggerAt|kind|cycle，加类型防「同名同时间」误判）
+                                val existingFp = database.reminderDao().getAllSync()
+                                    .map { "${it.title}|${it.nextTriggerAt}|${it.kind}|${it.cycle}" }
+                                    .toSet()
                                 var imported = 0
                                 var skipped = 0
                                 for (r in entities) {
-                                    val fp = "${r.title}|${r.nextTriggerAt}"
-                                    if (existingIds.contains(r.id) || existingFp.contains(fp)) {
+                                    val fp = "${r.title}|${r.nextTriggerAt}|${r.kind}|${r.cycle}"
+                                    if (existingFp.contains(fp)) {
                                         skipped++
                                         continue
                                     }

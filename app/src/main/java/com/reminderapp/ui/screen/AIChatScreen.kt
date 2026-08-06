@@ -1,10 +1,7 @@
 package com.reminderapp.ui.screen
 
-import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -34,7 +31,6 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
-import java.text.SimpleDateFormat
 import java.util.*
 
 // ---- Message Model ----
@@ -78,6 +74,9 @@ fun AIChatScreen(
             voiceService.recognize().fold(
                 onSuccess = { text ->
                     if (text.isNotBlank()) {
+                        // v1.9.6 fix: 语音识别结果先上屏（与文本路径一致），
+                        // 否则对话列表只显示 AI 回复、看不到用户气泡
+                        messages = messages + ChatMessage(role = ChatMessage.Role.USER, content = text)
                         scope.launch {
                             sendToAI(
                                 text, settings, aiService, database, scheduler, notificationMgr, gson,
@@ -334,10 +333,11 @@ private suspend fun sendToAI(
     )
     // v1.9.6 fix: 携带完整历史（截断最近 20 条）——否则「确认喝水」「再提醒一次」
     // 这类依赖上下文的指令永远失联（原实现只发 system+当前 user）
+    // 注意：当前 user 消息已由调用方上屏并包含在 history 里，这里不要再追加，
+    // 否则同一指令会发给模型两次（文本路径曾因此重复）
     history.takeLast(20).forEach { msg ->
         conversation.add(mapOf("role" to msg.role.name.lowercase(), "content" to msg.content))
     }
-    conversation.add(mapOf("role" to "user", "content" to userText))
 
     var maxTurns = 5
 
