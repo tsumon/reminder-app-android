@@ -27,6 +27,7 @@ import com.reminderapp.ui.screen.AIChatScreen
 import com.reminderapp.ui.screen.AISettingsScreen
 import com.reminderapp.ui.screen.StatsScreen
 import com.reminderapp.ui.screen.SettingsScreen
+import com.reminderapp.ui.screen.NearbyShareScreen
 import com.reminderapp.ui.viewmodel.HomeViewModel
 import com.reminderapp.ui.viewmodel.ReminderDetailViewModel
 import com.reminderapp.service.AISettings
@@ -140,6 +141,7 @@ fun NavGraph(
                 onOpenStats = { navController.navigate("stats") },
                 onOpenSettings = { navController.navigate("settings") },
                 onCheckUpdate = manualCheck,
+                onNearbyShare = { navController.navigate("nearby_share") },
                 // v1.8.7 任务④: .ics 导出 → 写 cache + FileProvider 分享
                 onExportICS = {
                     scope.launch {
@@ -261,6 +263,15 @@ fun NavGraph(
             }
             StatsScreen(
                 records = records,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // 近场传输: 同一局域网互传提醒
+        composable("nearby_share") {
+            NearbyShareScreen(
+                database = database,
+                scheduler = scheduler,
                 onBack = { navController.popBackStack() }
             )
         }

@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -106,6 +107,7 @@ fun HomeScreen(
     onOpenSettings: () -> Unit = {},
     onExportICS: () -> Unit = {},
     onCheckUpdate: () -> Unit = {},
+    onNearbyShare: () -> Unit = {},
     onSyncNow: () -> Unit = {}
 ) {
     val grouped by viewModel.groupedReminders.collectAsState()
@@ -204,6 +206,16 @@ fun HomeScreen(
                                 onClick = {
                                     menuExpanded = false
                                     onExportICS()
+                                }
+                            )
+                            Divider()
+                            // 近场传输: 同一局域网互传提醒
+                            DropdownMenuItem(
+                                text = { Text("附近传输") },
+                                leadingIcon = { Icon(Icons.Default.Wifi, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onNearbyShare()
                                 }
                             )
                             Divider()
