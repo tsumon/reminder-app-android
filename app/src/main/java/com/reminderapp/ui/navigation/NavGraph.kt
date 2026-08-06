@@ -7,6 +7,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -128,6 +131,60 @@ fun NavGraph(
                     }
                 }
             )
+
+            // v1.8.7 在线升级: 启动检查 GitHub 最新版本
+            var updateInfo by remember { mutableStateOf<com.reminderapp.service.UpdateService.UpdateInfo?>(null) }
+            var downloading by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) {
+                val info = com.reminderapp.service.UpdateService.checkLatest()
+                if (info != null &&
+                    com.reminderapp.service.UpdateService.isNewer(info.latestVersion, com.reminderapp.service.UpdateService.currentVersion())) {
+                    updateInfo = info
+                }
+            }
+            updateInfo?.let { info ->
+                AlertDialog(
+                    onDismissRequest = { if (!downloading) updateInfo = null },
+                    title = { Text("发现新版本 v${info.latestVersion}") },
+                    text = {
+                        Text(
+                            if (downloading) "正在下载更新包…"
+                            else "当前版本 v${com.reminderapp.service.UpdateService.currentVersion()}，是否前往下载安装？"
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(
+                            enabled = !downloading,
+                            onClick = {
+                                scope.launch {
+                                    downloading = true
+                                    try {
+                                        val apkUrl = info.apkUrl
+                                        if (apkUrl != null) {
+                                            val apk = com.reminderapp.service.UpdateService.downloadApk(context, apkUrl)
+                                            com.reminderapp.service.UpdateService.install(context, apk)
+                                        } else {
+                                            com.reminderapp.service.UpdateService.openReleasePage(context, info.releaseUrl)
+                                        }
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(
+                                            context, "下载失败: ${e.message}", android.widget.Toast.LENGTH_LONG
+                                        ).show()
+                                    } finally {
+                                        downloading = false
+                                        updateInfo = null
+                                    }
+                                }
+                            }
+                        ) { Text(if (downloading) "下载中…" else "前往下载") }
+                    },
+                    dismissButton = {
+                        TextButton(enabled = !downloading, onClick = { updateInfo = null }) {
+                            Text("稍后再说")
+                        }
+                    }
+                )
+            }
         }
 
         composable("chat") {

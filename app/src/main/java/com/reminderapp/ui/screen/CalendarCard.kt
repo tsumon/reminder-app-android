@@ -3,18 +3,21 @@ package com.reminderapp.ui.screen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -47,6 +50,8 @@ fun CalendarCard(
     var displayYear by remember { mutableIntStateOf(todayCal.get(Calendar.YEAR)) }
     var displayMonth by remember { mutableIntStateOf(todayCal.get(Calendar.MONTH)) } // 0-based
     var selectedDateKey by remember { mutableStateOf<String?>(null) }
+    // v1.8.7 UI 优化: 月份选择器弹窗
+    var showMonthPicker by remember { mutableStateOf(false) }
 
     // 任务日期 → 数量映射（按 displayed 月份逐日判断是否触发，贴合所显示月份）
     val taskDates = remember(reminders, displayYear, displayMonth) {
@@ -81,9 +86,32 @@ fun CalendarCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 12.dp, vertical = 12.dp)
+                // v1.8.7 UI 优化: 左右滑动快速切月（与纵向滚动不冲突）
+                .pointerInput(Unit) {
+                    var totalDrag = 0f
+                    detectHorizontalDragGestures(
+                        onDragStart = { totalDrag = 0f },
+                        onDragEnd = {
+                            if (totalDrag > 80) {
+                                displayMonth--
+                                if (displayMonth < 0) { displayMonth = 11; displayYear-- }
+                            } else if (totalDrag < -80) {
+                                displayMonth++
+                                if (displayMonth > 11) { displayMonth = 0; displayYear++ }
+                            }
+                        },
+                        onHorizontalDrag = { change, amount ->
+                            change.consume()
+                            totalDrag += amount
+                        }
+                    )
+                }
+        ) {
             // === 头部：月份 + 切换 + 今天信息 ===
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
@@ -94,20 +122,45 @@ fun CalendarCard(
                 ) {
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "上一月")
                 }
+                // 月份标题：点击弹「月份选择器」（v1.8.7 UI 优化）
                 Column(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { showMonthPicker = true }
+                        .padding(vertical = 4.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = "${displayYear}年${displayMonth + 1}月",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "${displayYear}年${displayMonth + 1}月",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            Icons.Filled.KeyboardArrowDown,
+                            contentDescription = "选择月份",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     Text(
                         text = "农历$todayLunar · $todayWeekday$todayStatusSuffix",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+                // 回到今天（非当月时显示，v1.8.7 UI 优化）
+                val isCurrentMonth = displayYear == todayCal.get(Calendar.YEAR) &&
+                    displayMonth == todayCal.get(Calendar.MONTH)
+                if (!isCurrentMonth) {
+                    TextButton(onClick = {
+                        displayYear = todayCal.get(Calendar.YEAR)
+                        displayMonth = todayCal.get(Calendar.MONTH)
+                    }) {
+                        Text("今天", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    }
                 }
                 IconButton(
                     onClick = {
@@ -188,6 +241,64 @@ fun CalendarCard(
                 }
             }
         }
+    }
+
+    // v1.8.7 UI 优化: 月份选择器（年份 +/- + 12 个月网格）
+    if (showMonthPicker) {
+        AlertDialog(
+            onDismissRequest = { showMonthPicker = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { displayYear-- }) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "上一年")
+                    }
+                    Text(
+                        text = "${displayYear} 年",
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = { displayYear++ }) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "下一年")
+                    }
+                }
+            },
+            text = {
+                val monthNames = listOf("一月", "二月", "三月", "四月", "五月", "六月",
+                    "七月", "八月", "九月", "十月", "十一月", "十二月")
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    monthNames.chunked(4).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            row.forEach { name ->
+                                val idx = monthNames.indexOf(name)
+                                Box(modifier = Modifier.weight(1f)) {
+                                    TextButton(
+                                        onClick = {
+                                            displayMonth = idx
+                                            showMonthPicker = false
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.textButtonColors(
+                                            containerColor = if (idx == displayMonth) Tokens.BrandPrimary
+                                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                            contentColor = if (idx == displayMonth) Color.White
+                                            else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    ) {
+                                        Text(name, fontWeight = if (idx == displayMonth) FontWeight.Bold else FontWeight.Normal)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showMonthPicker = false }) { Text("取消") }
+            }
+        )
     }
 }
 
