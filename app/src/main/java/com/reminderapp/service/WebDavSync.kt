@@ -94,7 +94,7 @@ object WebDavSync {
                 }
             }
         } catch (e: Exception) {
-            SyncResult.Error(e.message ?: "同步失败")
+            SyncResult.Error(friendlyMessage(e))
         }
     }
 
@@ -153,7 +153,7 @@ object WebDavSync {
         client.newCall(request).execute().use { response ->
             if (response.code == 404) return null
             if (!response.isSuccessful) {
-                throw Exception("下载失败 HTTP ${response.code}")
+                throw Exception("HTTP ${response.code}")
             }
             return response.body?.string()
         }
@@ -168,8 +168,64 @@ object WebDavSync {
             .build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                throw Exception("上传失败 HTTP ${response.code}")
+                throw Exception("HTTP ${response.code}")
             }
+        }
+    }
+
+    /**
+     * 测试连接：PROPFIND 验证连通性与认证（坚果云友好提示）。
+     * 添加 WebDAV 时先测试，再同步。
+     */
+    suspend fun testConnection(): SyncResult = withContext(Dispatchers.IO) {
+        val base = SyncStore.url.trim().trimEnd('/')
+        if (base.isEmpty() || SyncStore.username.isEmpty() || SyncStore.password.isEmpty()) {
+            return@withContext SyncResult.Error("请先填写 WebDAV 地址、用户名和应用密码")
+        }
+        try {
+            val request = Request.Builder()
+                .url(base)
+                .header("Authorization", Credentials.basic(SyncStore.username, SyncStore.password))
+                .header("Depth", "0")
+                .method("PROPFIND", null)
+                .build()
+            client.newCall(request).execute().use { response ->
+                val code = response.code
+                // 207 Multi-Status 是 PROPFIND 的正常成功响应
+                if (code in 200..299 || code == 207) {
+                    SyncResult.Success
+                } else {
+                    SyncResult.Error(friendlyMessage(code))
+                }
+            }
+        } catch (e: Exception) {
+            SyncResult.Error(friendlyMessage(e))
+        }
+    }
+
+    /** 把 HTTP 状态码/异常转成可操作的中文提示（尤其坚果云 401 应用密码） */
+    private fun friendlyMessage(code: Int): String = when (code) {
+        401 -> "认证失败（HTTP 401）：请确认用户名；密码必须是坚果云「应用密码」——在坚果云网页端「账户信息 → 安全选项 → 添加应用密码」生成，不能用登录密码。"
+        403 -> "无权限（HTTP 403）：请检查该 WebDAV 路径是否可写（如 dav.jianguoyun.com/dav/ 根目录）。"
+        405 -> "服务器不支持该操作（HTTP 405）：请确认填的是 WebDAV 地址（如 …/dav/），不是网盘网页地址。"
+        409 -> "资源冲突（HTTP 409）。"
+        423 -> "资源被锁定（HTTP 423）。"
+        507 -> "存储空间不足（HTTP 507）。"
+        else -> "HTTP $code：请检查服务器地址/账号，或稍后重试。"
+    }
+
+    private fun friendlyMessage(e: Exception): String {
+        val m = e.message ?: return "无法连接服务器：请检查网络和地址。"
+        if (m.startsWith("HTTP")) {
+            val code = m.removePrefix("HTTP").trim().toIntOrNull()
+            if (code != null) return friendlyMessage(code)
+        }
+        val low = m.lowercase()
+        return when {
+            low.contains("timeout") -> "连接超时：请检查网络或服务器地址。"
+            low.contains("failed to connect") || low.contains("network") ||
+                low.contains("unable to resolve") -> "无法连接服务器：请检查网络和地址。"
+            else -> m
         }
     }
 }
