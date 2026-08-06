@@ -1,6 +1,7 @@
 package com.reminderapp.ui.screen
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
@@ -40,6 +41,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.reminderapp.data.entity.ReminderEntity
 import com.reminderapp.service.ReminderEngine
 import com.reminderapp.ui.theme.*
@@ -145,6 +147,25 @@ fun HomeScreen(
                     containerColor = MaterialTheme.colorScheme.background
                 ),
                 actions = {
+                    // 品牌头像（设计图风格：M3 紫渐变圆）
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 4.dp)
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(Color(0xFF7C66C2), Color(0xFF5B4891))
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "周",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                    }
                     Box {
                         IconButton(onClick = { menuExpanded = true }) {
                             Icon(
@@ -276,8 +297,7 @@ fun HomeScreen(
                 )
             }
 
-            // 日历卡片（始终显示）
-            item { CalendarCard(reminders = allReminders, onDateClick = { selectedDate = it }) }
+            // v1.9.8 UI 对齐设计图：日历卡移到「日历」Tab（CalendarScreen），首页只保留列表
 
             // 智能清单筛选条
             item {
@@ -331,7 +351,7 @@ fun HomeScreen(
             } else {
                 // 提醒中
                 if (reminding.isNotEmpty()) {
-                    item { SectionHeader("提醒中", StatusReminding) }
+                    item { SectionHeader("提醒中", StatusReminding, count = reminding.size) }
                     items(reminding, key = { it.id }) { reminder ->
                         SwipeableReminderCard(
                             reminder = reminder,
@@ -347,7 +367,7 @@ fun HomeScreen(
 
                 // 等待中
                 if (waiting.isNotEmpty()) {
-                    item { SectionHeader("等待中", StatusWaiting) }
+                    item { SectionHeader("等待中", StatusWaiting, count = waiting.size) }
                     items(waiting, key = { it.id }) { reminder ->
                         SwipeableReminderCard(
                             reminder = reminder,
@@ -362,7 +382,7 @@ fun HomeScreen(
 
                 // 已完成
                 if (completed.isNotEmpty()) {
-                    item { SectionHeader("已完成", StatusCompleted) }
+                    item { SectionHeader("已完成", StatusCompleted, count = completed.size) }
                     items(completed, key = { it.id }) { reminder ->
                         SwipeableReminderCard(
                             reminder = reminder,
@@ -449,14 +469,35 @@ fun HomeScreen(
     }
 }
 
+/** 分组标题：小色条 + 标题 + 数量（设计图风格） */
 @Composable
-fun SectionHeader(title: String, color: Color) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-        color = color,
+fun SectionHeader(title: String, color: Color, count: Int? = null) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
-    )
+    ) {
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .height(14.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(color)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        if (count != null) {
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "· $count",
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                color = color
+            )
+        }
+    }
 }
 
 /** 智能清单筛选条：横向可滚动的 Chip 列表 */
@@ -658,6 +699,34 @@ fun ruleLabel(reminder: ReminderEntity): String {
     return "${periodLabel}第${reminder.ruleWeek ?: 1}周$weekday"
 }
 
+/** 提醒类型 → 展示用 emoji（设计图风格彩色图标容器） */
+fun reminderEmoji(reminder: ReminderEntity): String = when {
+    reminder.kind == "date" && reminder.dateType == "holiday" -> "🎉"
+    reminder.kind == "date" && reminder.dateType == "lunar_birthday" -> "🌙"
+    reminder.kind == "date" && reminder.dateType == "solar_birthday" -> "🎂"
+    reminder.kind == "rule" -> "📅"
+    else -> when (reminder.cycle) {
+        "once" -> "⏰"
+        "daily" -> "🔁"
+        "weekly" -> "📆"
+        "biweekly" -> "📆"
+        "monthly" -> "🗓"
+        "quarterly" -> "📊"
+        "yearly" -> "🎯"
+        "custom" -> "⏳"
+        else -> "💡"
+    }
+}
+
+/** 提醒类型 → 图标容器底色（与 iOS kindBadgeColor 对应） */
+fun reminderKindColor(reminder: ReminderEntity): Color = when {
+    reminder.kind == "date" && reminder.dateType == "holiday" -> Color(0xFFF39C12)
+    reminder.kind == "date" && reminder.dateType == "lunar_birthday" -> Color(0xFF9C27B0)
+    reminder.kind == "date" && reminder.dateType == "solar_birthday" -> Color(0xFFE91E63)
+    reminder.kind == "rule" -> Color(0xFF1ABC9C)
+    else -> Color(0xFF3498DB)
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ReminderCard(
@@ -696,7 +765,9 @@ fun ReminderCard(
         "low" -> "⚪低"
         else -> "🟢中"
     }
+    val isDone = reminder.status == "confirmed"
 
+    // 液态玻璃卡片：半透明白 + 大圆角 + 高光描边 + 柔和阴影（对齐设计图）
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -706,27 +777,32 @@ fun ReminderCard(
                 onClickLabel = "打开详情",
                 onLongClickLabel = "长按删除"
             ),
+        shape = RoundedCornerShape(Tokens.RadiusCell),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = Color.White.copy(alpha = 0.82f)
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.7f))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // 彩色 emoji 图标容器（设计图：44dp 圆角方块 + 类型色浅底）
             Box(
                 modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(statusColor)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(reminderKindColor(reminder).copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(reminderEmoji(reminder), fontSize = 22.sp)
+            }
+            Spacer(modifier = Modifier.width(13.dp))
             Column(modifier = Modifier.weight(1f)) {
-                // 已完成：标题划线变灰（v1.8.7 UI 优化，滴答清单风格）
-                val isDone = reminder.status == "confirmed"
+                // 标题（已完成划线变灰）
                 Text(
                     text = reminder.title,
                     style = MaterialTheme.typography.titleMedium,
@@ -736,20 +812,36 @@ fun ReminderCard(
                     color = if (isDone) MaterialTheme.colorScheme.onSurfaceVariant
                     else MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row {
+                Spacer(modifier = Modifier.height(3.dp))
+                // meta：类型 · 优先级 · 重试
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "$priorityLabel · $kindLabel",
+                        text = "$kindLabel · $priorityLabel",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    if (reminder.retryCount > 0 && !isDone) {
+                        Text(
+                            text = " · 第${reminder.retryCount}次重试",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFF39C12)
+                        )
+                    }
+                }
+                // 状态胶囊（设计图独立 chip）
+                if (statusText.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(5.dp))
                     Text(
-                        text = " · $statusText",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = statusColor
+                        text = statusText,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = statusColor,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(statusColor.copy(alpha = 0.12f))
+                            .padding(horizontal = 10.dp, vertical = 3.dp)
                     )
                 }
-                if (reminder.note.isNotEmpty()) {
+                if (reminder.note.isNotEmpty() && statusText.isEmpty()) {
                     Text(
                         text = reminder.note,
                         style = MaterialTheme.typography.bodySmall,
@@ -760,10 +852,11 @@ fun ReminderCard(
                     )
                 }
             }
+            // 右侧时间：状态色（设计图）
             Text(
                 text = dateFormat.format(Date(reminder.nextTriggerAt)),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                color = statusColor
             )
         }
     }
