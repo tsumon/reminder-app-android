@@ -31,25 +31,36 @@ object UpdateService {
 
     private val client by lazy {
         OkHttpClient.Builder()
-            .connectTimeout(8, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
             .build()
     }
 
     /** 当前 App 版本（BuildConfig.VERSION_NAME） */
     fun currentVersion(): String = com.reminderapp.BuildConfig.VERSION_NAME
 
-    /** 检查最新 release；失败返回 null（离线/限流静默降级） */
+    /** 检查最新 release；失败返回 null（离线/限流/国内网络超时静默降级，可重试） */
     suspend fun checkLatest(): UpdateInfo? = withContext(Dispatchers.IO) {
-        try {
+        // 国内访问 api.github.com 不稳定，失败重试一次
+        var result: UpdateInfo? = null
+        for (attempt in 0..1) {
+            result = tryFetchLatest()
+            if (result != null) break
+        }
+        result
+    }
+
+    private fun tryFetchLatest(): UpdateInfo? {
+        return try {
             val req = Request.Builder().url(API)
                 .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", "reminder-app-android")
                 .build()
             client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext null
-                val body = resp.body?.string() ?: return@withContext null
+                if (!resp.isSuccessful) return null
+                val body = resp.body?.string() ?: return null
                 val json = JsonParser.parseString(body).asJsonObject
-                val tag = json.get("tag_name")?.asString ?: return@withContext null
+                val tag = json.get("tag_name")?.asString ?: return null
                 val releaseUrl = json.get("html_url")?.asString ?: "https://github.com/$REPO/releases"
                 // 找第一个 .apk 资产
                 var apkUrl: String? = null

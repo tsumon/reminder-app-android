@@ -27,6 +27,7 @@ fun SyncSettingsScreen(
     var password by remember { mutableStateOf(SyncStore.password) }
     var autoSync by remember { mutableStateOf(SyncStore.autoSync) }
     var syncing by remember { mutableStateOf(false) }
+    var testing by remember { mutableStateOf(false) }
     var resultMsg by remember { mutableStateOf("") }
     var resultIsError by remember { mutableStateOf(false) }
 
@@ -100,6 +101,36 @@ fun SyncSettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            // v1.9.1: 测试连接（先验证账号/路径，坚果云友好提示）
+            Button(
+                onClick = {
+                    SyncStore.url = url
+                    SyncStore.username = username
+                    SyncStore.password = password
+                    SyncStore.autoSync = autoSync
+                    testing = true
+                    resultMsg = ""
+                    scope.launch {
+                        val result = WebDavSync.testConnection()
+                        testing = false
+                        when (result) {
+                            is WebDavSync.SyncResult.Success -> {
+                                resultMsg = "连接成功 ✓ 账号与路径可用，可以开始同步。"
+                                resultIsError = false
+                            }
+                            is WebDavSync.SyncResult.Error -> {
+                                resultMsg = result.message
+                                resultIsError = true
+                            }
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !testing && !syncing && url.isNotBlank() && username.isNotBlank() && password.isNotBlank()
+            ) {
+                Text(if (testing) "测试中..." else "测试连接")
             }
 
             Button(
