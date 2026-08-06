@@ -321,7 +321,9 @@ object ReminderEngine {
             "yearly" -> month == aM && day == aD
             "custom" -> {
                 val cd = reminder.customDays
-                cd > 0 && targetWeekday == aWeekday && diff % cd == 0
+                // P2 修复：每 N 天提醒不能要求同星期 —— 每 3 天第 2 次起星期必然不同，
+                // 加 weekday 条件会让日历格/智能清单/点日期全部漏显（调度按纯天数累加正常）。
+                cd > 0 && diff % cd == 0
             }
             else -> false
         }
