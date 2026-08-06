@@ -25,6 +25,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import android.webkit.WebView
 import com.reminderapp.ReminderApp
 import com.reminderapp.data.database.AppDatabase
 import com.reminderapp.data.entity.ReminderEntity
@@ -71,6 +75,7 @@ fun AIChatScreen(
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var isListening by remember { mutableStateOf(false) }
     var showNoApiSheet by remember { mutableStateOf(false) }
+    var webViewUrl by remember { mutableStateOf<String?>(null) }
 
     val listState = rememberLazyListState()
 
@@ -132,9 +137,15 @@ fun AIChatScreen(
                                         onSuccess = { text ->
                                             if (text.isNotBlank()) {
                                                 if (settings.useNoAPIMode) {
-                                                    handleNoAPISend(text, settings, context, messages) { messages = it }
+                                                    handleNoAPISend(text, settings, context, messages, { messages = it }) { url -> webViewUrl = url }
                                                 } else {
-                                                    sendToAI(text, settings, aiService, database, scheduler, notificationMgr, gson) { messages = it }
+                                                    scope.launch {
+                                                        sendToAI(
+                                                            text, settings, aiService, database, scheduler, notificationMgr, gson,
+                                                            onMessages = { messages = it },
+                                                            onLoading = { isLoading = it }
+                                                        )
+                                                    }
                                                 }
                                             }
                                         },
@@ -178,10 +189,15 @@ fun AIChatScreen(
                                 errorMsg = null
 
                                 if (settings.useNoAPIMode) {
-                                    handleNoAPISend(userMsg, settings, context, messages) { messages = it }
+                                    handleNoAPISend(userMsg, settings, context, messages, { messages = it }) { url -> webViewUrl = url }
+                                    isLoading = false
                                 } else if (settings.isConfigured) {
                                     scope.launch {
-                                        sendToAI(userMsg, settings, aiService, database, scheduler, notificationMgr, gson) { messages = it }
+                                        sendToAI(
+                                            userMsg, settings, aiService, database, scheduler, notificationMgr, gson,
+                                            onMessages = { messages = it },
+                                            onLoading = { isLoading = it }
+                                        )
                                     }
                                 }
                             },
@@ -266,6 +282,55 @@ fun AIChatScreen(
             }
         }
     }
+
+    // 免 API 模式：应用内网页浏览器（修复「切换到网页对话无法返回」）
+    if (webViewUrl != null) {
+        InAppWebView(url = webViewUrl!!, onClose = { webViewUrl = null })
+    }
+}
+
+/**
+ * 应用内网页浏览器（Dialog 覆盖层，可返回）
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun InAppWebView(url: String, onClose: () -> Unit) {
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("网页 AI 助手") },
+                    navigationIcon = {
+                        IconButton(onClick = onClose) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+            },
+            containerColor = MaterialTheme.colorScheme.background
+        ) { padding ->
+            AndroidView(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                factory = { ctx ->
+                    WebView(ctx).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.loadWithOverviewMode = true
+                        settings.useWideViewPort = true
+                        loadUrl(url)
+                    }
+                }
+            )
+        }
+    }
 }
 
 /**
@@ -276,7 +341,8 @@ private fun handleNoAPISend(
     settings: AISettings,
     context: Context,
     currentMessages: List<ChatMessage>,
-    onMessages: (List<ChatMessage>) -> Unit
+    onMessages: (List<ChatMessage>) -> Unit,
+    onOpenWeb: (String) -> Unit
 ) {
     // 复制到剪贴板
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -289,24 +355,16 @@ private fun handleNoAPISend(
     // 弹 toast
     Toast.makeText(context, "已复制到剪贴板，请在「${provider.name}」网页中粘贴发送", Toast.LENGTH_LONG).show()
 
-    // 打开网页
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(provider.webUrl))
-    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    context.startActivity(intent)
+    // 在应用内打开网页（保留返回能力，不会跳离 App）
+    onOpenWeb(provider.webUrl)
 
     // 显示提示消息
     val truncated = if (text.length > 30) text.take(30) + "..." else text
     val newMessages = currentMessages + ChatMessage(
         role = ChatMessage.Role.ASSISTANT,
-        content = "⚠️ 已复制「$truncated」到剪贴板，请在弹出的「${provider.name}」网页中粘贴发送。\n\n如果页面未自动弹出，你也可以手动打开：${provider.webUrl}"
+        content = "⚠️ 已复制「$truncated」到剪贴板，并在应用内打开了「${provider.name}」网页，请直接粘贴发送。\n\n若网页未自动弹出，也可手动打开：${provider.webUrl}"
     )
     onMessages(newMessages)
-
-    // 延迟重置 loading
-    kotlinx.coroutines.GlobalScope.launch {
-        kotlinx.coroutines.delay(500)
-        // reset via the caller's scope (handled by the caller already)
-    }
 }
 
 @Composable
@@ -341,7 +399,8 @@ private suspend fun sendToAI(
     scheduler: ReminderScheduler,
     notificationMgr: NotificationManager,
     gson: Gson,
-    onMessages: (List<ChatMessage>) -> Unit
+    onMessages: (List<ChatMessage>) -> Unit,
+    onLoading: (Boolean) -> Unit = {}
 ) {
     var msgs = mutableListOf(
         ChatMessage(role = ChatMessage.Role.USER, content = userText)
@@ -377,19 +436,20 @@ private suspend fun sendToAI(
 
             val content = reply.content ?: "好的，已处理。"
             msgs.add(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = content))
-            loading = false
+            onLoading(false)
             onMessages(msgs)
             return
 
         } catch (e: Exception) {
             msgs.add(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = "❌ ${e.message}"))
-            loading = false
+            onLoading(false)
             onMessages(msgs)
             return
         }
     }
 
     msgs.add(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = "对话轮次过多，请重新描述你的需求。"))
+    onLoading(false)
     onMessages(msgs)
 }
 
@@ -427,25 +487,32 @@ private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase,
     val reminderMinute = (args["reminder_minute"] as? Double)?.toInt() ?: 0
     val holidayName = args["holiday_name"] as? String
 
-    val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
     val now = System.currentTimeMillis()
 
-    val firstTrigger = when {
-        args["trigger_date"] is String && args["trigger_time"] is String ->
-            dateFormat.parse("${args["trigger_date"]} ${args["trigger_time"]}")?.time ?: (now + 60000)
-        else -> now + 60000
-    }
+    // 首次锚点：下一个到达 reminderHour:reminderMinute 的时刻
+    // 对 cycle 作为周期锚点；对 date/rule 仅用于确定日期类提醒的时分
+    val cal = Calendar.getInstance().apply { timeInMillis = now }
+    cal.set(Calendar.HOUR_OF_DAY, reminderHour.coerceIn(0, 23))
+    cal.set(Calendar.MINUTE, reminderMinute.coerceIn(0, 59))
+    cal.set(Calendar.SECOND, 0)
+    cal.set(Calendar.MILLISECOND, 0)
+    if (cal.timeInMillis <= now) cal.add(Calendar.DAY_OF_MONTH, 1)
+    val anchorNext = cal.timeInMillis
 
     val entity = ReminderEntity(
         title = title, note = note, kind = kind, cycle = cycle, customDays = customDays,
         dateType = dateType, targetMonth = targetMonth, targetDay = targetDay,
         advanceDays = advanceDays, reminderHour = reminderHour, reminderMinute = reminderMinute,
-        holidayName = holidayName, firstTriggerAt = firstTrigger, nextTriggerAt = firstTrigger,
+        holidayName = holidayName, firstTriggerAt = anchorNext, nextTriggerAt = anchorNext,
         status = ReminderStatus.PENDING.name.lowercase(), retryCount = 0, isActive = true
     )
 
-    val id = database.reminderDao().insert(entity)
-    scheduler.schedule(entity.copy(id = id))
+    // 用引擎重算 nextTriggerAt（日期/规则类按目标月日计算，避免落到 +1 分钟）
+    val nextTrigger = ReminderEngine.calculateNextTrigger(entity)
+    val finalEntity = entity.copy(nextTriggerAt = nextTrigger)
+
+    val id = database.reminderDao().insert(finalEntity)
+    scheduler.schedule(finalEntity.copy(id = id))
     return "已创建提醒：「$title」"
 }
 

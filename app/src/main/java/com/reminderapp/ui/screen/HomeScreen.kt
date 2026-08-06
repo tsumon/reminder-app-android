@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.reminderapp.data.entity.ReminderEntity
+import com.reminderapp.service.ReminderEngine
 import com.reminderapp.ui.theme.*
 import com.reminderapp.ui.viewmodel.HomeViewModel
 import java.text.SimpleDateFormat
@@ -47,6 +48,8 @@ fun HomeScreen(
     // 长按删除确认框状态
     var pendingDelete by remember { mutableStateOf<ReminderEntity?>(null) }
     var menuExpanded by remember { mutableStateOf(false) }
+    // 点击日历某天 → 查看当日任务
+    var selectedDate by remember { mutableStateOf<Long?>(null) }
 
     Scaffold(
         topBar = {
@@ -135,8 +138,16 @@ fun HomeScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // 概览卡片（参考滴答清单：待处理数 + 最近提醒）
+            item {
+                OverviewCard(
+                    unhandledCount = allReminders.count { it.isActive && it.status != "confirmed" },
+                    nextReminder = allReminders.filter { it.isActive }.minByOrNull { it.nextTriggerAt }
+                )
+            }
+
             // 日历卡片（始终显示）
-            item { CalendarCard(reminders = allReminders) }
+            item { CalendarCard(reminders = allReminders, onDateClick = { selectedDate = it }) }
 
             if (reminding.isEmpty() && waiting.isEmpty() && completed.isEmpty()) {
                 // 空状态
@@ -217,6 +228,52 @@ fun HomeScreen(
             }
         )
     }
+
+    // 点击日历日期 → 底部弹窗展示当日任务
+    selectedDate?.let { ts ->
+        val cal = Calendar.getInstance().apply { timeInMillis = ts }
+        val y = cal.get(Calendar.YEAR)
+        val m = cal.get(Calendar.MONTH) + 1
+        val d = cal.get(Calendar.DAY_OF_MONTH)
+        val dateReminders = allReminders.filter { it.isActive && ReminderEngine.occursOn(it, y, m, d) }
+
+        ModalBottomSheet(
+            onDismissRequest = { selectedDate = null },
+            dragHandle = { Divider(thickness = 4.dp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)) }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    "${y}年${m}月${d}日 的任务",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (dateReminders.isEmpty()) {
+                    Text(
+                        "这一天没有提醒",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 16.dp)
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(dateReminders, key = { it.id }) { r ->
+                            ReminderCard(r, StatusReminding, onDelete = { pendingDelete = r }) { onReminderClick(r.id) }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
 }
 
 @Composable
@@ -227,6 +284,43 @@ fun SectionHeader(title: String, color: Color) {
         color = color,
         modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
     )
+}
+
+/** 首页概览卡片：待处理数量 + 最近一次提醒（参考滴答清单） */
+@Composable
+fun OverviewCard(unhandledCount: Int, nextReminder: ReminderEntity?) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "待处理 $unhandledCount 项",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                val nextText = nextReminder?.let {
+                    val f = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+                    "${it.title} · ${f.format(Date(it.nextTriggerAt))}"
+                } ?: "暂无即将到来的提醒"
+                Text(
+                    nextText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
 }
 
 /** 规则提醒的显示文本，如「每季度第2周周二」 */
