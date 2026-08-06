@@ -31,11 +31,14 @@ jobs:
         env:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: |
-          if [ -n "$SIGNING_KEY" ]; then
-            echo "$SIGNING_KEY" | base64 -d > release.keystore
-          else
-            keytool -genkey -v -keystore release.keystore -alias reminder -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Reminder App, OU=Dev, O=ReminderApp, L=Unknown, ST=Unknown, C=CN" -storepass android -keypass android
+          # ⚠️ 必须配置 SIGNING_KEY（正式 keystore 的 base64）！
+          # 未配置时禁止随机生成——v1.8.x 曾因随机生成导致每版签名不同，
+          # 用户无法覆盖安装（签名冲突）。未配置直接构建失败，提醒配置。
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "::error::SIGNING_KEY secret 未配置！请在仓库 Settings → Secrets 配置正式 keystore 的 base64（Mac 上 ~/reminder-release.keystore 经 base64 编码），否则构建失败。"
+            exit 1
           fi
+          echo "$SIGNING_KEY" | base64 -d > release.keystore
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
