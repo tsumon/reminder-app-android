@@ -12,8 +12,8 @@ android {
         applicationId = "com.reminderapp"
         minSdk = 26
         targetSdk = 34
-        versionCode = 13
-        versionName = "1.8.5"
+        versionCode = 14
+        versionName = "1.8.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -56,6 +56,13 @@ android {
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.8"
     }
+
+    // 单测需要访问 android.icu（framework API），JVM 单测无法直接调用产品代码里的
+    // android.icu.util.ChineseCalendar，回归测试用同源的 com.ibm.icu 复制逻辑断言
+    // 权威农历事实（见 LunarCalendarRegressionTest 注释）。
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
@@ -96,4 +103,8 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+
+    // 单元测试：JUnit + ICU4J（历法回归测试用，android.icu 与 com.ibm.icu 同源）
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("com.ibm.icu:icu4j:75.1")
 }
