@@ -196,33 +196,64 @@ object WebDavSync {
     }
 
     /**
-     * 测试连接：PROPFIND 验证连通性与认证（坚果云友好提示）。
-     * 添加 WebDAV 时先测试，再同步。
+     * 测试连接：完整读写测试。
+     * 仅 PROPFIND 通过不算成功——很多账号只读不开写（如坚果云第三方登录受限），
+     * 必须实际能写才算配置成功。
      */
     suspend fun testConnection(): SyncResult = withContext(Dispatchers.IO) {
         val base = SyncStore.url.trim().trimEnd('/')
         if (base.isEmpty() || SyncStore.username.isEmpty() || SyncStore.password.isEmpty()) {
             return@withContext SyncResult.Error("请先填写 WebDAV 地址、用户名和应用密码")
         }
-        try {
-            val request = Request.Builder()
+
+        // 1. 验证读权限
+        val readCode = runCatching {
+            client.newCall(Request.Builder()
                 .url(base)
                 .header("Authorization", Credentials.basic(SyncStore.username, SyncStore.password))
                 .header("Depth", "0")
                 .method("PROPFIND", null)
                 .build()
-            client.newCall(request).execute().use { response ->
-                val code = response.code
-                // 207 Multi-Status 是 PROPFIND 的正常成功响应
-                if (code in 200..299 || code == 207) {
-                    SyncResult.Success
-                } else {
-                    SyncResult.Error(friendlyMessage(code))
-                }
-            }
-        } catch (e: Exception) {
-            SyncResult.Error(friendlyMessage(e))
+            ).execute().use { it.code }
+        }.getOrElse { return@withContext SyncResult.Error(friendlyMessage(it)) }
+        if (readCode !in 200..299 && readCode != 207) {
+            return@withContext SyncResult.Error(friendlyMessage(readCode))
         }
+
+        // 2. 验证写权限：PUT 一个随机文件
+        val testName = ".reminder_test_${java.util.UUID.randomUUID().toString().take(8)}"
+        val testUrl = "$base/$testName"
+        val writeCode = runCatching {
+            client.newCall(Request.Builder()
+                .url(testUrl)
+                .header("Authorization", Credentials.basic(SyncStore.username, SyncStore.password))
+                .put("ok".toRequestBody("application/octet-stream".toMediaType()))
+                .build()
+            ).execute().use { it.code }
+        }.getOrElse { return@withContext SyncResult.Error(friendlyMessage(it)) }
+        if (writeCode !in 200..299) {
+            return@withContext SyncResult.Error(writeFailureHint(writeCode))
+        }
+
+        // 3. 清理测试文件（失败不影响结论）
+        runCatching {
+            client.newCall(Request.Builder()
+                .url(testUrl)
+                .header("Authorization", Credentials.basic(SyncStore.username, SyncStore.password))
+                .delete()
+                .build()
+            ).execute().close()
+        }
+        SyncResult.Success
+    }
+
+    /** 「可读但不可写」的精准提示（testConnection 第二步失败时使用） */
+    private fun writeFailureHint(code: Int): String = when (code) {
+        401 -> "账号或密码错误（HTTP 401）：坚果云请用「应用密码」——网页端 → 账户信息 → 安全选项 → 添加应用密码，不能用登录密码。"
+        403 -> "账号只读不可写（HTTP 403）：可能原因：① 第三方登录注册的坚果云账号（如 Google/微信登录）不支持 WebDAV 写入，请用坚果云独立注册的账号；② 账号未在网页端启用 WebDAV（账户信息 → 安全选项）。"
+        404 -> "账号只读不可写（HTTP 404）：可能原因：① 第三方登录注册的坚果云账号不支持 WebDAV 写入，请用坚果云独立注册的账号；② 应用密码生成后未刷新权限，删除旧密码重新生成一次。"
+        405 -> "服务器不允许写入（HTTP 405）：地址可能不是 WebDAV 路径，请确认填 https://dav.jianguoyun.com/dav/（坚果云以 /dav/ 结尾）。"
+        else -> "可读但不可写（HTTP $code）：账号可能被禁用 WebDAV，或地址权限不足，请联系服务器管理员。"
     }
 
     /** 把 HTTP 状态码/异常转成可操作的中文提示（尤其坚果云 401 应用密码） */
@@ -235,6 +266,11 @@ object WebDavSync {
         423 -> "资源被锁定（HTTP 423）。"
         507 -> "存储空间不足（HTTP 507）。"
         else -> "HTTP $code：请检查服务器地址/账号，或稍后重试。"
+    }
+
+    private fun friendlyMessage(e: Throwable): String {
+        if (e is Exception) return friendlyMessage(e as Exception)
+        return "未知错误：${e.message ?: e.javaClass.simpleName}"
     }
 
     private fun friendlyMessage(e: Exception): String {
