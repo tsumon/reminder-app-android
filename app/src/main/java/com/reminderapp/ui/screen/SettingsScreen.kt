@@ -123,7 +123,7 @@ fun SettingsScreen(
                                     checking = false
                                     when {
                                         info == null -> android.widget.Toast.makeText(
-                                            context, "检查更新失败（网络或限流），请稍后再试",
+                                            context, "检查更新失败，请检查网络后重试",
                                             android.widget.Toast.LENGTH_SHORT
                                         ).show()
                                         UpdateService.isNewer(info.latestVersion, UpdateService.currentVersion()) ->
