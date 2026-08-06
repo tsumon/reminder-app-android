@@ -65,7 +65,8 @@ class ReminderWorker(
             }
         }
 
-        // 周期 / 日期 / 规则提醒：到点后推进到下一次并重新调度
+        // 周期 / 日期 / 规则提醒：到点后递增重试（对齐 iOS escalateRetry），
+        // 未确认不推进周期 —— 1h → 4h → 12h → 24h → 24h → overdue
         runBlocking(Dispatchers.IO) {
             try {
                 // v1.9.6 fix TOCTOU: 发通知后用户可能已点「确认/稍后」（写库+重排），
@@ -75,26 +76,15 @@ class ReminderWorker(
                     latest.status == ReminderStatus.CONFIRMED.name.lowercase() ||
                     latest.status == "overdue") return@runBlocking
 
-                val shouldReschedule = when (latest.kind) {
-                    "cycle" -> latest.cycle != "once"
-                    "date" -> true   // 生日 / 节假日每年重复
-                    "rule" -> true
-                    else -> false
+                // v1.9.7: 接上之前是死代码的 escalate() —— 到点未确认先按递增间隔重试
+                // （once 也走重试，与 iOS 一致；用户点「确认」才会归档/推进周期）。
+                // 达到 5 次上限后标 overdue 停止轰炸，提醒留在列表等待用户手动处理。
+                val escalated = ReminderEngine.escalate(latest)
+                dao.update(escalated)
+                if (escalated.status != "overdue") {
+                    ReminderScheduler(applicationContext).schedule(escalated)
                 }
-                if (shouldReschedule) {
-                    val next = ReminderEngine.calculateNextTrigger(latest)
-                    val updated = latest.copy(
-                        status = ReminderStatus.PENDING.name.lowercase(),
-                        nextTriggerAt = next,
-                        retryCount = 0
-                    )
-                    dao.update(updated)
-                    ReminderScheduler(applicationContext).schedule(updated)
-                } else {
-                    // once：触发即归档，不重排（nextTriggerAt 是过去值，schedule 会立即再弹）
-                    dao.update(latest.copy(status = ReminderStatus.CONFIRMED.name.lowercase()))
-                }
-                // v1.9.6 fix: Worker 是后台主路径——推进/归档必须参与同步版本号，
+                // v1.9.6 fix: Worker 是后台主路径——重试/逾期必须参与同步版本号，
                 // 否则这些状态变化永远不上传（另一设备同步会把推进回滚）
                 SyncStore.touchLocalChange()
                 com.reminderapp.receiver.ReminderWidgetProvider.refresh(applicationContext)

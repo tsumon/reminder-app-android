@@ -21,6 +21,7 @@ object Tokens {
     val StatusReminding = Color(0xFFE74C3C)
     val StatusWaiting = Color(0xFF3498DB)
     val StatusCompleted = Color(0xFF27AE60)
+    val StatusOverdue = Color(0xFFC0392B)   // v1.9.7: 递增重试到上限（比提醒中更深一档的红色）
 
     // ── 节假日「休/班」──
     val HolidayRest = Color(0xFFD32F2F)
@@ -33,8 +34,9 @@ object Tokens {
     val Heatmap3 = Color(0xFF2B66C4)
 
     // ── 圆角 ──
-    val RadiusCard = 16.dp
-    val RadiusCell = 6.dp
+    val RadiusCard = 20.dp      // 液态玻璃大圆角（与 iOS glassCard 24 近似）
+    val RadiusCell = 10.dp
+    val RadiusLarge = 28.dp     // 弹窗/大组件
 
     // ── 字号（sp）──
     val FontTiny = 9.sp   // 日历农历/休班角标

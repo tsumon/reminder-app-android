@@ -13,7 +13,13 @@ import java.util.*
 object ReminderEngine {
 
     /**
-     * 递增重试间隔（毫秒）
+     * 递增重试上限 — 对齐 iOS：retryStage >= 5 即标 overdue（不再轰炸）
+     */
+    const val MAX_ESCALATION = 5
+
+    /**
+     * 递增重试间隔（毫秒）— 对齐 iOS escalateRetry：1h / 4h / 12h / 24h / 24h
+     * retryCount=0 → 1h、1 → 4h、2 → 12h、3 → 24h、4+ → 24h（与 iOS stage 映射一致）
      */
     private val retryIntervals = listOf(
         3600_000L,      // 1 小时
@@ -270,25 +276,32 @@ object ReminderEngine {
     }
 
     /**
-     * 稍后提醒 → 15 分钟后重推
+     * 稍后提醒 → 15 分钟后重推（v1.9.7 对齐 iOS：不动 retryCount，
+     * 避免用户反复点稍后导致 escalate 间隔被跳过）
      */
     fun snooze(reminder: ReminderEntity): ReminderEntity {
         return reminder.copy(
             status = ReminderStatus.NOTIFYING.name.lowercase(),
             nextTriggerAt = System.currentTimeMillis() + 900_000L, // 15 分钟
-            retryCount = reminder.retryCount + 1
+            retryCount = reminder.retryCount
         )
     }
 
     /**
-     * 递增重试（未确认时自动调度）
+     * 递增重试（到点未确认时自动调度）— 对齐 iOS escalateRetry
+     *
+     * 间隔序列：1h → 4h → 12h → 24h → 24h；
+     * retryCount 达到 MAX_ESCALATION(5) 时标为 overdue（停止轰炸，等用户手动确认/重新打开）。
+     * 注意：重试期间【不推进周期】，周期只在「确认完成 / 重新打开」时前进（与 iOS 一致）。
      */
     fun escalate(reminder: ReminderEntity): ReminderEntity {
+        val newCount = minOf(reminder.retryCount + 1, MAX_ESCALATION)
         val idx = minOf(reminder.retryCount, retryIntervals.size - 1)
+        val isOverdue = newCount >= MAX_ESCALATION
         return reminder.copy(
-            status = ReminderStatus.NOTIFYING.name.lowercase(),
+            status = if (isOverdue) "overdue" else ReminderStatus.NOTIFYING.name.lowercase(),
             nextTriggerAt = System.currentTimeMillis() + retryIntervals[idx],
-            retryCount = reminder.retryCount + 1
+            retryCount = newCount
         )
     }
 

@@ -335,7 +335,8 @@ fun HomeScreen(
                     items(reminding, key = { it.id }) { reminder ->
                         SwipeableReminderCard(
                             reminder = reminder,
-                            statusColor = StatusReminding,
+                            // v1.9.7: overdue 用更深一档红色区分
+                            statusColor = if (reminder.status == "overdue") StatusOverdue else StatusReminding,
                             onComplete = { viewModel.confirmReminder(reminder) },
                             onDelete = { pendingDelete = reminder },
                             onClick = { onReminderClick(reminder.id) },
@@ -575,20 +576,31 @@ fun SwipeableReminderCard(
 fun OverviewCard(unhandledCount: Int, nextReminder: ReminderEntity?) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(Tokens.RadiusCard),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
+        // 液态玻璃：品牌渐变 + 顶部高光
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .clip(RoundedCornerShape(Tokens.RadiusCard))
                 .background(
                     Brush.linearGradient(
-                        colors = listOf(Primary, Primary.copy(alpha = 0.78f))
+                        colors = listOf(Primary, Tokens.BrandPrimaryDark)
                     )
                 )
-                .padding(18.dp)
         ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.White.copy(alpha = 0.25f), Color.Transparent)
+                        )
+                    )
+                    .padding(18.dp)
+            ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -629,6 +641,7 @@ fun OverviewCard(unhandledCount: Int, nextReminder: ReminderEntity?) {
                     color = Color.White.copy(alpha = 0.9f)
                 )
             }
+            }
         }
     }
 }
@@ -656,6 +669,7 @@ fun ReminderCard(
     val dateFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
     val statusText = when (reminder.status) {
         "notifying" -> "需要确认"
+        "overdue" -> "已逾期"   // v1.9.7: 递增重试到上限
         "idle", "pending" -> "等待中"
         "confirmed" -> "已完成"
         else -> ""

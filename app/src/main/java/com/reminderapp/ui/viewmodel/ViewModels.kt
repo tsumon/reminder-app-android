@@ -24,7 +24,12 @@ class HomeViewModel(
     init {
         viewModelScope.launch {
             allReminders.collect { reminders ->
-                val reminding = reminders.filter { it.status in listOf("notifying", "pending") && it.nextTriggerAt <= System.currentTimeMillis() }
+                // v1.9.7: overdue（递增重试到上限）始终显示在「需要确认」区，
+                // 用户可对其点确认/重新打开恢复周期
+                val reminding = reminders.filter {
+                    it.status == "overdue" ||
+                        (it.status in listOf("notifying", "pending") && it.nextTriggerAt <= System.currentTimeMillis())
+                }
                 val waiting = reminders.filter { it.status in listOf("notifying", "pending", "idle") && it.nextTriggerAt > System.currentTimeMillis() }
                 val completed = reminders.filter { it.status == "confirmed" }
                 _groupedReminders.value = GroupedReminders(reminding, waiting, completed)
@@ -170,6 +175,9 @@ class ReminderDetailViewModel(
                 "⏰ ${updated.title}",
                 updated.note.ifEmpty { "该事项仍需要你确认" }
             )
+            // v1.9.7: 对齐 iOS —— 重试必须重新排期，否则下一次到点永远不会响；
+            // 已逾期（达到重试上限）不再排期
+            if (updated.status != "overdue") scheduler.schedule(updated)
             _reminder.value = updated
         }
     }
