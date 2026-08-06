@@ -5,7 +5,7 @@ import android.content.SharedPreferences
 
 /**
  * 用户自定义 AI API 配置（SharedPreferences 持久化）
- * 支持免 API 模式（无需 Key，跳转网页版）
+ * 仅 API 模式（免 API 网页跳转模式已移除）
  */
 class AISettings(context: Context) {
 
@@ -24,17 +24,6 @@ class AISettings(context: Context) {
         get() = prefs.getString("model", "gpt-4o-mini") ?: "gpt-4o-mini"
         set(value) = prefs.edit().putString("model", value).apply()
 
-    /// 免 API 模式：不填 Key，直接跳转外部 App 网页版
-    var useNoAPIMode: Boolean
-        get() = prefs.getBoolean("noapi_mode", false)
-        set(value) = prefs.edit().putBoolean("noapi_mode", value).apply()
-
-    /// 免 API 模式下默认跳转的服务商
-    var noAPIProvider: String
-        get() = prefs.getString("noapi_provider", "deepseek") ?: "deepseek"
-        set(value) = prefs.edit().putString("noapi_provider", value).apply()
-
     val isConfigured: Boolean
-        get() = if (useNoAPIMode) true
-                else apiEndpoint.isNotBlank() && apiKey.isNotBlank()
+        get() = apiEndpoint.isNotBlank() && apiKey.isNotBlank()
 }

@@ -1,7 +1,5 @@
 package com.reminderapp.ui.screen
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -27,10 +25,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import android.webkit.WebView
 import com.reminderapp.ReminderApp
 import com.reminderapp.data.database.AppDatabase
 import com.reminderapp.data.entity.ReminderEntity
@@ -77,8 +71,6 @@ fun AIChatScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var isListening by remember { mutableStateOf(false) }
-    var showNoApiSheet by remember { mutableStateOf(false) }
-    var webViewUrl by remember { mutableStateOf<String?>(null) }
     fun startListening() {
         if (isListening) return
         isListening = true
@@ -86,17 +78,13 @@ fun AIChatScreen(
             voiceService.recognize().fold(
                 onSuccess = { text ->
                     if (text.isNotBlank()) {
-                        if (settings.useNoAPIMode) {
-                            handleNoAPISend(text, settings, context, messages, { messages = it }) { url -> webViewUrl = url }
-                        } else {
-                            scope.launch {
-                                sendToAI(
-                                    text, settings, aiService, database, scheduler, notificationMgr, gson,
-                                    history = messages,
-                                    onMessages = { newMsgs -> messages = messages + newMsgs },
-                                    onLoading = { isLoading = it }
-                                )
-                            }
+                        scope.launch {
+                            sendToAI(
+                                text, settings, aiService, database, scheduler, notificationMgr, gson,
+                                history = messages,
+                                onMessages = { newMsgs -> messages = messages + newMsgs },
+                                onLoading = { isLoading = it }
+                            )
                         }
                     }
                 },
@@ -122,11 +110,7 @@ fun AIChatScreen(
     // 欢迎消息
     LaunchedEffect(Unit) {
         if (!settings.isConfigured) {
-            val guide = if (settings.useNoAPIMode) {
-                "👋 免 API 模式已开启！\n\n输入提醒需求后，会自动复制文字并跳转到网页版 AI，在那里粘贴发送即可。\n\n我能帮你：\n• 创建提醒「每天提醒我喝水」\n• 查看列表「有什么提醒」\n• 确认完成「确认喝水」\n• 推迟/删除提醒"
-            } else {
-                "👋 你好！请先在设置中配置 API Key，或者开启「免 API 模式」无需 Key 直接使用。\n\n我能帮你：\n• 创建提醒「每天提醒我喝水」\n• 查看列表「有什么提醒」\n• 确认完成「确认喝水」\n• 推迟/删除提醒"
-            }
+            val guide = "👋 你好！请先在设置中配置 API Key（支持 DeepSeek / 通义千问 / 豆包等，均有免费额度）。\n\n我能帮你：\n• 创建提醒「每天提醒我喝水」\n• 查看列表「有什么提醒」\n• 确认完成「确认喝水」\n• 推迟/删除提醒"
             messages = listOf(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = guide))
         }
     }
@@ -141,7 +125,7 @@ fun AIChatScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (settings.useNoAPIMode) "AI 助手 · 免 API" else "AI 助手") },
+                title = { Text("AI 助手") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
@@ -202,8 +186,6 @@ fun AIChatScreen(
                         Spacer(modifier = Modifier.width(4.dp))
 
                         // 发送
-                        val sendColor = if (settings.useNoAPIMode) Color(0xFFFF9800)
-                                        else MaterialTheme.colorScheme.primary
                         IconButton(
                             onClick = {
                                 val text = inputText.trim()
@@ -214,10 +196,7 @@ fun AIChatScreen(
                                 isLoading = true
                                 errorMsg = null
 
-                                if (settings.useNoAPIMode) {
-                                    handleNoAPISend(userMsg, settings, context, messages, { messages = it }) { url -> webViewUrl = url }
-                                    isLoading = false
-                                } else if (settings.isConfigured) {
+                                if (settings.isConfigured) {
                                     scope.launch {
                                         sendToAI(
                                             userMsg, settings, aiService, database, scheduler, notificationMgr, gson,
@@ -227,8 +206,9 @@ fun AIChatScreen(
                                         )
                                     }
                                 } else {
-                                    // 既未配置 API 也未开免 API 模式：解锁发送按钮，避免永久卡死
+                                    // 未配置 API Key：解锁按钮并提示
                                     isLoading = false
+                                    Toast.makeText(context, "请先在 AI 设置中配置 API Key", Toast.LENGTH_SHORT).show()
                                 }
                             },
                             enabled = inputText.isNotBlank() && !isLoading,
@@ -236,7 +216,7 @@ fun AIChatScreen(
                         ) {
                             Icon(
                                 Icons.Filled.Send, contentDescription = "发送",
-                                tint = if (inputText.isNotBlank() && !isLoading) sendColor
+                                tint = if (inputText.isNotBlank() && !isLoading) MaterialTheme.colorScheme.primary
                                        else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -268,19 +248,18 @@ fun AIChatScreen(
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
-                            if (settings.useNoAPIMode) Icons.Filled.Bolt else Icons.Filled.AutoAwesome,
+                            Icons.Filled.AutoAwesome,
                             contentDescription = null,
                             modifier = Modifier.size(64.dp),
-                            tint = if (settings.useNoAPIMode) Color(0xFFFF9800) else MaterialTheme.colorScheme.primary
+                            tint = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            if (settings.useNoAPIMode) "免 API 模式" else "跟我说你想提醒什么",
+                            "跟我说你想提醒什么",
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
-                            if (settings.useNoAPIMode) "输入需求 → 自动跳转网页版 AI\n粘贴即用，无需 Key"
-                            else "\"每天8点提醒我吃药\"\n\"每年提醒我妈生日\"",
+                            "\"每天8点提醒我吃药\"\n\"每年提醒我妈生日\"",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -299,12 +278,7 @@ fun AIChatScreen(
                     if (isLoading) {
                         item {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                                if (settings.useNoAPIMode) {
-                                    Text("文字已复制，正在跳转...", style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                } else {
-                                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                                }
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
                             }
                         }
                     }
@@ -312,89 +286,6 @@ fun AIChatScreen(
             }
         }
     }
-
-    // 免 API 模式：应用内网页浏览器（修复「切换到网页对话无法返回」）
-    if (webViewUrl != null) {
-        InAppWebView(url = webViewUrl!!, onClose = { webViewUrl = null })
-    }
-}
-
-/**
- * 应用内网页浏览器（Dialog 覆盖层，可返回）
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun InAppWebView(url: String, onClose: () -> Unit) {
-    Dialog(
-        onDismissRequest = onClose,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text("网页 AI 助手") },
-                    navigationIcon = {
-                        IconButton(onClick = onClose) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
-                )
-            },
-            containerColor = MaterialTheme.colorScheme.background
-        ) { padding ->
-            AndroidView(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                factory = { ctx ->
-                    WebView(ctx).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        settings.loadWithOverviewMode = true
-                        settings.useWideViewPort = true
-                        loadUrl(url)
-                    }
-                }
-            )
-        }
-    }
-}
-
-/**
- * 免 API 模式发送：复制文字 + 打开网页版
- */
-private fun handleNoAPISend(
-    text: String,
-    settings: AISettings,
-    context: Context,
-    currentMessages: List<ChatMessage>,
-    onMessages: (List<ChatMessage>) -> Unit,
-    onOpenWeb: (String) -> Unit
-) {
-    // 复制到剪贴板
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val clip = ClipData.newPlainText("reminder_query", text)
-    clipboard.setPrimaryClip(clip)
-
-    // 找到选中提供商
-    val provider = noApiProviders.find { it.id == settings.noAPIProvider } ?: noApiProviders[0]
-
-    // 弹 toast
-    Toast.makeText(context, "已复制到剪贴板，请在「${provider.name}」网页中粘贴发送", Toast.LENGTH_LONG).show()
-
-    // 在应用内打开网页（保留返回能力，不会跳离 App）
-    onOpenWeb(provider.webUrl)
-
-    // 显示提示消息
-    val truncated = if (text.length > 30) text.take(30) + "..." else text
-    val newMessages = currentMessages + ChatMessage(
-        role = ChatMessage.Role.ASSISTANT,
-        content = "⚠️ 已复制「$truncated」到剪贴板，并在应用内打开了「${provider.name}」网页，请直接粘贴发送。\n\n若网页未自动弹出，也可手动打开：${provider.webUrl}"
-    )
-    onMessages(newMessages)
 }
 
 @Composable
