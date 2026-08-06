@@ -64,6 +64,30 @@ fun StatsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // v1.9.8 设计图风格：顶部 3 数字概览卡（本月完成 / 连续天数 / 完成率）
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    StatMiniCard(
+                        title = "本月完成",
+                        value = summary.confirmCount.toString(),
+                        color = Tokens.StatusCompleted,
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatMiniCard(
+                        title = "连续天数",
+                        value = summary.currentStreak.toString(),
+                        color = Color(0xFFFF9800),
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatMiniCard(
+                        title = "完成率",
+                        value = summary.completionRate?.let { "${(it * 100).toInt()}%" } ?: "—",
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
             item { CompletionCard(summary) }
 
             item {
@@ -148,6 +172,37 @@ private fun CompletionCard(summary: StatsService.Summary) {
                 LabelChip("确认 ${summary.confirmCount}", Icons.Filled.CheckCircle, Tokens.StatusCompleted)
                 LabelChip("漏掉 ${summary.missedCount}", Icons.Filled.Notifications, Tokens.StatusReminding)
             }
+        }
+    }
+}
+
+/** v1.9.8 设计图风格：数字概览小卡（大数字 + 小标题） */
+@Composable
+private fun StatMiniCard(title: String, value: String, color: Color, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(Tokens.RadiusCell),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

@@ -18,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -297,13 +298,25 @@ private fun ChatBubble(msg: ChatMessage) {
         Box(
             modifier = Modifier
                 .widthIn(max = 280.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+                // v1.9.8 设计图风格：AI 白底(左上尖角) / 用户紫渐变(右上尖角)
+                .clip(
+                    RoundedCornerShape(
+                        topStart = if (isUser) 18.dp else 6.dp,
+                        topEnd = if (isUser) 6.dp else 18.dp,
+                        bottomEnd = 18.dp,
+                        bottomStart = 18.dp
+                    )
+                )
+                .background(
+                    // if 两个分支必须同为 Brush，否则类型推断为 Any 无法匹配 background 重载
+                    if (isUser) Brush.linearGradient(listOf(Color(0xFF7C66C2), Color(0xFF6750A4)))
+                    else Brush.linearGradient(listOf(Color.White, Color.White))
+                )
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
             Text(
                 text = msg.content,
-                color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                color = if (isUser) Color.White else MaterialTheme.colorScheme.onSurface
             )
         }
     }

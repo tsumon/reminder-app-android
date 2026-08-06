@@ -1,24 +1,38 @@
 package com.reminderapp.ui.navigation
 
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import com.reminderapp.data.database.AppDatabase
 import com.reminderapp.service.NotificationManager
 import com.reminderapp.service.ReminderEngine
 import com.reminderapp.service.ReminderScheduler
+import com.reminderapp.ui.screen.CalendarScreen
 import com.reminderapp.ui.screen.CreateReminderScreen
 import com.reminderapp.ui.screen.HomeScreen
 import com.reminderapp.ui.screen.ReminderDetailScreen
@@ -43,7 +57,79 @@ fun NavGraph(
     aiService: AIService,
     aiSettings: AISettings
 ) {
-    NavHost(navController = navController, startDestination = "home") {
+    // v1.9.8 UI 对齐设计图：底部导航 4 Tab（首页 / 日历 / 统计 / AI）
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
+    val tabRoutes = listOf("home", "calendar", "stats", "chat")
+    val showBottomBar = currentRoute in tabRoutes
+
+    Scaffold(
+        bottomBar = {
+            if (showBottomBar) {
+                NavigationBar(
+                    containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+                ) {
+                    // 首页
+                    NavigationBarItem(
+                        selected = currentRoute == "home",
+                        onClick = {
+                            navController.navigate("home") {
+                                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        icon = { Icon(Icons.Filled.Home, contentDescription = null) },
+                        label = { Text("首页") }
+                    )
+                    // 日历
+                    NavigationBarItem(
+                        selected = currentRoute == "calendar",
+                        onClick = {
+                            navController.navigate("calendar") {
+                                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        icon = { Icon(Icons.Filled.CalendarMonth, contentDescription = null) },
+                        label = { Text("日历") }
+                    )
+                    // 统计
+                    NavigationBarItem(
+                        selected = currentRoute == "stats",
+                        onClick = {
+                            navController.navigate("stats") {
+                                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        icon = { Icon(Icons.Filled.BarChart, contentDescription = null) },
+                        label = { Text("统计") }
+                    )
+                    // AI
+                    NavigationBarItem(
+                        selected = currentRoute == "chat",
+                        onClick = {
+                            navController.navigate("chat") {
+                                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        icon = { Icon(Icons.Filled.SmartToy, contentDescription = null) },
+                        label = { Text("AI") }
+                    )
+                }
+            }
+        }
+    ) { innerPadding ->
+    NavHost(
+        navController = navController,
+        startDestination = "home",
+        modifier = Modifier.padding(innerPadding)
+    ) {
 
         composable("home") {
             // 必须 remember：否则每次重组都会新建 ViewModel，
@@ -218,6 +304,16 @@ fun NavGraph(
             }
         }
 
+        // v1.9.8: 独立日历 Tab（整页日历 + 当天任务，对齐设计图）
+        composable("calendar") {
+            val calendarReminders by database.reminderDao().getAllActive()
+                .collectAsState(initial = emptyList())
+            CalendarScreen(
+                reminders = calendarReminders,
+                onReminderClick = { id -> navController.navigate("detail/$id") }
+            )
+        }
+
         composable("chat") {
             AIChatScreen(
                 settings = aiSettings,
@@ -326,5 +422,6 @@ fun NavGraph(
                 onBack = { navController.popBackStack() }
             )
         }
+    }
     }
 }
