@@ -167,9 +167,31 @@ object WebDavSync {
             .put(body)
             .build()
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
+            if (response.code == 404) {
+                // 坚果云等服务器要求目录已存在：先 MKCOL 创建父目录再重试一次
+                mkcolIfNeeded()
+                client.newCall(request).execute().use { retry ->
+                    if (!retry.isSuccessful) {
+                        throw Exception("HTTP ${retry.code}")
+                    }
+                }
+            } else if (!response.isSuccessful) {
                 throw Exception("HTTP ${response.code}")
             }
+        }
+    }
+
+    /** 确保 WebDAV 目录存在（MKCOL；已存在时返回 405/301 属正常，忽略） */
+    private fun mkcolIfNeeded() {
+        val base = SyncStore.url.trim().trimEnd('/')
+        val request = Request.Builder()
+            .url(base)
+            .header("Authorization", Credentials.basic(SyncStore.username, SyncStore.password))
+            .method("MKCOL", null)
+            .build()
+        try {
+            client.newCall(request).execute().close()
+        } catch (_: Exception) {
         }
     }
 
@@ -207,6 +229,7 @@ object WebDavSync {
     private fun friendlyMessage(code: Int): String = when (code) {
         401 -> "认证失败（HTTP 401）：请确认用户名；密码必须是坚果云「应用密码」——在坚果云网页端「账户信息 → 安全选项 → 添加应用密码」生成，不能用登录密码。"
         403 -> "无权限（HTTP 403）：请检查该 WebDAV 路径是否可写（如 dav.jianguoyun.com/dav/ 根目录）。"
+        404 -> "目录不存在（HTTP 404）：请确认 WebDAV 地址指向已存在的目录，坚果云请填 https://dav.jianguoyun.com/dav/（根目录），不要带不存在的子路径。"
         405 -> "服务器不支持该操作（HTTP 405）：请确认填的是 WebDAV 地址（如 …/dav/），不是网盘网页地址。"
         409 -> "资源冲突（HTTP 409）。"
         423 -> "资源被锁定（HTTP 423）。"
