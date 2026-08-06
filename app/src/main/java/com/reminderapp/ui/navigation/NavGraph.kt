@@ -1,7 +1,12 @@
 package com.reminderapp.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -17,6 +22,7 @@ import com.reminderapp.ui.screen.ReminderDetailScreen
 import com.reminderapp.ui.screen.SyncSettingsScreen
 import com.reminderapp.ui.screen.AIChatScreen
 import com.reminderapp.ui.screen.AISettingsScreen
+import com.reminderapp.ui.screen.StatsScreen
 import com.reminderapp.ui.viewmodel.HomeViewModel
 import com.reminderapp.ui.viewmodel.ReminderDetailViewModel
 import com.reminderapp.service.AISettings
@@ -92,6 +98,25 @@ fun NavGraph(
                 onExport = { exportLauncher.launch("reminder_backup_${System.currentTimeMillis() / 1000}.json") },
                 onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
                 onOpenSyncSettings = { navController.navigate("sync_settings") },
+                onOpenStats = { navController.navigate("stats") },
+                // v1.8.7 任务④: .ics 导出 → 写 cache + FileProvider 分享
+                onExportICS = {
+                    scope.launch {
+                        val reminders = database.reminderDao().getAllSync()
+                        val ics = com.reminderapp.service.IcsExporter.generateIcs(reminders)
+                        val file = java.io.File(context.cacheDir, "reminders.ics")
+                        file.writeText(ics)
+                        val uri = androidx.core.content.FileProvider.getUriForFile(
+                            context, "${context.packageName}.fileprovider", file
+                        )
+                        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "text/calendar"
+                            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(android.content.Intent.createChooser(intent, "导出日历"))
+                    }
+                },
                 onSyncNow = {
                     scope2.launch {
                         val result = com.reminderapp.service.WebDavSync.syncNow(context)
@@ -128,6 +153,20 @@ fun NavGraph(
             SyncSettingsScreen(
                 onBack = { navController.popBackStack() },
                 onSyncResult = {}
+            )
+        }
+
+        composable("stats") {
+            // v1.8.7 任务③: 统计洞察（全本地，加载全部操作记录后聚合）
+            var records by remember {
+                mutableStateOf<List<com.reminderapp.data.entity.ReminderRecordEntity>>(emptyList())
+            }
+            LaunchedEffect(Unit) {
+                records = database.reminderRecordDao().getAll()
+            }
+            StatsScreen(
+                records = records,
+                onBack = { navController.popBackStack() }
             )
         }
 

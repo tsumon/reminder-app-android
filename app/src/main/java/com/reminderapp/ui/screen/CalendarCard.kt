@@ -20,9 +20,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reminderapp.data.entity.ReminderEntity
+import com.reminderapp.service.HolidayRemoteService
 import com.reminderapp.service.LunarCalendar
 import com.reminderapp.service.ReminderEngine
 import com.reminderapp.ui.theme.Primary
+import com.reminderapp.ui.theme.Tokens
+import androidx.compose.ui.platform.LocalContext
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -40,6 +43,7 @@ fun CalendarCard(
     val todayDate = remember {
         SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(todayCal.time)
     }
+    val context = LocalContext.current
     var displayYear by remember { mutableIntStateOf(todayCal.get(Calendar.YEAR)) }
     var displayMonth by remember { mutableIntStateOf(todayCal.get(Calendar.MONTH)) } // 0-based
     var selectedDateKey by remember { mutableStateOf<String?>(null) }
@@ -64,6 +68,13 @@ fun CalendarCard(
     }
     val weekDayNames = arrayOf("周日", "周一", "周二", "周三", "周四", "周五", "周六")
     val todayWeekday = weekDayNames[todayCal.get(Calendar.DAY_OF_WEEK) - 1]
+    // v1.8.7 任务②: 今天的节假日状态后缀（联网数据，无则空）
+    val todayStatusSuffix = HolidayRemoteService.status(
+        context,
+        todayCal.get(Calendar.YEAR),
+        todayCal.get(Calendar.MONTH) + 1,
+        todayCal.get(Calendar.DAY_OF_MONTH)
+    )?.let { if (it.isHoliday) " · ${it.name}休" else " · 调休上班" } ?: ""
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -93,7 +104,7 @@ fun CalendarCard(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "农历$todayLunar · $todayWeekday",
+                        text = "农历$todayLunar · $todayWeekday$todayStatusSuffix",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -157,6 +168,9 @@ fun CalendarCard(
                                     lunarText = lunarTextFor(displayYear, displayMonth, dayNum),
                                     taskCount = taskDates[key] ?: 0,
                                     isFutureMonth = false,
+                                    holidayStatus = HolidayRemoteService.status(
+                                        context, displayYear, displayMonth + 1, dayNum
+                                    ),
                                     onClick = {
                                         selectedDateKey = key
                                         val t = Calendar.getInstance().apply {
@@ -178,7 +192,7 @@ fun CalendarCard(
 }
 
 /**
- * 单个日期格子：公历数字 + 农历 + 任务缩略点
+ * 单个日期格子：公历数字 + 农历 + 「休/班」角标 + 任务角标（数字右上）
  */
 @Composable
 private fun DayCell(
@@ -188,6 +202,7 @@ private fun DayCell(
     lunarText: String,
     taskCount: Int,
     isFutureMonth: Boolean,
+    holidayStatus: HolidayRemoteService.DayStatus?,
     onClick: () -> Unit
 ) {
     Column(
@@ -217,6 +232,14 @@ private fun DayCell(
                     else -> MaterialTheme.colorScheme.onSurface
                 }
             )
+            // 任务角标：数字右上角小圆点（v1.8.7 移出第三行，腾位给「休/班」）
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(5.dp)
+                    .clip(CircleShape)
+                    .background(if (taskCount > 0) Primary else Color.Transparent)
+            )
         }
         // 农历（初二~三十 简化显示）
         Text(
@@ -225,13 +248,12 @@ private fun DayCell(
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             maxLines = 1
         )
-        // 任务缩略点
-        Box(
-            modifier = Modifier
-                .padding(top = 1.dp)
-                .size(if (taskCount > 0) 5.dp else 5.dp)
-                .clip(CircleShape)
-                .background(if (taskCount > 0) Primary else Color.Transparent)
+        // 休/班角标：放假红「休」、调休上班橙「班」；普通日占位保持对齐（v1.8.7 任务②）
+        Text(
+            text = holidayStatus?.let { if (it.isHoliday) "休" else "班" } ?: "",
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = Tokens.FontTiny, fontWeight = FontWeight.Bold),
+            color = if (holidayStatus?.isHoliday == true) Tokens.HolidayRest else Tokens.HolidayWork,
+            maxLines = 1
         )
     }
 }

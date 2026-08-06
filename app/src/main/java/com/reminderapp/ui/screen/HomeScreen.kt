@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
@@ -97,6 +98,8 @@ fun HomeScreen(
     onExport: () -> Unit = {},
     onImport: () -> Unit = {},
     onOpenSyncSettings: () -> Unit = {},
+    onOpenStats: () -> Unit = {},
+    onExportICS: () -> Unit = {},
     onSyncNow: () -> Unit = {}
 ) {
     val grouped by viewModel.groupedReminders.collectAsState()
@@ -162,6 +165,16 @@ fun HomeScreen(
                                 }
                             )
                             Divider()
+                            // v1.8.7 任务③: 统计洞察
+                            DropdownMenuItem(
+                                text = { Text("统计洞察") },
+                                leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onOpenStats()
+                                }
+                            )
+                            Divider()
                             DropdownMenuItem(
                                 text = { Text("导入提醒") },
                                 leadingIcon = { Icon(Icons.Default.FileDownload, contentDescription = null) },
@@ -176,6 +189,15 @@ fun HomeScreen(
                                 onClick = {
                                     menuExpanded = false
                                     onExport()
+                                }
+                            )
+                            // v1.8.7 任务④: 导出 .ics 日历
+                            DropdownMenuItem(
+                                text = { Text("导出日历(.ics)") },
+                                leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onExportICS()
                                 }
                             )
                         }

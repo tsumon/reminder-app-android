@@ -47,6 +47,15 @@
         android:layout_marginBottom="8dp"
         android:background="#22000000" />
 
+    <!-- 今天农历（v1.8.7 小组件增强） -->
+    <TextView
+        android:id="@+id/widget_lunar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textColor="#8A6D3B"
+        android:textSize="11sp" />
+
     <TextView
         android:id="@+id/widget_next_label"
         android:layout_width="wrap_content"
@@ -66,12 +75,33 @@
         android:textSize="14sp"
         android:textStyle="bold" />
 
-    <TextView
-        android:id="@+id/widget_next_time"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text=""
-        android:textColor="#888888"
-        android:textSize="11sp" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/widget_next_time"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text=""
+            android:textColor="#888888"
+            android:textSize="11sp" />
+
+        <!-- 快捷完成按钮（v1.8.7）：点击广播确认该提醒 -->
+        <TextView
+            android:id="@+id/widget_complete_btn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="4dp"
+            android:text="✓ 完成"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:background="@drawable/widget_complete_bg"
+            android:visibility="gone" />
+    </LinearLayout>
 
 </LinearLayout>
