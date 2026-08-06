@@ -26,6 +26,7 @@ import com.reminderapp.ui.screen.SyncSettingsScreen
 import com.reminderapp.ui.screen.AIChatScreen
 import com.reminderapp.ui.screen.AISettingsScreen
 import com.reminderapp.ui.screen.StatsScreen
+import com.reminderapp.ui.screen.SettingsScreen
 import com.reminderapp.ui.viewmodel.HomeViewModel
 import com.reminderapp.ui.viewmodel.ReminderDetailViewModel
 import com.reminderapp.service.AISettings
@@ -130,6 +131,7 @@ fun NavGraph(
                 onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
                 onOpenSyncSettings = { navController.navigate("sync_settings") },
                 onOpenStats = { navController.navigate("stats") },
+                onOpenSettings = { navController.navigate("settings") },
                 onCheckUpdate = manualCheck,
                 // v1.8.7 任务④: .ics 导出 → 写 cache + FileProvider 分享
                 onExportICS = {
@@ -223,6 +225,15 @@ fun NavGraph(
             AISettingsScreen(
                 settings = aiSettings,
                 onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable("settings") {
+            // v1.9.2: 设置页（版本号/检查更新/更新日志/同步/AI）
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenSyncSettings = { navController.navigate("sync_settings") },
+                onOpenAISettings = { navController.navigate("ai_settings") }
             )
         }
 
