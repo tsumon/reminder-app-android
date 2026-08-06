@@ -21,6 +21,11 @@ import java.util.concurrent.TimeUnit
 object UpdateService {
 
     private const val REPO = "tsumon/reminder-app-android"
+    /// 检查源：releases.atom（HTML 域名走 CDN，无匿名 API 限流；api.github.com 常被限流 403）
+    private const val ATOM = "https://github.com/$REPO/releases.atom"
+    /// 下载路径：latest/download 固定名（无需版本号/API，永远指向最新 Release 的该资产）
+    private const val APK_ASSET_URL = "https://github.com/$REPO/releases/latest/download/app-release.apk"
+    /// 兜底：api.github.com（可能限流，仅当 atom 不可用时尝试）
     private const val API = "https://api.github.com/repos/$REPO/releases/latest"
 
     data class UpdateInfo(
@@ -39,18 +44,50 @@ object UpdateService {
     /** 当前 App 版本（BuildConfig.VERSION_NAME） */
     fun currentVersion(): String = com.reminderapp.BuildConfig.VERSION_NAME
 
-    /** 检查最新 release；失败返回 null（离线/限流/国内网络超时静默降级，可重试） */
+    /** 检查最新 release；失败返回 null（离线/网络异常静默降级，可重试） */
     suspend fun checkLatest(): UpdateInfo? = withContext(Dispatchers.IO) {
-        // 国内访问 api.github.com 不稳定，失败重试一次
+        // 优先 releases.atom（不限流），重试 1 次；仍失败再兜底 api.github.com
         var result: UpdateInfo? = null
         for (attempt in 0..1) {
-            result = tryFetchLatest()
+            result = tryFetchAtom()
             if (result != null) break
         }
-        result
+        result ?: tryFetchApi()
     }
 
-    private fun tryFetchLatest(): UpdateInfo? {
+    /** releases.atom：解析第一个 <entry> 的 title(=tag) 与 link(=release 页) */
+    private fun tryFetchAtom(): UpdateInfo? {
+        return try {
+            val req = Request.Builder().url(ATOM)
+                .header("User-Agent", "reminder-app-android")
+                .build()
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return null
+                val body = resp.body?.string() ?: return null
+                parseAtom(body)
+            }
+        } catch (e: Exception) {
+            Log.i("UpdateService", "atom 检查失败: ${e.message}")
+            null
+        }
+    }
+
+    private fun parseAtom(body: String): UpdateInfo? {
+        val entry = Regex("<entry>(.*?)</entry>", RegexOption.DOT_MATCHES_ALL)
+            .find(body)?.groupValues?.get(1) ?: return null
+        val tag = Regex("<title[^>]*>(.*?)</title>", RegexOption.DOT_MATCHES_ALL)
+            .find(entry)?.groupValues?.get(1)?.trim() ?: return null
+        val link = Regex("href=\"([^\"]*releases/tag/[^\"]*)\"")
+            .find(entry)?.groupValues?.get(1) ?: return null
+        return UpdateInfo(
+            latestVersion = tag.removePrefix("v"),
+            apkUrl = APK_ASSET_URL,
+            releaseUrl = link
+        )
+    }
+
+    /** 兜底：api.github.com 解析（可能被限流 403） */
+    private fun tryFetchApi(): UpdateInfo? {
         return try {
             val req = Request.Builder().url(API)
                 .header("Accept", "application/vnd.github+json")
@@ -62,22 +99,14 @@ object UpdateService {
                 val json = JsonParser.parseString(body).asJsonObject
                 val tag = json.get("tag_name")?.asString ?: return null
                 val releaseUrl = json.get("html_url")?.asString ?: "https://github.com/$REPO/releases"
-                // 找第一个 .apk 资产
-                var apkUrl: String? = null
-                json.getAsJsonArray("assets")?.forEach { el ->
-                    val name = el.asJsonObject.get("name")?.asString ?: ""
-                    if (name.endsWith(".apk") && apkUrl == null) {
-                        apkUrl = el.asJsonObject.get("browser_download_url")?.asString
-                    }
-                }
                 UpdateInfo(
                     latestVersion = tag.removePrefix("v"),
-                    apkUrl = apkUrl,
+                    apkUrl = APK_ASSET_URL,
                     releaseUrl = releaseUrl
                 )
             }
         } catch (e: Exception) {
-            Log.i("UpdateService", "检查更新失败: ${e.message}")
+            Log.i("UpdateService", "API 检查失败: ${e.message}")
             null
         }
     }

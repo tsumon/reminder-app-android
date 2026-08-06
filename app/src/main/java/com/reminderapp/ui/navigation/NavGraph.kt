@@ -101,7 +101,7 @@ fun NavGraph(
                     val info = com.reminderapp.service.UpdateService.checkLatest()
                     when {
                         info == null -> android.widget.Toast.makeText(
-                            context, "检查更新失败（网络或限流），请稍后再试", android.widget.Toast.LENGTH_SHORT
+                            context, "检查更新失败，请检查网络后重试", android.widget.Toast.LENGTH_SHORT
                         ).show()
                         com.reminderapp.service.UpdateService.isNewer(
                             info.latestVersion, com.reminderapp.service.UpdateService.currentVersion()
