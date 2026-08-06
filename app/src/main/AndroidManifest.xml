@@ -30,6 +30,17 @@
             </intent-filter>
         </activity>
 
+        <!-- v1.8.7 任务④: .ics 导出分享（仅暴露 cache 目录） -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- 通知操作按钮接收器 -->
         <receiver
             android:name=".receiver.NotificationActionReceiver"

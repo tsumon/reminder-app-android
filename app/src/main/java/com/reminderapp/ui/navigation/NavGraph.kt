@@ -99,6 +99,24 @@ fun NavGraph(
                 onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
                 onOpenSyncSettings = { navController.navigate("sync_settings") },
                 onOpenStats = { navController.navigate("stats") },
+                // v1.8.7 任务④: .ics 导出 → 写 cache + FileProvider 分享
+                onExportICS = {
+                    scope.launch {
+                        val reminders = database.reminderDao().getAllSync()
+                        val ics = com.reminderapp.service.IcsExporter.generateIcs(reminders)
+                        val file = java.io.File(context.cacheDir, "reminders.ics")
+                        file.writeText(ics)
+                        val uri = androidx.core.content.FileProvider.getUriForFile(
+                            context, "${context.packageName}.fileprovider", file
+                        )
+                        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "text/calendar"
+                            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(android.content.Intent.createChooser(intent, "导出日历"))
+                    }
+                },
                 onSyncNow = {
                     scope2.launch {
                         val result = com.reminderapp.service.WebDavSync.syncNow(context)

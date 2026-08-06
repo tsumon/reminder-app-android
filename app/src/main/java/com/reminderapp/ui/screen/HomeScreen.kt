@@ -99,6 +99,7 @@ fun HomeScreen(
     onImport: () -> Unit = {},
     onOpenSyncSettings: () -> Unit = {},
     onOpenStats: () -> Unit = {},
+    onExportICS: () -> Unit = {},
     onSyncNow: () -> Unit = {}
 ) {
     val grouped by viewModel.groupedReminders.collectAsState()
@@ -188,6 +189,15 @@ fun HomeScreen(
                                 onClick = {
                                     menuExpanded = false
                                     onExport()
+                                }
+                            )
+                            // v1.8.7 任务④: 导出 .ics 日历
+                            DropdownMenuItem(
+                                text = { Text("导出日历(.ics)") },
+                                leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onExportICS()
                                 }
                             )
                         }
