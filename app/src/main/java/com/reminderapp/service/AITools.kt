@@ -31,6 +31,14 @@ object AITools {
         - 每年 → kind=cycle, cycle=yearly
         - 每 N 天 → kind=cycle, cycle=custom, custom_days=N
 
+        **规则提醒（第N周周X，重要）：**
+        - 每月/每季度/每年 第N周周X → kind=rule, rule_period=monthly/quarterly/yearly,
+          rule_week=N(1-5), rule_weekday=周几(1=周一...7=周日)
+        - 例「每季度第二周周二」→ kind=rule, rule_period=quarterly, rule_week=2, rule_weekday=2
+        - 例「每年1、4、7、10月第一周周四报税」→ 这是每季度(1/4/7/10月)第一周周四：
+          kind=rule, rule_period=quarterly, rule_week=1, rule_weekday=4
+        - 「每月最后一个周五」等 → 近似用 rule_week=5（该月无第5周时自动跳过）
+
         **提醒时间：** 用 reminder_hour / reminder_minute 指定时分（默认 9:00）。日期类提醒会自动按目标月日计算，无需传 trigger_date。
 
         **回复风格：** 简洁友好，执行完告知创建了哪些提醒（例如"已创建 5 条生日提醒"）。
@@ -50,9 +58,12 @@ object AITools {
                     "properties" to mapOf(
                         "title" to mapOf("type" to "string", "description" to "提醒标题"),
                         "note" to mapOf("type" to "string", "description" to "备注"),
-                        "kind" to mapOf("type" to "string", "enum" to listOf("cycle", "date"), "description" to "周期/日期"),
+                        "kind" to mapOf("type" to "string", "enum" to listOf("cycle", "date", "rule"), "description" to "周期/日期/规则(第N周周X)"),
                         "cycle" to mapOf("type" to "string", "enum" to listOf("daily", "weekly", "biweekly", "monthly", "quarterly", "yearly")),
                         "custom_days" to mapOf("type" to "integer"),
+                        "rule_period" to mapOf("type" to "string", "enum" to listOf("monthly", "quarterly", "yearly"), "description" to "规则提醒频率，如每季度/每年"),
+                        "rule_week" to mapOf("type" to "integer", "description" to "规则提醒：第几周(1-5)"),
+                        "rule_weekday" to mapOf("type" to "integer", "description" to "规则提醒：周几(1=周一...7=周日)"),
                         "date_type" to mapOf("type" to "string", "enum" to listOf("solar_birthday", "lunar_birthday", "holiday")),
                         "target_month" to mapOf("type" to "integer"),
                         "target_day" to mapOf("type" to "integer"),

@@ -92,6 +92,34 @@ fun NavGraph(
             // 立即同步
             val scope2 = rememberCoroutineScope()
 
+            // v1.9.0 在线升级: 启动静默检查 + 手动检查（无新版/失败 toast）
+            var updateInfo by remember { mutableStateOf<com.reminderapp.service.UpdateService.UpdateInfo?>(null) }
+            var downloading by remember { mutableStateOf(false) }
+            val manualCheck: () -> Unit = {
+                scope.launch {
+                    val info = com.reminderapp.service.UpdateService.checkLatest()
+                    when {
+                        info == null -> android.widget.Toast.makeText(
+                            context, "检查更新失败（网络或限流），请稍后再试", android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                        com.reminderapp.service.UpdateService.isNewer(
+                            info.latestVersion, com.reminderapp.service.UpdateService.currentVersion()
+                        ) -> updateInfo = info
+                        else -> android.widget.Toast.makeText(
+                            context, "当前已是最新版本 v${com.reminderapp.service.UpdateService.currentVersion()}",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            }
+            LaunchedEffect(Unit) {
+                val info = com.reminderapp.service.UpdateService.checkLatest()
+                if (info != null &&
+                    com.reminderapp.service.UpdateService.isNewer(info.latestVersion, com.reminderapp.service.UpdateService.currentVersion())) {
+                    updateInfo = info
+                }
+            }
+
             HomeScreen(
                 viewModel = viewModel,
                 onCreateReminder = { navController.navigate("create") },
@@ -102,6 +130,7 @@ fun NavGraph(
                 onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
                 onOpenSyncSettings = { navController.navigate("sync_settings") },
                 onOpenStats = { navController.navigate("stats") },
+                onCheckUpdate = manualCheck,
                 // v1.8.7 任务④: .ics 导出 → 写 cache + FileProvider 分享
                 onExportICS = {
                     scope.launch {
@@ -132,16 +161,7 @@ fun NavGraph(
                 }
             )
 
-            // v1.8.7 在线升级: 启动检查 GitHub 最新版本
-            var updateInfo by remember { mutableStateOf<com.reminderapp.service.UpdateService.UpdateInfo?>(null) }
-            var downloading by remember { mutableStateOf(false) }
-            LaunchedEffect(Unit) {
-                val info = com.reminderapp.service.UpdateService.checkLatest()
-                if (info != null &&
-                    com.reminderapp.service.UpdateService.isNewer(info.latestVersion, com.reminderapp.service.UpdateService.currentVersion())) {
-                    updateInfo = info
-                }
-            }
+            // v1.9.0 在线升级弹窗（updateInfo/downloading/manualCheck 定义在 HomeScreen 之前）
             updateInfo?.let { info ->
                 AlertDialog(
                     onDismissRequest = { if (!downloading) updateInfo = null },

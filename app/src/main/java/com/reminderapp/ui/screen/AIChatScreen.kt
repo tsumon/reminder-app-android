@@ -500,6 +500,10 @@ private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase,
     val reminderHour = (args["reminder_hour"] as? Double)?.toInt() ?: 9
     val reminderMinute = (args["reminder_minute"] as? Double)?.toInt() ?: 0
     val holidayName = args["holiday_name"] as? String
+    // v1.9.0 fix: 规则提醒（第N周周X）参数
+    val rulePeriod = args["rule_period"] as? String
+    val ruleWeek = (args["rule_week"] as? Double)?.toInt() ?: (args["rule_week"] as? Int)
+    val ruleWeekday = (args["rule_weekday"] as? Double)?.toInt() ?: (args["rule_weekday"] as? Int)
 
     val now = System.currentTimeMillis()
 
@@ -524,12 +528,18 @@ private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase,
     if (kind == "date" && dateType == "holiday" && holidayName.isNullOrBlank()) {
         return "需要指定节假日名称（例如：春节、中秋节）才能创建节假日提醒。"
     }
+    // v1.9.0 fix: 规则提醒必须带全 频率/第几周/周几
+    if (kind == "rule" && (rulePeriod == null || ruleWeek == null || ruleWeekday == null)) {
+        return "规则提醒需要指定频率（每月/每季度/每年）、第几周和星期几，例如：每季度第一周周四。请补充完整，我再为你创建。"
+    }
 
     val entity = ReminderEntity(
         title = title, note = note, kind = kind, cycle = cycle, customDays = customDays,
         dateType = dateType, targetMonth = targetMonth, targetDay = targetDay,
         advanceDays = advanceDays, reminderHour = reminderHour, reminderMinute = reminderMinute,
-        holidayName = holidayName, firstTriggerAt = anchorNext, nextTriggerAt = anchorNext,
+        holidayName = holidayName,
+        rulePeriod = rulePeriod, ruleWeek = ruleWeek, ruleWeekday = ruleWeekday,
+        firstTriggerAt = anchorNext, nextTriggerAt = anchorNext,
         status = ReminderStatus.PENDING.name.lowercase(), retryCount = 0, isActive = true
     )
 
