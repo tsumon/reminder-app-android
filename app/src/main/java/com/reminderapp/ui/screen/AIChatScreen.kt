@@ -1,10 +1,7 @@
 package com.reminderapp.ui.screen
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -25,10 +22,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import android.webkit.WebView
 import com.reminderapp.ReminderApp
 import com.reminderapp.data.database.AppDatabase
 import com.reminderapp.data.entity.ReminderEntity
@@ -38,7 +31,6 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
-import java.text.SimpleDateFormat
 import java.util.*
 
 // ---- Message Model ----
@@ -75,19 +67,49 @@ fun AIChatScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var isListening by remember { mutableStateOf(false) }
-    var showNoApiSheet by remember { mutableStateOf(false) }
-    var webViewUrl by remember { mutableStateOf<String?>(null) }
+    fun startListening() {
+        if (isListening) return
+        isListening = true
+        scope.launch {
+            voiceService.recognize().fold(
+                onSuccess = { text ->
+                    if (text.isNotBlank()) {
+                        // v1.9.6 fix: 语音识别结果先上屏（与文本路径一致），
+                        // 否则对话列表只显示 AI 回复、看不到用户气泡
+                        messages = messages + ChatMessage(role = ChatMessage.Role.USER, content = text)
+                        scope.launch {
+                            sendToAI(
+                                text, settings, aiService, database, scheduler, notificationMgr, gson,
+                                history = messages,
+                                onMessages = { newMsgs -> messages = messages + newMsgs },
+                                onLoading = { isLoading = it }
+                            )
+                        }
+                    }
+                },
+                onFailure = { e -> errorMsg = e.message }
+            )
+            isListening = false
+        }
+    }
+    // v1.9.6 fix: RECORD_AUDIO 是危险权限，Android 12+ 不申请 SpeechRecognizer 必失败
+    val recordPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            startListening()
+        } else {
+            Toast.makeText(context, "需要录音权限才能使用语音输入", Toast.LENGTH_SHORT).show()
+        }
+    }
+
 
     val listState = rememberLazyListState()
 
     // 欢迎消息
     LaunchedEffect(Unit) {
         if (!settings.isConfigured) {
-            val guide = if (settings.useNoAPIMode) {
-                "👋 免 API 模式已开启！\n\n输入提醒需求后，会自动复制文字并跳转到网页版 AI，在那里粘贴发送即可。\n\n我能帮你：\n• 创建提醒「每天提醒我喝水」\n• 查看列表「有什么提醒」\n• 确认完成「确认喝水」\n• 推迟/删除提醒"
-            } else {
-                "👋 你好！请先在设置中配置 API Key，或者开启「免 API 模式」无需 Key 直接使用。\n\n我能帮你：\n• 创建提醒「每天提醒我喝水」\n• 查看列表「有什么提醒」\n• 确认完成「确认喝水」\n• 推迟/删除提醒"
-            }
+            val guide = "👋 你好！请先在设置中配置 API Key（支持 DeepSeek / 通义千问 / 豆包等，均有免费额度）。\n\n我能帮你：\n• 创建提醒「每天提醒我喝水」\n• 查看列表「有什么提醒」\n• 确认完成「确认喝水」\n• 推迟/删除提醒"
             messages = listOf(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = guide))
         }
     }
@@ -102,7 +124,7 @@ fun AIChatScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (settings.useNoAPIMode) "AI 助手 · 免 API" else "AI 助手") },
+                title = { Text("AI 助手") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
@@ -131,29 +153,15 @@ fun AIChatScreen(
                         // 语音按钮
                         IconButton(
                             onClick = {
-                                if (isListening) return@IconButton
-                                isListening = true
-                                scope.launch {
-                                    voiceService.recognize().fold(
-                                        onSuccess = { text ->
-                                            if (text.isNotBlank()) {
-                                                if (settings.useNoAPIMode) {
-                                                    handleNoAPISend(text, settings, context, messages, { messages = it }) { url -> webViewUrl = url }
-                                                } else {
-                                                    scope.launch {
-                                                        sendToAI(
-                                                            text, settings, aiService, database, scheduler, notificationMgr, gson,
-                                                            onMessages = { messages = it },
-                                                            onLoading = { isLoading = it }
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        onFailure = { e -> errorMsg = e.message }
-                                    )
-                                    isListening = false
+                                // v1.9.6 fix: 先检查录音权限，未授权先申请再识别
+                                val hasMic = androidx.core.content.ContextCompat.checkSelfPermission(
+                                    context, android.Manifest.permission.RECORD_AUDIO
+                                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                if (!hasMic) {
+                                    recordPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                    return@IconButton
                                 }
+                                startListening()
                             },
                             modifier = Modifier.size(40.dp)
                         ) {
@@ -177,8 +185,6 @@ fun AIChatScreen(
                         Spacer(modifier = Modifier.width(4.dp))
 
                         // 发送
-                        val sendColor = if (settings.useNoAPIMode) Color(0xFFFF9800)
-                                        else MaterialTheme.colorScheme.primary
                         IconButton(
                             onClick = {
                                 val text = inputText.trim()
@@ -189,20 +195,19 @@ fun AIChatScreen(
                                 isLoading = true
                                 errorMsg = null
 
-                                if (settings.useNoAPIMode) {
-                                    handleNoAPISend(userMsg, settings, context, messages, { messages = it }) { url -> webViewUrl = url }
-                                    isLoading = false
-                                } else if (settings.isConfigured) {
+                                if (settings.isConfigured) {
                                     scope.launch {
                                         sendToAI(
                                             userMsg, settings, aiService, database, scheduler, notificationMgr, gson,
-                                            onMessages = { messages = it },
+                                            history = messages,
+                                            onMessages = { newMsgs -> messages = messages + newMsgs },
                                             onLoading = { isLoading = it }
                                         )
                                     }
                                 } else {
-                                    // 既未配置 API 也未开免 API 模式：解锁发送按钮，避免永久卡死
+                                    // 未配置 API Key：解锁按钮并提示
                                     isLoading = false
+                                    Toast.makeText(context, "请先在 AI 设置中配置 API Key", Toast.LENGTH_SHORT).show()
                                 }
                             },
                             enabled = inputText.isNotBlank() && !isLoading,
@@ -210,7 +215,7 @@ fun AIChatScreen(
                         ) {
                             Icon(
                                 Icons.Filled.Send, contentDescription = "发送",
-                                tint = if (inputText.isNotBlank() && !isLoading) sendColor
+                                tint = if (inputText.isNotBlank() && !isLoading) MaterialTheme.colorScheme.primary
                                        else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -242,19 +247,18 @@ fun AIChatScreen(
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
-                            if (settings.useNoAPIMode) Icons.Filled.Bolt else Icons.Filled.AutoAwesome,
+                            Icons.Filled.AutoAwesome,
                             contentDescription = null,
                             modifier = Modifier.size(64.dp),
-                            tint = if (settings.useNoAPIMode) Color(0xFFFF9800) else MaterialTheme.colorScheme.primary
+                            tint = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            if (settings.useNoAPIMode) "免 API 模式" else "跟我说你想提醒什么",
+                            "跟我说你想提醒什么",
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
-                            if (settings.useNoAPIMode) "输入需求 → 自动跳转网页版 AI\n粘贴即用，无需 Key"
-                            else "\"每天8点提醒我吃药\"\n\"每年提醒我妈生日\"",
+                            "\"每天8点提醒我吃药\"\n\"每年提醒我妈生日\"",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -273,12 +277,7 @@ fun AIChatScreen(
                     if (isLoading) {
                         item {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                                if (settings.useNoAPIMode) {
-                                    Text("文字已复制，正在跳转...", style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                } else {
-                                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                                }
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
                             }
                         }
                     }
@@ -286,89 +285,6 @@ fun AIChatScreen(
             }
         }
     }
-
-    // 免 API 模式：应用内网页浏览器（修复「切换到网页对话无法返回」）
-    if (webViewUrl != null) {
-        InAppWebView(url = webViewUrl!!, onClose = { webViewUrl = null })
-    }
-}
-
-/**
- * 应用内网页浏览器（Dialog 覆盖层，可返回）
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun InAppWebView(url: String, onClose: () -> Unit) {
-    Dialog(
-        onDismissRequest = onClose,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text("网页 AI 助手") },
-                    navigationIcon = {
-                        IconButton(onClick = onClose) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
-                )
-            },
-            containerColor = MaterialTheme.colorScheme.background
-        ) { padding ->
-            AndroidView(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                factory = { ctx ->
-                    WebView(ctx).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        settings.loadWithOverviewMode = true
-                        settings.useWideViewPort = true
-                        loadUrl(url)
-                    }
-                }
-            )
-        }
-    }
-}
-
-/**
- * 免 API 模式发送：复制文字 + 打开网页版
- */
-private fun handleNoAPISend(
-    text: String,
-    settings: AISettings,
-    context: Context,
-    currentMessages: List<ChatMessage>,
-    onMessages: (List<ChatMessage>) -> Unit,
-    onOpenWeb: (String) -> Unit
-) {
-    // 复制到剪贴板
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val clip = ClipData.newPlainText("reminder_query", text)
-    clipboard.setPrimaryClip(clip)
-
-    // 找到选中提供商
-    val provider = noApiProviders.find { it.id == settings.noAPIProvider } ?: noApiProviders[0]
-
-    // 弹 toast
-    Toast.makeText(context, "已复制到剪贴板，请在「${provider.name}」网页中粘贴发送", Toast.LENGTH_LONG).show()
-
-    // 在应用内打开网页（保留返回能力，不会跳离 App）
-    onOpenWeb(provider.webUrl)
-
-    // 显示提示消息
-    val truncated = if (text.length > 30) text.take(30) + "..." else text
-    val newMessages = currentMessages + ChatMessage(
-        role = ChatMessage.Role.ASSISTANT,
-        content = "⚠️ 已复制「$truncated」到剪贴板，并在应用内打开了「${provider.name}」网页，请直接粘贴发送。\n\n若网页未自动弹出，也可手动打开：${provider.webUrl}"
-    )
-    onMessages(newMessages)
 }
 
 @Composable
@@ -403,18 +319,25 @@ private suspend fun sendToAI(
     scheduler: ReminderScheduler,
     notificationMgr: NotificationManager,
     gson: Gson,
+    history: List<ChatMessage> = emptyList(),
     onMessages: (List<ChatMessage>) -> Unit,
     onLoading: (Boolean) -> Unit = {}
 ) {
-    var msgs = mutableListOf(
-        ChatMessage(role = ChatMessage.Role.USER, content = userText)
-    )
+    // v1.9.6 fix: msgs 只放本轮 assistant 回复（user 消息由调用方上屏），
+    // onMessages 语义为「追加」——原实现整体替换导致多轮历史清空
+    var msgs = mutableListOf<ChatMessage>()
     var loading = true
 
     val conversation = mutableListOf<Map<String, Any?>>(
-        mapOf("role" to "system", "content" to AITools.systemPrompt),
-        mapOf("role" to "user", "content" to userText)
+        mapOf("role" to "system", "content" to AITools.systemPrompt)
     )
+    // v1.9.6 fix: 携带完整历史（截断最近 20 条）——否则「确认喝水」「再提醒一次」
+    // 这类依赖上下文的指令永远失联（原实现只发 system+当前 user）
+    // 注意：当前 user 消息已由调用方上屏并包含在 history 里，这里不要再追加，
+    // 否则同一指令会发给模型两次（文本路径曾因此重复）
+    history.takeLast(20).forEach { msg ->
+        conversation.add(mapOf("role" to msg.role.name.lowercase(), "content" to msg.content))
+    }
 
     var maxTurns = 5
 
@@ -505,6 +428,23 @@ private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase,
     val ruleWeek = (args["rule_week"] as? Double)?.toInt() ?: (args["rule_week"] as? Int)
     val ruleWeekday = (args["rule_weekday"] as? Double)?.toInt() ?: (args["rule_weekday"] as? Int)
 
+    // v1.9.6 fix: kind/cycle/dateType 白名单校验。
+    // 非法值会静默降级（调度走 else 分支、日历不显示）→「创建成功但永远不对」的幽灵提醒
+    if (kind !in setOf("cycle", "date", "rule")) {
+        return "提醒类型无效（$kind），只支持：周期(cycle)/日期(date)/规则(rule)。"
+    }
+    if (kind == "cycle" && cycle !in setOf("daily", "weekly", "biweekly", "monthly", "quarterly", "yearly", "custom", "once")) {
+        return "周期类型无效（$cycle），只支持：每天/每周/每两周/每月/每季度/每年/自定义/一次。"
+    }
+    // v1.9.6 fix: kind=date 必须带 dateType——null 会退化成「一年后随机时刻」的幽灵提醒
+    if (kind == "date" && dateType !in setOf("solar_birthday", "lunar_birthday", "holiday")) {
+        return "日期提醒需要指定类型（公历生日/农历生日/节假日），例如：农历八月十五。请补充类型，我再为你创建。"
+    }
+    // v1.9.6 fix: cycle=custom 必须 customDays>=1，否则 interval=0 → Worker 立即重触发死循环
+    if (cycle == "custom" && customDays < 1) {
+        return "自定义周期需要指定间隔天数（如：每3天），custom_days 至少为 1。"
+    }
+
     val now = System.currentTimeMillis()
 
     // 首次锚点：下一个到达 reminderHour:reminderMinute 的时刻
@@ -549,6 +489,9 @@ private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase,
 
     val id = database.reminderDao().insert(finalEntity)
     scheduler.schedule(finalEntity.copy(id = id))
+    // v1.9.6 fix: 漏 touchLocalChange → AI 新建的提醒永远不同步 / 被远程旧数据覆盖
+    com.reminderapp.service.SyncStore.touchLocalChange()
+    com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
     return "已创建提醒：「$title」"
 }
 
@@ -569,28 +512,45 @@ private suspend fun handleList(database: AppDatabase): String {
 
 private suspend fun handleConfirm(args: Map<String, Any?>, database: AppDatabase, scheduler: ReminderScheduler, notificationMgr: NotificationManager): String {
     val keyword = (args["title_keyword"] as? String ?: "").lowercase()
+    // 空关键词 contains("") 恒 true 会命中第一条无关提醒 → 必须守卫
+    if (keyword.isEmpty()) return "请指定要确认的提醒标题（如：确认「交房租」）。"
     val list = database.reminderDao().getAllSync()
     val match = list.find { it.title.lowercase().contains(keyword) } ?: return "未找到包含「$keyword」的提醒"
     val updated = ReminderEngine.confirm(match)
     database.reminderDao().update(updated)
+    // v1.9.6 fix: 确认后取消已显示的通知，避免通知栏残留可反复点击
+    notificationMgr.cancelReminderNotifications(match.id)
     scheduler.schedule(updated)
+    com.reminderapp.service.SyncStore.touchLocalChange()
+    com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
     return "已确认「${match.title}」，下次提醒时间已更新。"
 }
 
 private suspend fun handleSnooze(args: Map<String, Any?>, database: AppDatabase, scheduler: ReminderScheduler, notificationMgr: NotificationManager): String {
     val keyword = (args["title_keyword"] as? String ?: "").lowercase()
+    if (keyword.isEmpty()) return "请指定要推迟的提醒标题（如：推迟「交房租」）。"
     val list = database.reminderDao().getAllSync()
     val match = list.find { it.title.lowercase().contains(keyword) } ?: return "未找到包含「$keyword」的提醒"
     val updated = ReminderEngine.snooze(match)
     database.reminderDao().update(updated)
     scheduler.schedule(updated)
+    com.reminderapp.service.SyncStore.touchLocalChange()
+    com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
     return "已推迟「${match.title}」，15 分钟后再次提醒。"
 }
 
 private suspend fun handleDelete(args: Map<String, Any?>, database: AppDatabase): String {
     val keyword = (args["title_keyword"] as? String ?: "").lowercase()
+    if (keyword.isEmpty()) return "请指定要删除的提醒标题（如：删除「交房租」）。"
     val list = database.reminderDao().getAllSync()
     val match = list.find { it.title.lowercase().contains(keyword) } ?: return "未找到包含「$keyword」的提醒"
-    database.reminderDao().delete(match)
+    // v1.9.6 fix: 必须先取消 WorkManager 排期 + 已显示通知，再用软删。
+    // 原实现物理 delete：遗留任务触发时 Worker 先发通知才查库 → 幽灵通知；
+    // 且物理删会级联清掉统计记录（与 UI 路径软删不一致）
+    ReminderScheduler(com.reminderapp.ReminderApp.instance).cancel(match.id)
+    NotificationManager(com.reminderapp.ReminderApp.instance).cancelReminderNotifications(match.id)
+    database.reminderDao().softDelete(match.id)
+    com.reminderapp.service.SyncStore.touchLocalChange()
+    com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
     return "已删除「${match.title}」"
 }

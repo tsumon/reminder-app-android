@@ -6,6 +6,7 @@ import android.content.Intent
 import com.reminderapp.data.database.AppDatabase
 import com.reminderapp.service.ReminderEngine
 import com.reminderapp.service.ReminderScheduler
+import com.reminderapp.service.SyncStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -32,13 +33,23 @@ class WidgetActionReceiver : BroadcastReceiver() {
         val db = AppDatabase.getInstance(appContext)
         val scheduler = ReminderScheduler(appContext)
 
+        // ⚠️ goAsync() 保活：小组件广播后台执行，协程未完成进程可能被杀
+        val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
-            val reminder = db.reminderDao().getById(reminderId) ?: return@launch
-            val updated = ReminderEngine.confirm(reminder)
-            db.reminderDao().update(updated)
-            scheduler.schedule(updated)
-            // 刷新小组件（含下次提醒与倒计时）
-            ReminderWidgetProvider.refresh(appContext)
+            try {
+                val reminder = db.reminderDao().getById(reminderId) ?: return@launch
+                val updated = ReminderEngine.confirm(reminder)
+                db.reminderDao().update(updated)
+                // v1.9.6 fix: 完成确认后取消已显示的通知
+                com.reminderapp.service.NotificationManager(appContext).cancelReminderNotifications(reminderId)
+                scheduler.schedule(updated)
+                // v1.9.6 fix: 漏 touchLocalChange → 本地新数据被远程旧数据覆盖
+                SyncStore.touchLocalChange()
+                // 刷新小组件（含下次提醒与倒计时）
+                ReminderWidgetProvider.refresh(appContext)
+            } finally {
+                pendingResult.finish()
+            }
         }
     }
 }

@@ -135,4 +135,14 @@ class LunarCalendarRegressionTest {
         assertNull(lunarToSolar(2020, 4, 30, true)) // 2020 闰四月只有 29 天
         assertNull(lunarToSolar(2023, 2, 30, true)) // 2023 闰二月只有 29 天
     }
+
+    @Test
+    fun `2026年六月三十_公历8月12日`() {
+        // 用户反馈：Android 日历 8/12 农历空白（旧 lunarTextFor 索引错位导致三十越界）
+        // 验证 2026-08-12 确为农历六月三十（大月）
+        assertEquals("2026-08-12 = 六月三十", Lunar(2026, 6, 30, false), solarToLunar(date(2026, 8, 12)))
+        assertEquals("六月三十 = 2026-08-12", date(2026, 8, 12), lunarToSolar(2026, 6, 30))
+        // 六月廿九 = 08-11（确保索引在 29 也正确）
+        assertEquals("2026-08-11 = 六月廿九", Lunar(2026, 6, 29, false), solarToLunar(date(2026, 8, 11)))
+    }
 }

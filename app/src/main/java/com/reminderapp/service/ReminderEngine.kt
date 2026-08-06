@@ -124,7 +124,10 @@ object ReminderEngine {
     }
 
     /**
-     * 按日历月累加推进（每月 / 每季度 / 每年），自动处理月末对齐与闰年
+     * 按日历月累加推进（每月 / 每季度 / 每年）。
+     * 注意「月末对齐」：锚点 31 号在 2 月落 28 号后，不能从 28 号继续加月
+     * （会永久漂移到 28 号），必须每次累加后把日钳回「锚点日号」，
+     * 目标月不足时取该月最后一天（1/31 → 2/28 → 3/31 → 4/30 → 5/31…）。
      */
     private fun advanceByCalendarMonths(cycle: String, anchor: Long, now: Long): Long {
         val amount = when (cycle) {
@@ -132,9 +135,36 @@ object ReminderEngine {
             "quarterly" -> 3
             else -> 12
         }
+        val anchorDay = Calendar.getInstance().apply { timeInMillis = anchor }
+            .get(Calendar.DAY_OF_MONTH)
         val cal = Calendar.getInstance().apply { timeInMillis = anchor }
+        var attempts = 0
         while (cal.timeInMillis <= now) {
             cal.add(Calendar.MONTH, amount)
+            // 目标月不足 anchorDay 天（如 2 月）→ 钳到月末
+            val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+            if (anchorDay <= maxDay) {
+                cal.set(Calendar.DAY_OF_MONTH, anchorDay)
+            } else {
+                cal.set(Calendar.DAY_OF_MONTH, maxDay)
+            }
+            attempts++
+            if (attempts > 1200) break // 防御：最多推进 100 年
+        }
+        // yearly + 2/29：主循环可能停在「非闰年的 2/28」就退出（cursor > now），
+        // 必须继续逐月 +12 找到下一个闰年 2/29，否则提醒永久漂移到 28 号
+        if (cycle == "yearly" && anchorDay == 29 &&
+            cal.get(Calendar.DAY_OF_MONTH) != 29) {
+            var leapAttempts = 0
+            while (cal.get(Calendar.DAY_OF_MONTH) != 29) {
+                cal.add(Calendar.MONTH, 12)
+                if (cal.getActualMaximum(Calendar.DAY_OF_MONTH) >= 29) {
+                    cal.set(Calendar.DAY_OF_MONTH, 29)
+                    break
+                }
+                leapAttempts++
+                if (leapAttempts > 1200) break
+            }
         }
         return cal.timeInMillis
     }
@@ -301,8 +331,7 @@ object ReminderEngine {
         return (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7 + 1 // 1=周一..7=周日
     }
 
-    private fun occursOnCycle(reminder: ReminderEntity, year: Int, month: Int, day: Int): Boolean {
-        val anchor = Calendar.getInstance().apply { timeInMillis = reminder.firstTriggerAt }
+    private fun occursOnCycle(reminder: ReminderEntity, year: Int, month: Int, day: Int): Boolean {        val anchor = Calendar.getInstance().apply { timeInMillis = reminder.firstTriggerAt }
         val aY = anchor.get(Calendar.YEAR)
         val aM = anchor.get(Calendar.MONTH) + 1
         val aD = anchor.get(Calendar.DAY_OF_MONTH)
@@ -316,9 +345,18 @@ object ReminderEngine {
             "daily" -> true
             "weekly" -> targetWeekday == aWeekday
             "biweekly" -> targetWeekday == aWeekday && diff % 14 == 0
-            "monthly" -> day == aD
-            "quarterly" -> day == aD && (month - aM) % 3 == 0
-            "yearly" -> month == aM && day == aD
+            // 月末对齐：锚点 31 号在 2 月触发日是 28/29，日历标记必须用同一规则
+            "monthly" -> day == effectiveAnchorDay(year, month, aD)
+            "quarterly" -> (month - aM) % 3 == 0 && day == effectiveAnchorDay(year, month, aD)
+            "yearly" -> {
+                // 2/29 锚点：非闰年 2 月调度侧跳过（不触发）→ 这里也不显示，避免「显示但不响」幻影
+                if (aD == 29 && aM == 2) {
+                    if (month != 2) return false
+                    val isLeap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+                    return isLeap && day == 29
+                }
+                month == aM && day == effectiveAnchorDay(year, month, aD)
+            }
             "custom" -> {
                 val cd = reminder.customDays
                 // P2 修复：每 N 天提醒不能要求同星期 —— 每 3 天第 2 次起星期必然不同，
@@ -327,6 +365,14 @@ object ReminderEngine {
             }
             else -> false
         }
+    }
+
+    /** 月末对齐用的「锚点日号」：目标月不足锚点日时取该月最后一天（如 31 号在 2 月 → 28/29） */
+    private fun effectiveAnchorDay(year: Int, month: Int, anchorDay: Int): Int {
+        val cal = Calendar.getInstance().apply {
+            set(year, month - 1, 1, 12, 0, 0)
+        }
+        return minOf(anchorDay, cal.getActualMaximum(Calendar.DAY_OF_MONTH))
     }
 
     private fun occursOnDate(reminder: ReminderEntity, year: Int, month: Int, day: Int): Boolean {

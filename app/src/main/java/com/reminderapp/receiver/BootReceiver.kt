@@ -21,9 +21,16 @@ class BootReceiver : BroadcastReceiver() {
         val db = AppDatabase.getInstance(context)
         val scheduler = ReminderScheduler(context)
 
+        // v1.9.6 fix: goAsync() 保活——开机广播返回后进程可被立即回收，
+        // 不加保活重排常来不及完成（用户不开 App 时开机恢复只靠这里）
+        val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
-            val allActive = db.reminderDao().getAllActive().first()
-            scheduler.rescheduleAll(allActive)
+            try {
+                val allActive = db.reminderDao().getAllActive().first()
+                scheduler.rescheduleAll(allActive)
+            } finally {
+                pendingResult.finish()
+            }
         }
     }
 }

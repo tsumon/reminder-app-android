@@ -1,6 +1,7 @@
 package com.reminderapp.service
 
 import android.content.Context
+import androidx.room.withTransaction
 import com.reminderapp.ReminderApp
 import com.reminderapp.data.database.AppDatabase
 import kotlinx.coroutines.Dispatchers
@@ -45,7 +46,8 @@ object WebDavSync {
             return@withContext SyncResult.Error("请先配置 WebDAV 服务器")
         }
 
-        val dao = AppDatabase.getInstance(context).reminderDao()
+        val db = AppDatabase.getInstance(context)
+        val dao = db.reminderDao()
         val localVersion = SyncStore.lastLocalChange
 
         try {
@@ -75,7 +77,7 @@ object WebDavSync {
                     if (items == null) {
                         SyncResult.Error("远程文件解析失败")
                     } else {
-                        replaceLocal(dao, items)
+                        replaceLocal(db, items)
                         SyncStore.lastLocalChange = remoteVersion
                         SyncStore.lastSyncAt = System.currentTimeMillis()
                         SyncResult.Success
@@ -120,27 +122,36 @@ object WebDavSync {
         }
     }
 
-    /** 用远程数据整体替换本地（先软删全部，再插入，最后重新调度全部提醒） */
+    /** 用远程数据整体替换本地（事务内：软删全部 → 插入 → 调度；失败回滚不丢本地数据） */
     private suspend fun replaceLocal(
-        dao: com.reminderapp.data.dao.ReminderDao,
+        db: AppDatabase,
         items: List<com.reminderapp.data.entity.ReminderEntity>
     ) {
-        dao.getAllSync().forEach { dao.softDelete(it.id) }
+        val dao = db.reminderDao()
+        // v1.9.6 fix: 事务包裹——原来先全量软删再逐条插入，中途失败本地全丢
+        db.withTransaction {
+            dao.getAllSync().forEach { dao.softDelete(it.id) }
 
-        // 重新计算下次触发时间，避免导入的陈旧时间戳导致「立即触发」或「永不触发」，
-        // 同时保留已完成状态。
-        val toInsert = items.map { entity ->
-            val next = ReminderEngine.calculateNextTrigger(entity)
-            entity.copy(
-                nextTriggerAt = next,
-                status = if (entity.status == "confirmed") "confirmed" else "pending",
-                retryCount = 0
-            )
+            // 重新计算下次触发时间，避免导入的陈旧时间戳导致「立即触发」或「永不触发」，
+            // 同时保留已完成状态。
+            val toInsert = items.map { entity ->
+                val next = ReminderEngine.calculateNextTrigger(entity)
+                // id=0 强制自增：远程 JSON 保留了上传时的原 id，软删行仍占用这些主键，
+                // 直接插入会 SQLiteConstraintException 导致整个同步失败
+                entity.copy(
+                    id = 0,
+                    nextTriggerAt = next,
+                    status = if (entity.status == "confirmed") "confirmed" else "pending",
+                    retryCount = 0
+                )
+            }
+            // ⚠️ 必须用 insert 返回的新 id 调度：直接传 id=0 的实体，
+            // 所有提醒的 uniqueName/tag 都是 "reminder_0" → 互相覆盖，只剩最后一条会响一次
+            val inserted = toInsert.map { it.copy(id = dao.insert(it)) }
+
+            // 关键：下载覆盖本地后必须重新调度，否则所有提醒不再响，直到重启。
+            ReminderScheduler(ReminderApp.instance).rescheduleAll(inserted)
         }
-        toInsert.forEach { dao.insert(it) }
-
-        // 关键：下载覆盖本地后必须重新调度，否则所有提醒不再响，直到重启。
-        ReminderScheduler(ReminderApp.instance).rescheduleAll(toInsert)
         com.reminderapp.receiver.ReminderWidgetProvider.refresh(ReminderApp.instance)
     }
 
@@ -196,33 +207,64 @@ object WebDavSync {
     }
 
     /**
-     * 测试连接：PROPFIND 验证连通性与认证（坚果云友好提示）。
-     * 添加 WebDAV 时先测试，再同步。
+     * 测试连接：完整读写测试。
+     * 仅 PROPFIND 通过不算成功——很多账号只读不开写（如坚果云第三方登录受限），
+     * 必须实际能写才算配置成功。
      */
     suspend fun testConnection(): SyncResult = withContext(Dispatchers.IO) {
         val base = SyncStore.url.trim().trimEnd('/')
         if (base.isEmpty() || SyncStore.username.isEmpty() || SyncStore.password.isEmpty()) {
             return@withContext SyncResult.Error("请先填写 WebDAV 地址、用户名和应用密码")
         }
-        try {
-            val request = Request.Builder()
+
+        // 1. 验证读权限
+        val readCode = runCatching {
+            client.newCall(Request.Builder()
                 .url(base)
                 .header("Authorization", Credentials.basic(SyncStore.username, SyncStore.password))
                 .header("Depth", "0")
                 .method("PROPFIND", null)
                 .build()
-            client.newCall(request).execute().use { response ->
-                val code = response.code
-                // 207 Multi-Status 是 PROPFIND 的正常成功响应
-                if (code in 200..299 || code == 207) {
-                    SyncResult.Success
-                } else {
-                    SyncResult.Error(friendlyMessage(code))
-                }
-            }
-        } catch (e: Exception) {
-            SyncResult.Error(friendlyMessage(e))
+            ).execute().use { it.code }
+        }.getOrElse { return@withContext SyncResult.Error(friendlyMessage(it)) }
+        if (readCode !in 200..299 && readCode != 207) {
+            return@withContext SyncResult.Error(friendlyMessage(readCode))
         }
+
+        // 2. 验证写权限：PUT 一个随机文件
+        val testName = ".reminder_test_${java.util.UUID.randomUUID().toString().take(8)}"
+        val testUrl = "$base/$testName"
+        val writeCode = runCatching {
+            client.newCall(Request.Builder()
+                .url(testUrl)
+                .header("Authorization", Credentials.basic(SyncStore.username, SyncStore.password))
+                .put("ok".toRequestBody("application/octet-stream".toMediaType()))
+                .build()
+            ).execute().use { it.code }
+        }.getOrElse { return@withContext SyncResult.Error(friendlyMessage(it)) }
+        if (writeCode !in 200..299) {
+            return@withContext SyncResult.Error(writeFailureHint(writeCode))
+        }
+
+        // 3. 清理测试文件（失败不影响结论）
+        runCatching {
+            client.newCall(Request.Builder()
+                .url(testUrl)
+                .header("Authorization", Credentials.basic(SyncStore.username, SyncStore.password))
+                .delete()
+                .build()
+            ).execute().close()
+        }
+        SyncResult.Success
+    }
+
+    /** 「可读但不可写」的精准提示（testConnection 第二步失败时使用） */
+    private fun writeFailureHint(code: Int): String = when (code) {
+        401 -> "账号或密码错误（HTTP 401）：坚果云请用「应用密码」——网页端 → 账户信息 → 安全选项 → 添加应用密码，不能用登录密码。"
+        403 -> "账号只读不可写（HTTP 403）：可能原因：① 第三方登录注册的坚果云账号（如 Google/微信登录）不支持 WebDAV 写入，请用坚果云独立注册的账号；② 账号未在网页端启用 WebDAV（账户信息 → 安全选项）。"
+        404 -> "账号只读不可写（HTTP 404）：可能原因：① 第三方登录注册的坚果云账号不支持 WebDAV 写入，请用坚果云独立注册的账号；② 应用密码生成后未刷新权限，删除旧密码重新生成一次。"
+        405 -> "服务器不允许写入（HTTP 405）：地址可能不是 WebDAV 路径，请确认填 https://dav.jianguoyun.com/dav/（坚果云以 /dav/ 结尾）。"
+        else -> "可读但不可写（HTTP $code）：账号可能被禁用 WebDAV，或地址权限不足，请联系服务器管理员。"
     }
 
     /** 把 HTTP 状态码/异常转成可操作的中文提示（尤其坚果云 401 应用密码） */
@@ -235,6 +277,11 @@ object WebDavSync {
         423 -> "资源被锁定（HTTP 423）。"
         507 -> "存储空间不足（HTTP 507）。"
         else -> "HTTP $code：请检查服务器地址/账号，或稍后重试。"
+    }
+
+    private fun friendlyMessage(e: Throwable): String {
+        if (e is Exception) return friendlyMessage(e as Exception)
+        return "未知错误：${e.message ?: e.javaClass.simpleName}"
     }
 
     private fun friendlyMessage(e: Exception): String {

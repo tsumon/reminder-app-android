@@ -27,6 +27,7 @@ import com.reminderapp.ui.screen.AIChatScreen
 import com.reminderapp.ui.screen.AISettingsScreen
 import com.reminderapp.ui.screen.StatsScreen
 import com.reminderapp.ui.screen.SettingsScreen
+import com.reminderapp.ui.screen.NearbyShareScreen
 import com.reminderapp.ui.viewmodel.HomeViewModel
 import com.reminderapp.ui.viewmodel.ReminderDetailViewModel
 import com.reminderapp.service.AISettings
@@ -81,7 +82,14 @@ fun NavGraph(
                         val reminders = com.reminderapp.service.BackupService.importFromJson(json)
                             ?: return@launch
                         reminders.forEach { r ->
-                            val newId = database.reminderDao().insert(r)
+                            // 强制 id=0 让 Room 重新自增：备份 JSON 保留了原 id，
+                            // 直接插入会与现有行（含软删行）主键冲突 → SQLiteConstraintException 崩溃
+                            val newId = try {
+                                database.reminderDao().insert(r.copy(id = 0))
+                            } catch (e: Exception) {
+                                android.util.Log.e("NavGraph", "导入单条失败: ${e.message}")
+                                return@forEach
+                            }
                             scheduler.schedule(r.copy(id = newId))
                         }
                         com.reminderapp.service.SyncStore.touchLocalChange()
@@ -133,6 +141,7 @@ fun NavGraph(
                 onOpenStats = { navController.navigate("stats") },
                 onOpenSettings = { navController.navigate("settings") },
                 onCheckUpdate = manualCheck,
+                onNearbyShare = { navController.navigate("nearby_share") },
                 // v1.8.7 任务④: .ics 导出 → 写 cache + FileProvider 分享
                 onExportICS = {
                     scope.launch {
@@ -258,6 +267,15 @@ fun NavGraph(
             )
         }
 
+        // 近场传输: 同一局域网互传提醒
+        composable("nearby_share") {
+            NearbyShareScreen(
+                database = database,
+                scheduler = scheduler,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
         composable("create") {
             val scope = rememberCoroutineScope()
             val context = androidx.compose.ui.platform.LocalContext.current
@@ -292,13 +310,16 @@ fun NavGraph(
         ) { backStackEntry ->
             val reminderId = backStackEntry.arguments?.getLong("reminderId") ?: return@composable
 
-            val viewModel = ReminderDetailViewModel(
-                reminderId = reminderId,
-                dao = database.reminderDao(),
-                recordDao = database.reminderRecordDao(),
-                scheduler = scheduler,
-                notificationMgr = notificationMgr
-            )
+            // 必须 remember：每次重组 new 会让 VM 初始状态变 null → 详情页闪空白反复加载
+            val viewModel = remember(reminderId) {
+                ReminderDetailViewModel(
+                    reminderId = reminderId,
+                    dao = database.reminderDao(),
+                    recordDao = database.reminderRecordDao(),
+                    scheduler = scheduler,
+                    notificationMgr = notificationMgr
+                )
+            }
 
             ReminderDetailScreen(
                 viewModel = viewModel,

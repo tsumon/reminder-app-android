@@ -376,16 +376,18 @@ private fun lunarTextFor(year: Int, month: Int, day: Int): String {
         set(Calendar.MILLISECOND, 0)
     }
     val lunar = LunarCalendar.solarToLunar(cal.timeInMillis) ?: return ""
+    // LunarDate.day 是 1-based（1=初一…30=三十）。注意索引 day-1：
+    // 旧实现用 getOrElse(lunar.day) 直接索引导致「初二」起错位一天、
+    // 「三十」(day=30)越界返回空白（如 2026-08-12 六月三十不显示）。
+    val dayNames = arrayOf(
+        "", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",
+        "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
+        "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"
+    )
     return when (lunar.day) {
         1 -> "初一"
-        else -> {
-            val dayNames = arrayOf(
-                "", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",
-                "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
-                "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"
-            )
-            dayNames.getOrElse(lunar.day) { "" }
-        }
+        in 2..30 -> dayNames[lunar.day - 1]
+        else -> ""
     }
 }
 

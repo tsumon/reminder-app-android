@@ -122,9 +122,23 @@ object TelemetryService {
         }
     }
 
-    private fun escape(s: String): String = s
-        .replace("\\", "\\\\")
-        .replace("\"", "\\\"")
-        .replace("\n", "\\n")
-        .replace("\r", "\\r")
+    /** JSON 字符串转义：除 \ " 外还要处理 \t \b \f 及全部控制字符，否则 crash 日志是非法 JSON */
+    private fun escape(s: String): String = buildString {
+        for (ch in s) {
+            when (ch) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                '\b' -> append("\\b")
+                '\u000C' -> append("\\f")
+                else -> if (ch < ' ') {
+                    append(String.format("\\u%04x", ch.code))
+                } else {
+                    append(ch)
+                }
+            }
+        }
+    }
 }

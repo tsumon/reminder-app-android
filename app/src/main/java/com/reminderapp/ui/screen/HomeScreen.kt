@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -106,6 +107,7 @@ fun HomeScreen(
     onOpenSettings: () -> Unit = {},
     onExportICS: () -> Unit = {},
     onCheckUpdate: () -> Unit = {},
+    onNearbyShare: () -> Unit = {},
     onSyncNow: () -> Unit = {}
 ) {
     val grouped by viewModel.groupedReminders.collectAsState()
@@ -207,6 +209,16 @@ fun HomeScreen(
                                 }
                             )
                             Divider()
+                            // 近场传输: 同一局域网互传提醒
+                            DropdownMenuItem(
+                                text = { Text("附近传输") },
+                                leadingIcon = { Icon(Icons.Default.Wifi, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onNearbyShare()
+                                }
+                            )
+                            Divider()
                             // v1.9.0: 主动检查更新
                             DropdownMenuItem(
                                 text = { Text("检查更新") },
@@ -256,7 +268,11 @@ fun HomeScreen(
             item {
                 OverviewCard(
                     unhandledCount = allReminders.count { it.isActive && it.status != "confirmed" },
-                    nextReminder = allReminders.filter { it.isActive }.minByOrNull { it.nextTriggerAt }
+                    // v1.9.6 fix: 过滤已确认/已过期——is_active=1 包含 confirmed 的 once 提醒
+                    // （nextTriggerAt 是过去值），会被误选成「下一条提醒」显示历史时间
+                    nextReminder = allReminders
+                        .filter { it.isActive && it.status != "confirmed" && it.nextTriggerAt > System.currentTimeMillis() }
+                        .minByOrNull { it.nextTriggerAt }
                 )
             }
 

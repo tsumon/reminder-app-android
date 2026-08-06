@@ -72,11 +72,13 @@ class AIService {
             .header("Authorization", "Bearer $apiKey")
             .build()
 
-        val response = client.newCall(request).execute()
-        val responseBody = response.body?.string() ?: throw Exception("空响应")
-
-        if (response.code == 401) throw Exception("API Key 无效，请检查设置")
-        if (!response.isSuccessful) throw Exception("API 错误 ${response.code}: ${responseBody.take(200)}")
+        // use{} 确保异常路径也关闭 response，避免连接泄漏
+        val responseBody = client.newCall(request).execute().use { response ->
+            val body = response.body?.string() ?: throw Exception("空响应")
+            if (response.code == 401) throw Exception("API Key 无效，请检查设置")
+            if (!response.isSuccessful) throw Exception("API 错误 ${response.code}: ${body.take(200)}")
+            body
+        }
 
         val result = gson.fromJson(responseBody, ChatResponse::class.java)
             ?: throw Exception("响应格式错误")

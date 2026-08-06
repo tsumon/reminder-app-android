@@ -7,6 +7,7 @@ import com.reminderapp.data.database.AppDatabase
 import com.reminderapp.service.ReminderEngine
 import com.reminderapp.service.NotificationManager
 import com.reminderapp.service.ReminderScheduler
+import com.reminderapp.service.SyncStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -25,48 +26,54 @@ class NotificationActionReceiver : BroadcastReceiver() {
         val notificationMgr = NotificationManager(context)
         val scheduler = ReminderScheduler(context)
 
+        // ⚠️ 广播回调必须 goAsync() 保活，否则协程里的 Room 操作常来不及完成，
+        // 用户点了「确认/稍后」却什么都没发生（进程被杀）
+        val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
-            val reminder = db.reminderDao().getById(reminderId) ?: return@launch
+            try {
+                val reminder = db.reminderDao().getById(reminderId) ?: return@launch
 
-            when (intent.action) {
-                NotificationManager.ACTION_CONFIRM -> {
-                    val updated = ReminderEngine.confirm(reminder)
-                    db.reminderDao().update(updated)
-                    // 重新调度下一次触发，避免从通知栏确认后周期断链
-                    scheduler.schedule(updated)
-
-                    // 日期提醒：也生成预告通知
-                    if (updated.kind == "date") {
-                        scheduleAdvanceNotifications(context, updated)
+                when (intent.action) {
+                    NotificationManager.ACTION_CONFIRM -> {
+                        val updated = ReminderEngine.confirm(reminder)
+                        db.reminderDao().update(updated)
+                        // v1.9.6 fix: once 提醒确认后归档，不重排——
+                        // nextTriggerAt 是过去值，schedule 会 delay=0 立即再弹一条「已完成」
+                        if (updated.cycle != "once") {
+                            scheduler.schedule(updated)
+                        }
+                        // v1.9.6 fix: 写操作记录（通知栏确认是常用路径，统计依赖它）
+                        try {
+                            db.reminderRecordDao().insert(
+                                com.reminderapp.data.entity.ReminderRecordEntity(reminderId = reminderId, action = "confirmed")
+                            )
+                        } catch (_: Exception) {
+                        }
+                        // v1.9.6 fix: 漏 touchLocalChange → 本地新数据被远程旧数据覆盖 / AI 新建不同步
+                        SyncStore.touchLocalChange()
+                        ReminderWidgetProvider.refresh(context)
+                    }
+                    NotificationManager.ACTION_SNOOZE -> {
+                        val updated = ReminderEngine.snooze(reminder)
+                        db.reminderDao().update(updated)
+                        // snooze 已把 nextTriggerAt 设成 15 分钟后，交给 scheduler 定时重推。
+                        scheduler.schedule(updated)
+                        try {
+                            db.reminderRecordDao().insert(
+                                com.reminderapp.data.entity.ReminderRecordEntity(reminderId = reminderId, action = "snoozed")
+                            )
+                        } catch (_: Exception) {
+                        }
+                        SyncStore.touchLocalChange()
+                        ReminderWidgetProvider.refresh(context)
                     }
                 }
-                NotificationManager.ACTION_SNOOZE -> {
-                    val updated = ReminderEngine.snooze(reminder)
-                    db.reminderDao().update(updated)
-                    // snooze 已把 nextTriggerAt 设成 15 分钟后，交给 scheduler 定时重推。
-                    // 这里不要再直接 sendReminderNotification：那是「立刻」弹一条，
-                    // 且会被本方法末尾的 cancelReminderNotifications 立即撤掉，
-                    // 结果就是点了「稍后」等于什么都没发生。
-                    scheduler.schedule(updated)
-                }
+
+                // 取消已显示的通知
+                notificationMgr.cancelReminderNotifications(reminderId)
+            } finally {
+                pendingResult.finish()
             }
-
-            // 取消已显示的通知
-            notificationMgr.cancelReminderNotifications(reminderId)
-        }
-    }
-
-    private fun scheduleAdvanceNotifications(context: Context, reminder: com.reminderapp.data.entity.ReminderEntity) {
-        val now = System.currentTimeMillis()
-        val advanceDays = ReminderEngine.getAdvanceDaysToNotify(reminder, now)
-        val notificationMgr = NotificationManager(context)
-
-        advanceDays.forEach { days ->
-            notificationMgr.sendAdvanceNotification(
-                reminder.id,
-                "📅 即将到来：${reminder.title}",
-                "还有 $days 天，提前做好准备"
-            )
         }
     }
 }

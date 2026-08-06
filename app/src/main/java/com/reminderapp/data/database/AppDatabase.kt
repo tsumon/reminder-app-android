@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.reminderapp.data.dao.ReminderDao
 import com.reminderapp.data.dao.ReminderRecordDao
 import com.reminderapp.data.entity.ReminderEntity
@@ -22,6 +24,24 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
+        // v1.2.0(v2): 新增 reminder_hour / reminder_minute
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE reminders ADD COLUMN reminder_hour INTEGER NOT NULL DEFAULT 9")
+                db.execSQL("ALTER TABLE reminders ADD COLUMN reminder_minute INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        // v1.5.0(v3): 新增规则提醒字段 + priority
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE reminders ADD COLUMN rule_period TEXT")
+                db.execSQL("ALTER TABLE reminders ADD COLUMN rule_week INTEGER")
+                db.execSQL("ALTER TABLE reminders ADD COLUMN rule_weekday INTEGER")
+                db.execSQL("ALTER TABLE reminders ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal'")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -29,7 +49,10 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "reminder_app.db"
                 )
-                    .fallbackToDestructiveMigration()
+                    // v1.9.6 fix: 原来靠 fallbackToDestructiveMigration 兜底，
+                    // 老用户(v1.1/v1.2/v1.5)升级会整库 DROP 重建 → 全部提醒清空。
+                    // 补 Migration 后 schema 不匹配时明确报错，绝不静默清库。
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { INSTANCE = it }
             }
