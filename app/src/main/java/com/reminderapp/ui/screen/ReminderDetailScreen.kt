@@ -140,7 +140,6 @@ fun ReminderDetailScreen(
                     }
                 }
             }
-            }
 
             // 操作按钮
             Row(
