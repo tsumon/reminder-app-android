@@ -9,6 +9,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.reminderapp.data.database.AppDatabase
 import com.reminderapp.service.NotificationManager
+import com.reminderapp.service.ReminderEngine
 import com.reminderapp.service.ReminderScheduler
 import com.reminderapp.ui.screen.CreateReminderScreen
 import com.reminderapp.ui.screen.HomeScreen
@@ -136,8 +137,18 @@ fun NavGraph(
             CreateReminderScreen(
                 onSave = { entity ->
                     scope.launch {
-                        val id = database.reminderDao().insert(entity)
-                        val saved = entity.copy(id = id)
+                        // P0 修复：手动创建路径之前直接 insert + schedule，
+                        // date 类 nextTriggerAt 落到「提醒时间」默认的今天，
+                        // 导致手动建的生日/节假日今天 9:00 就误触发。
+                        // 与 AI 创建路径（AIChatScreen）一致，date/rule 类
+                        // 统一走引擎按目标月日重算；cycle 类引擎会按周期锚点算。
+                        val finalEntity = if (entity.kind == "cycle") {
+                            entity
+                        } else {
+                            entity.copy(nextTriggerAt = ReminderEngine.calculateNextTrigger(entity))
+                        }
+                        val id = database.reminderDao().insert(finalEntity)
+                        val saved = finalEntity.copy(id = id)
                         scheduler.schedule(saved)
                         com.reminderapp.service.SyncStore.touchLocalChange()
                         com.reminderapp.receiver.ReminderWidgetProvider.refresh(context)

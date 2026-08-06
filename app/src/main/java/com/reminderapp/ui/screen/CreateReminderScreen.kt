@@ -109,6 +109,11 @@ fun CreateReminderScreen(
                                     targetDay = targetDay,
                                     holidayName = selectedHolidayName,
                                     advanceDays = advanceDays,
+                                    // P1 修复：date-mode 之前漏存用户选的钟点，
+                                    // 实体默认 09:00；首次触发后 confirm/Worker 重算
+                                    // 每年都在 09:00 响，无视用户挑的时间。
+                                    reminderHour = triggerHour,
+                                    reminderMinute = triggerMinute,
                                     priority = priority,
                                     title = title.trim(),
                                     note = note.trim(),
