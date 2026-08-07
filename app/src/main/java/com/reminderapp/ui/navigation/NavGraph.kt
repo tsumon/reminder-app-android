@@ -220,7 +220,10 @@ fun NavGraph(
                 onCreateReminder = { navController.navigate("create") },
                 onReminderClick = { id -> navController.navigate("detail/$id") },
                 onAIChat = { navController.navigate("chat") },
-                onDeleteReminder = { id -> viewModel.deleteReminder(id) },
+                onDeleteReminder = { id ->
+                    viewModel.deleteReminder(id)
+                    com.reminderapp.service.TelemetryService.logEvent("reminder.delete")
+                },
                 onExport = { exportLauncher.launch("reminder_backup_${System.currentTimeMillis() / 1000}.json") },
                 onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
                 onOpenSyncSettings = { navController.navigate("sync_settings") },
@@ -391,6 +394,7 @@ fun NavGraph(
                         val id = database.reminderDao().insert(finalEntity)
                         val saved = finalEntity.copy(id = id)
                         scheduler.schedule(saved)
+                        com.reminderapp.service.TelemetryService.logEvent("reminder.create", mapOf("kind" to entity.kind))
                         com.reminderapp.service.SyncStore.touchLocalChange()
                         com.reminderapp.receiver.ReminderWidgetProvider.refresh(context)
                         navController.popBackStack()
