@@ -1,6 +1,7 @@
 package com.reminderapp
 
 import android.Manifest
+import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -13,10 +14,16 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.app.NotificationManagerCompat
 import androidx.navigation.compose.rememberNavController
+import com.reminderapp.i18n.LocaleManager
 import com.reminderapp.ui.navigation.NavGraph
 import com.reminderapp.ui.theme.ReminderAppTheme
 
 class MainActivity : ComponentActivity() {
+
+    // v2.0.4: 手动语言切换 —— 在 Activity 构建前替换 Locale，整棵树资源跟随
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleManager.wrap(newBase))
+    }
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()

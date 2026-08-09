@@ -8,11 +8,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowRight
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,11 +23,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.reminderapp.BuildConfig
+import com.reminderapp.i18n.LocaleManager
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 import com.reminderapp.service.UpdateService
 import com.reminderapp.ui.theme.Tokens
 import kotlinx.coroutines.launch
-import com.reminderapp.i18n.zh
-import com.reminderapp.i18n.zhf
 
 /**
  * 设置页：同步/AI/关于（版本号 + 检查更新 + 更新日志）
@@ -65,6 +68,53 @@ fun SettingsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // === 语言（v2.0.4：手动切换，跟随系统为默认） ===
+            item {
+                SettingsCard {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.Translate, contentDescription = null,
+                            tint = Tokens.BrandPrimary, modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(zh("语言"), style = MaterialTheme.typography.bodyLarge)
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            LocaleManager.displayName(LocaleManager.currentCode(context)),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    HorizontalDivider()
+                    LocaleManager.options.forEach { code ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickableItem { LocaleManager.setLanguage(context, code) }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                LocaleManager.displayName(code),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            if (LocaleManager.currentCode(context) == code) {
+                                Icon(
+                                    Icons.Filled.Check, contentDescription = null,
+                                    tint = Tokens.BrandPrimary, modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // === 同步 ===
             item {
                 SettingsCard {

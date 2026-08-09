@@ -2,6 +2,7 @@ package com.reminderapp
 
 import android.app.Application
 import com.reminderapp.data.database.AppDatabase
+import com.reminderapp.i18n.LocaleManager
 import com.reminderapp.service.AIService
 import com.reminderapp.service.AISettings
 import com.reminderapp.service.HolidayRemoteService
@@ -34,6 +35,9 @@ class ReminderApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+
+        // v2.0.4: 手动语言切换 —— 先于一切业务初始化应用目标 Locale
+        LocaleManager.apply(this)
 
         // v1.8.7 任务⑥: 崩溃监控 + 埋点基础设施（必须先于业务初始化）
         TelemetryService.install()

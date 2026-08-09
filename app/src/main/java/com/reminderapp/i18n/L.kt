@@ -347,6 +347,8 @@ object L {
         "🔴高" to R.string.s_0331,
         "🟢 中" to R.string.s_0332,
         "🟢中" to R.string.s_0333,
+        "语言" to R.string.s_0334,
+        "跟随系统" to R.string.s_0335,
     )
 }
 
@@ -361,7 +363,8 @@ private fun appContext(): Context? =
 /** 取多语言文案（无占位符） */
 fun zh(src: String): String {
     val id = L.ids[src] ?: return src
-    val ctx = appContext() ?: return src
+    val base = appContext() ?: return src
+    val ctx = LocaleManager.wrap(base)
     return runCatching { ctx.getString(id) }.getOrDefault(src)
 }
 
@@ -369,7 +372,8 @@ fun zh(src: String): String {
 fun zhf(src: String, vararg args: Any?): String {
     val safe = args.map { it ?: "" }.toTypedArray()
     val id = L.ids[src] ?: return String.format(src, *safe)
-    val ctx = appContext() ?: return String.format(src, *safe)
+    val base = appContext() ?: return String.format(src, *safe)
+    val ctx = LocaleManager.wrap(base)
     return runCatching { ctx.getString(id, *safe) }.getOrDefault(String.format(src, *safe))
 }
 
