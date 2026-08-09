@@ -63,7 +63,7 @@ class ReminderScheduler(private val context: Context) {
                         workDataOf(
                             "reminder_id" to reminder.id,
                             "title" to reminder.title,
-                            "body" to zhf("还有 %1$s 天就是「%2$s」了，提前做好准备", d, reminder.title),
+                            "body" to zhf("还有 %1\$s 天就是「%2\$s」了，提前做好准备", d, reminder.title),
                             "kind" to "advance"
                         )
                     )

@@ -70,7 +70,7 @@ fun CalendarScreen(
                 } else {
                     val cal = Calendar.getInstance().apply { timeInMillis = ts }
                     SectionHeader(
-                        zhf("%1$s年%2$s月%3$s日 · 当天任务", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH)),
+                        zhf("%1\$s年%2\$s月%3\$s日 · 当天任务", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH)),
                         StatusReminding
                     )
                 }

@@ -135,7 +135,7 @@ fun CalendarCard(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = zhf("%1$s年%2$s月", displayYear, displayMonth + 1),
+                            text = zhf("%1\$s年%2\$s月", displayYear, displayMonth + 1),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -148,7 +148,7 @@ fun CalendarCard(
                         )
                     }
                     Text(
-                        text = zhf("农历%1$s · %2$s%3$s", todayLunar, todayWeekday, todayStatusSuffix),
+                        text = zhf("农历%1\$s · %2\$s%3\$s", todayLunar, todayWeekday, todayStatusSuffix),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

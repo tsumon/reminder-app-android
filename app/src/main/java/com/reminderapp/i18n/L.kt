@@ -2,6 +2,7 @@ package com.reminderapp.i18n
 
 import android.content.Context
 import com.reminderapp.R
+import com.reminderapp.ReminderApp
 
 /**
  * 多语言查表：以「简体中文原串」为 key，避免为几百条文案手工起名。

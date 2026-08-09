@@ -78,7 +78,7 @@ class AIService {
         val responseBody = client.newCall(request).execute().use { response ->
             val body = response.body?.string() ?: throw Exception(zh("空响应"))
             if (response.code == 401) throw Exception(zh("API Key 无效，请检查设置"))
-            if (!response.isSuccessful) throw Exception(zhf("API 错误 %1$s: %2$s", response.code, body.take(200)))
+            if (!response.isSuccessful) throw Exception(zhf("API 错误 %1\$s: %2\$s", response.code, body.take(200)))
             body
         }
 

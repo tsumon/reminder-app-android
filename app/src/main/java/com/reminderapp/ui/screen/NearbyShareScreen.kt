@@ -388,6 +388,6 @@ private fun receive(
         }
         SyncStore.touchLocalChange()
         com.reminderapp.receiver.ReminderWidgetProvider.refresh(context)
-        setResult(zhf("导入完成：新增 %1$s 条，跳过重复 %2$s 条", imported, skipped), false)
+        setResult(zhf("导入完成：新增 %1\$s 条，跳过重复 %2\$s 条", imported, skipped), false)
     }
 }

@@ -220,7 +220,7 @@ fun ReminderDetailScreen(
                         if (currentReminder.dateType == "holiday") {
                             infoRow(zh("节日"), currentReminder.holidayName ?: "")
                         } else {
-                            infoRow(zh("日期"), zhf("%1$s月%2$s日", currentReminder.targetMonth ?: 0, currentReminder.targetDay ?: 0))
+                            infoRow(zh("日期"), zhf("%1\$s月%2\$s日", currentReminder.targetMonth ?: 0, currentReminder.targetDay ?: 0))
                         }
                         infoRow(zh("提前提醒"), zhf("%s 天", currentReminder.advanceDays))
                     } else if (currentReminder.kind == "rule") {

@@ -298,7 +298,7 @@ private fun HeatmapCard(
                 IconButton(onClick = onPrevMonth, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = zh("上一月"))
                 }
-                Text(zhf("%1$s年%2$s月", year, month + 1), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                Text(zhf("%1\$s年%2\$s月", year, month + 1), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                 IconButton(onClick = onNextMonth, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = zh("下一月"))
                 }

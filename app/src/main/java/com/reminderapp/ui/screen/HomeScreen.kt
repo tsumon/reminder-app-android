@@ -442,7 +442,7 @@ fun HomeScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Text(
-                    zhf("%1$s年%2$s月%3$s日 的任务", y, m, d),
+                    zhf("%1\$s年%2\$s月%3\$s日 的任务", y, m, d),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -698,7 +698,7 @@ fun ruleLabel(reminder: ReminderEntity): String {
     }
     val weekday = arrayOf(zh("周一"), zh("周二"), zh("周三"), zh("周四"), zh("周五"), zh("周六"), zh("周日"))
         .getOrElse((reminder.ruleWeekday ?: 1) - 1) { zhf("周%s", reminder.ruleWeekday) }
-    return zhf("%1$s第%2$s周%3$s", periodLabel, reminder.ruleWeek ?: 1, weekday)
+    return zhf("%1\$s第%2\$s周%3\$s", periodLabel, reminder.ruleWeek ?: 1, weekday)
 }
 
 /** 提醒类型 → 展示用 emoji（设计图风格彩色图标容器） */

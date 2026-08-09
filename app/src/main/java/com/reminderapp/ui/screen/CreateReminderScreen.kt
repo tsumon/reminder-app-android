@@ -577,7 +577,7 @@ fun CreateReminderScreen(
                         if (solarDate != null) {
                             val sdf = java.text.SimpleDateFormat(zh("yyyy年MM月dd日"), Locale.getDefault())
                             Text(
-                                zhf("%1$s年对应公历：%2$s", triggerYear, sdf.format(Date(solarDate))),
+                                zhf("%1\$s年对应公历：%2\$s", triggerYear, sdf.format(Date(solarDate))),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -658,7 +658,7 @@ fun CreateReminderScreen(
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            zhf("%1$s年%2$s月%3$s日", triggerYear, triggerMonth, triggerDay),
+                            zhf("%1\$s年%2\$s月%3\$s日", triggerYear, triggerMonth, triggerDay),
                             style = MaterialTheme.typography.titleSmall
                         )
                     }

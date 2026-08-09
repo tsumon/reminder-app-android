@@ -172,9 +172,9 @@ class ReminderWidgetProvider : AppWidgetProvider() {
             val minutes = diffMillis / 60000L
             if (minutes < 60) return zhf("%s分钟后", minutes.coerceAtLeast(0))
             val hours = minutes / 60
-            if (hours < 24) return zhf("%1$s小时%2$s分后", hours, minutes % 60)
+            if (hours < 24) return zhf("%1\$s小时%2\$s分后", hours, minutes % 60)
             val days = hours / 24
-            return zhf("%1$s天%2$s小时后", days, hours % 24)
+            return zhf("%1\$s天%2\$s小时后", days, hours % 24)
         }
 
         /** App 数据变化后调用，刷新所有已添加的小组件（异步，绝不阻塞调用方） */
