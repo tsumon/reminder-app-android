@@ -1,3 +1,7 @@
+[🇨🇳 简体中文](README.md) · [🇺🇸 English](README.en.md) · [🇹🇼 繁體中文](README.zh-TW.md) · [🇯🇵 日本語](README.ja.md) · [🇰🇷 한국어](README.ko.md)
+
+---
+
 # 📱 提醒助手 (Reminder App) — Android
 
 一个功能完善的 Android 原生提醒应用，支持循环提醒、日期提醒、农历生日、节假日提醒以及 **AI 语音助手**。
