@@ -47,6 +47,8 @@ import com.reminderapp.ui.viewmodel.ReminderDetailViewModel
 import com.reminderapp.service.AISettings
 import com.reminderapp.service.AIService
 import kotlinx.coroutines.launch
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 @Composable
 fun NavGraph(
@@ -80,7 +82,7 @@ fun NavGraph(
                             }
                         },
                         icon = { Icon(Icons.Filled.Home, contentDescription = null) },
-                        label = { Text("首页") }
+                        label = { Text(zh("首页")) }
                     )
                     // 日历
                     NavigationBarItem(
@@ -93,7 +95,7 @@ fun NavGraph(
                             }
                         },
                         icon = { Icon(Icons.Filled.CalendarMonth, contentDescription = null) },
-                        label = { Text("日历") }
+                        label = { Text(zh("日历")) }
                     )
                     // 统计
                     NavigationBarItem(
@@ -106,7 +108,7 @@ fun NavGraph(
                             }
                         },
                         icon = { Icon(Icons.Filled.BarChart, contentDescription = null) },
-                        label = { Text("统计") }
+                        label = { Text(zh("统计")) }
                     )
                     // AI
                     NavigationBarItem(
@@ -195,13 +197,13 @@ fun NavGraph(
                     val info = com.reminderapp.service.UpdateService.checkLatest()
                     when {
                         info == null -> android.widget.Toast.makeText(
-                            context, "检查更新失败，请检查网络后重试", android.widget.Toast.LENGTH_SHORT
+                            context, zh("检查更新失败，请检查网络后重试"), android.widget.Toast.LENGTH_SHORT
                         ).show()
                         com.reminderapp.service.UpdateService.isNewer(
                             info.latestVersion, com.reminderapp.service.UpdateService.currentVersion()
                         ) -> updateInfo = info
                         else -> android.widget.Toast.makeText(
-                            context, "当前已是最新版本 v${com.reminderapp.service.UpdateService.currentVersion()}",
+                            context, zhf("当前已是最新版本 v%s", com.reminderapp.service.UpdateService.currentVersion()),
                             android.widget.Toast.LENGTH_SHORT
                         ).show()
                     }
@@ -220,7 +222,10 @@ fun NavGraph(
                 onCreateReminder = { navController.navigate("create") },
                 onReminderClick = { id -> navController.navigate("detail/$id") },
                 onAIChat = { navController.navigate("chat") },
-                onDeleteReminder = { id -> viewModel.deleteReminder(id) },
+                onDeleteReminder = { id ->
+                    viewModel.deleteReminder(id)
+                    com.reminderapp.service.TelemetryService.logEvent("reminder.delete")
+                },
                 onExport = { exportLauncher.launch("reminder_backup_${System.currentTimeMillis() / 1000}.json") },
                 onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
                 onOpenSyncSettings = { navController.navigate("sync_settings") },
@@ -243,14 +248,14 @@ fun NavGraph(
                             putExtra(android.content.Intent.EXTRA_STREAM, uri)
                             addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
-                        context.startActivity(android.content.Intent.createChooser(intent, "导出日历"))
+                        context.startActivity(android.content.Intent.createChooser(intent, zh("导出日历")))
                     }
                 },
                 onSyncNow = {
                     scope2.launch {
                         val result = com.reminderapp.service.WebDavSync.syncNow(context)
                         val msg = when (result) {
-                            is com.reminderapp.service.WebDavSync.SyncResult.Success -> "同步完成"
+                            is com.reminderapp.service.WebDavSync.SyncResult.Success -> zh("同步完成")
                             is com.reminderapp.service.WebDavSync.SyncResult.Error -> result.message
                         }
                         android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
@@ -262,11 +267,11 @@ fun NavGraph(
             updateInfo?.let { info ->
                 AlertDialog(
                     onDismissRequest = { if (!downloading) updateInfo = null },
-                    title = { Text("发现新版本 v${info.latestVersion}") },
+                    title = { Text(zhf("发现新版本 v%s", info.latestVersion)) },
                     text = {
                         Text(
-                            if (downloading) "正在下载更新包…"
-                            else "当前版本 v${com.reminderapp.service.UpdateService.currentVersion()}，是否前往下载安装？"
+                            if (downloading) zh("正在下载更新包…")
+                            else zhf("当前版本 v%s，是否前往下载安装？", com.reminderapp.service.UpdateService.currentVersion())
                         )
                     },
                     confirmButton = {
@@ -285,7 +290,7 @@ fun NavGraph(
                                         }
                                     } catch (e: Exception) {
                                         android.widget.Toast.makeText(
-                                            context, "下载失败: ${e.message}", android.widget.Toast.LENGTH_LONG
+                                            context, zhf("下载失败: %s", e.message), android.widget.Toast.LENGTH_LONG
                                         ).show()
                                     } finally {
                                         downloading = false
@@ -293,11 +298,11 @@ fun NavGraph(
                                     }
                                 }
                             }
-                        ) { Text(if (downloading) "下载中…" else "前往下载") }
+                        ) { Text(if (downloading) zh("下载中…") else zh("前往下载")) }
                     },
                     dismissButton = {
                         TextButton(enabled = !downloading, onClick = { updateInfo = null }) {
-                            Text("稍后再说")
+                            Text(zh("稍后再说"))
                         }
                     }
                 )
@@ -391,6 +396,7 @@ fun NavGraph(
                         val id = database.reminderDao().insert(finalEntity)
                         val saved = finalEntity.copy(id = id)
                         scheduler.schedule(saved)
+                        com.reminderapp.service.TelemetryService.logEvent("reminder.create", mapOf("kind" to entity.kind))
                         com.reminderapp.service.SyncStore.touchLocalChange()
                         com.reminderapp.receiver.ReminderWidgetProvider.refresh(context)
                         navController.popBackStack()

@@ -28,6 +28,8 @@ import com.reminderapp.ui.theme.*
 import com.reminderapp.ui.viewmodel.ReminderDetailViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,11 +59,11 @@ fun ReminderDetailScreen(
     }
 
     val statusLabel = when (currentReminder.status) {
-        "notifying" -> "需要确认"
-        "overdue" -> "已逾期"
-        "pending" -> "等待中"
-        "confirmed" -> "已完成"
-        else -> "等待中"
+        "notifying" -> zh("需要确认")
+        "overdue" -> zh("已逾期")
+        "pending" -> zh("等待中")
+        "confirmed" -> zh("已完成")
+        else -> zh("等待中")
     }
 
     val statusIcon = when (currentReminder.status) {
@@ -80,17 +82,17 @@ fun ReminderDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("提醒详情") },
+                title = { Text(zh("提醒详情")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.Default.ArrowBack, contentDescription = zh("返回"))
                     }
                 },
                 actions = {
                     IconButton(onClick = { showDeleteDialog = true }) {
                         Icon(
                             Icons.Default.Delete,
-                            contentDescription = "删除",
+                            contentDescription = zh("删除"),
                             tint = MaterialTheme.colorScheme.error
                         )
                     }
@@ -147,13 +149,13 @@ fun ReminderDetailScreen(
                             Spacer(modifier = Modifier.width(16.dp))
                             Column {
                                 Text(
-                                    text = "当前状态",
+                                    text = zh("当前状态"),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = Color.White.copy(alpha = 0.85f)
                                 )
                                 Text(
                                     text = statusLabel +
-                                        (if (currentReminder.retryCount > 0) " · 第${currentReminder.retryCount}次重试" else ""),
+                                        (if (currentReminder.retryCount > 0) zhf(" · 第%s次重试", currentReminder.retryCount) else ""),
                                     style = MaterialTheme.typography.headlineSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
@@ -161,7 +163,7 @@ fun ReminderDetailScreen(
                                 if (currentReminder.nextTriggerAt > 0) {
                                     val nextFmt = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
                                     Text(
-                                        text = "下次：${nextFmt.format(Date(currentReminder.nextTriggerAt))}",
+                                        text = zhf("下次：%s", nextFmt.format(Date(currentReminder.nextTriggerAt))),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = Color.White.copy(alpha = 0.85f)
                                     )
@@ -184,7 +186,7 @@ fun ReminderDetailScreen(
                 ) {
                     Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("确认完成")
+                    Text(zh("确认完成"))
                 }
 
                 OutlinedButton(
@@ -194,50 +196,50 @@ fun ReminderDetailScreen(
                 ) {
                     Icon(Icons.Default.Snooze, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("稍后提醒")
+                    Text(zh("稍后提醒"))
                 }
             }
 
             // 信息卡片
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    infoRow("优先级", when (currentReminder.priority) {
-                        "high" -> "🔴 高"
-                        "low" -> "⚪ 低"
-                        else -> "🟢 中"
+                    infoRow(zh("优先级"), when (currentReminder.priority) {
+                        "high" -> zh("🔴 高")
+                        "low" -> zh("⚪ 低")
+                        else -> zh("🟢 中")
                     })
                     if (currentReminder.kind == "date") {
-                        infoRow("类型", "日期提醒")
+                        infoRow(zh("类型"), zh("日期提醒"))
                         val dateTypeLabel = when (currentReminder.dateType) {
-                            "solar_birthday" -> "新历生日"
-                            "lunar_birthday" -> "农历生日"
-                            "holiday" -> "节假日"
+                            "solar_birthday" -> zh("新历生日")
+                            "lunar_birthday" -> zh("农历生日")
+                            "holiday" -> zh("节假日")
                             else -> ""
                         }
-                        infoRow("日期类型", dateTypeLabel)
+                        infoRow(zh("日期类型"), dateTypeLabel)
                         if (currentReminder.dateType == "holiday") {
-                            infoRow("节日", currentReminder.holidayName ?: "")
+                            infoRow(zh("节日"), currentReminder.holidayName ?: "")
                         } else {
-                            infoRow("日期", "${currentReminder.targetMonth ?: 0}月${currentReminder.targetDay ?: 0}日")
+                            infoRow(zh("日期"), zhf("%1$s月%2$s日", currentReminder.targetMonth ?: 0, currentReminder.targetDay ?: 0))
                         }
-                        infoRow("提前提醒", "${currentReminder.advanceDays} 天")
+                        infoRow(zh("提前提醒"), zhf("%s 天", currentReminder.advanceDays))
                     } else if (currentReminder.kind == "rule") {
-                        infoRow("类型", "规则提醒")
-                        infoRow("频率", when (currentReminder.rulePeriod) {
-                            "monthly" -> "每月"
-                            "yearly" -> "每年"
-                            else -> "每季度"
+                        infoRow(zh("类型"), zh("规则提醒"))
+                        infoRow(zh("频率"), when (currentReminder.rulePeriod) {
+                            "monthly" -> zh("每月")
+                            "yearly" -> zh("每年")
+                            else -> zh("每季度")
                         })
-                        infoRow("周次", "第${currentReminder.ruleWeek ?: 1}周")
-                        infoRow("星期", arrayOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
-                            .getOrElse((currentReminder.ruleWeekday ?: 1) - 1) { "周${currentReminder.ruleWeekday}" })
+                        infoRow(zh("周次"), zhf("第%s周", currentReminder.ruleWeek ?: 1))
+                        infoRow(zh("星期"), arrayOf(zh("周一"), zh("周二"), zh("周三"), zh("周四"), zh("周五"), zh("周六"), zh("周日"))
+                            .getOrElse((currentReminder.ruleWeekday ?: 1) - 1) { zhf("周%s", currentReminder.ruleWeekday) })
                     } else {
-                        infoRow("周期", currentReminder.cycle)
+                        infoRow(zh("周期"), currentReminder.cycle)
                     }
-                    infoRow("首次提醒", dateFormat.format(Date(currentReminder.firstTriggerAt)))
-                    infoRow("下次提醒", dateFormat.format(Date(currentReminder.nextTriggerAt)))
+                    infoRow(zh("首次提醒"), dateFormat.format(Date(currentReminder.firstTriggerAt)))
+                    infoRow(zh("下次提醒"), dateFormat.format(Date(currentReminder.nextTriggerAt)))
                     if (currentReminder.retryCount > 0) {
-                        infoRow("重试次数", "${currentReminder.retryCount} 次")
+                        infoRow(zh("重试次数"), zhf("%s 次", currentReminder.retryCount))
                     }
                 }
             }
@@ -245,7 +247,7 @@ fun ReminderDetailScreen(
             // 历史记录
             if (records.isNotEmpty()) {
                 Text(
-                    "操作记录",
+                    zh("操作记录"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -264,9 +266,9 @@ fun ReminderDetailScreen(
                         ) {
                             Text(
                                 text = when (record.action) {
-                                    "confirmed" -> "✅ 已确认完成"
-                                    "snoozed" -> "⏰ 稍后提醒"
-                                    "notified" -> "🔔 已发送通知"
+                                    "confirmed" -> zh("✅ 已确认完成")
+                                    "snoozed" -> zh("⏰ 稍后提醒")
+                                    "notified" -> zh("🔔 已发送通知")
                                     else -> record.action
                                 },
                                 style = MaterialTheme.typography.bodyMedium
@@ -325,16 +327,16 @@ private fun DeleteConfirmDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("删除提醒") },
-        text = { Text("确定要删除「$title」吗？此操作不可恢复。") },
+        title = { Text(zh("删除提醒")) },
+        text = { Text(zhf("确定要删除「%s」吗？此操作不可恢复。", title)) },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text("删除", color = MaterialTheme.colorScheme.error)
+                Text(zh("删除"), color = MaterialTheme.colorScheme.error)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(zh("取消"))
             }
         }
     )

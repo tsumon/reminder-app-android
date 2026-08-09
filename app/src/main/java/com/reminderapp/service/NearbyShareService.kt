@@ -11,6 +11,8 @@ import kotlin.concurrent.thread
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 /**
  * 近场分享：同一局域网内互传提醒
@@ -69,7 +71,7 @@ object NearbyShareService {
     ): ServerSocket? {
         return try {
             val server = ServerSocket(PORT)
-            onEvent("服务已启动，等待对方连接...", false)
+            onEvent(zh("服务已启动，等待对方连接..."), false)
             thread(isDaemon = true, name = "nearby-share-accept") {
                 while (!server.isClosed) {
                     try {
@@ -90,7 +92,7 @@ object NearbyShareService {
             }
             server
         } catch (e: Exception) {
-            onEvent("服务启动失败：${e.message}", true)
+            onEvent(zhf("服务启动失败：%s", e.message), true)
             null
         }
     }
@@ -127,7 +129,7 @@ object NearbyShareService {
                 s.getOutputStream().write(header.toByteArray(Charsets.UTF_8))
                 s.getOutputStream().write(bodyBytes)
                 s.getOutputStream().flush()
-                onEvent("已发送给一台设备（${bodyBytes.size} 字节）", false)
+                onEvent(zhf("已发送给一台设备（%s 字节）", bodyBytes.size), false)
             }
         } catch (_: Exception) {
             // 连接异常/超时忽略

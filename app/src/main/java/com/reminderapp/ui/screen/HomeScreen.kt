@@ -49,16 +49,18 @@ import com.reminderapp.ui.viewmodel.HomeViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.roundToInt
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 /** 智能清单：按时间/优先级/状态快速筛选 */
 enum class SmartList(val label: String) {
-    ALL("全部"),
-    TODAY("今天"),
-    TOMORROW("明天"),
-    WEEK("本周"),
-    MONTH("本月"),
-    HIGH("高优先级"),
-    DONE("已完成")
+    ALL(zh("全部")),
+    TODAY(zh("今天")),
+    TOMORROW(zh("明天")),
+    WEEK(zh("本周")),
+    MONTH(zh("本月")),
+    HIGH(zh("高优先级")),
+    DONE(zh("已完成"))
 }
 
 /** 判断提醒是否在 [fromDay, toDay] 天偏移范围内会发生 */
@@ -133,12 +135,12 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("循环提醒器", style = MaterialTheme.typography.headlineMedium) },
+                title = { Text(zh("循环提醒器"), style = MaterialTheme.typography.headlineMedium) },
                 navigationIcon = {
                     IconButton(onClick = onAIChat) {
                         Icon(
                             Icons.Filled.AutoAwesome,
-                            contentDescription = "AI 助手",
+                            contentDescription = zh("AI 助手"),
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -161,7 +163,7 @@ fun HomeScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            "周",
+                            zh("周"),
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                             color = Color.White
                         )
@@ -170,7 +172,7 @@ fun HomeScreen(
                         IconButton(onClick = { menuExpanded = true }) {
                             Icon(
                                 Icons.Default.MoreVert,
-                                contentDescription = "更多"
+                                contentDescription = zh("更多")
                             )
                         }
                         DropdownMenu(
@@ -178,7 +180,7 @@ fun HomeScreen(
                             onDismissRequest = { menuExpanded = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("立即同步") },
+                                text = { Text(zh("立即同步")) },
                                 leadingIcon = { Icon(Icons.Default.Sync, contentDescription = null) },
                                 onClick = {
                                     menuExpanded = false
@@ -186,7 +188,7 @@ fun HomeScreen(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("同步设置") },
+                                text = { Text(zh("同步设置")) },
                                 leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
                                 onClick = {
                                     menuExpanded = false
@@ -196,7 +198,7 @@ fun HomeScreen(
                             Divider()
                             // v1.8.7 任务③: 统计洞察
                             DropdownMenuItem(
-                                text = { Text("统计洞察") },
+                                text = { Text(zh("统计洞察")) },
                                 leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
                                 onClick = {
                                     menuExpanded = false
@@ -205,7 +207,7 @@ fun HomeScreen(
                             )
                             Divider()
                             DropdownMenuItem(
-                                text = { Text("导入提醒") },
+                                text = { Text(zh("导入提醒")) },
                                 leadingIcon = { Icon(Icons.Default.FileDownload, contentDescription = null) },
                                 onClick = {
                                     menuExpanded = false
@@ -213,7 +215,7 @@ fun HomeScreen(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("导出提醒") },
+                                text = { Text(zh("导出提醒")) },
                                 leadingIcon = { Icon(Icons.Default.FileUpload, contentDescription = null) },
                                 onClick = {
                                     menuExpanded = false
@@ -222,7 +224,7 @@ fun HomeScreen(
                             )
                             // v1.8.7 任务④: 导出 .ics 日历
                             DropdownMenuItem(
-                                text = { Text("导出日历(.ics)") },
+                                text = { Text(zh("导出日历(.ics)")) },
                                 leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
                                 onClick = {
                                     menuExpanded = false
@@ -232,7 +234,7 @@ fun HomeScreen(
                             Divider()
                             // 近场传输: 同一局域网互传提醒
                             DropdownMenuItem(
-                                text = { Text("附近传输") },
+                                text = { Text(zh("附近传输")) },
                                 leadingIcon = { Icon(Icons.Default.Wifi, contentDescription = null) },
                                 onClick = {
                                     menuExpanded = false
@@ -242,7 +244,7 @@ fun HomeScreen(
                             Divider()
                             // v1.9.0: 主动检查更新
                             DropdownMenuItem(
-                                text = { Text("检查更新") },
+                                text = { Text(zh("检查更新")) },
                                 leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
                                 onClick = {
                                     menuExpanded = false
@@ -252,7 +254,7 @@ fun HomeScreen(
                             Divider()
                             // v1.9.2: 设置（版本号/更新日志/AI/同步）
                             DropdownMenuItem(
-                                text = { Text("设置") },
+                                text = { Text(zh("设置")) },
                                 leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
                                 onClick = {
                                     menuExpanded = false
@@ -270,7 +272,7 @@ fun HomeScreen(
                 containerColor = Primary,
                 contentColor = Color.White
             ) {
-                Icon(Icons.Default.Add, contentDescription = "新建提醒")
+                Icon(Icons.Default.Add, contentDescription = zh("新建提醒"))
             }
         }
     ) { padding ->
@@ -326,12 +328,12 @@ fun HomeScreen(
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                if (smartList == SmartList.ALL) "暂无提醒" else "「${smartList.label}」没有提醒",
+                                if (smartList == SmartList.ALL) zh("暂无提醒") else zhf("「%s」没有提醒", smartList.label),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                if (smartList == SmartList.ALL) "点击右下角 + 创建新提醒" else "换个清单看看",
+                                if (smartList == SmartList.ALL) zh("点击右下角 + 创建新提醒") else zh("换个清单看看"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -343,7 +345,7 @@ fun HomeScreen(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("创建提醒")
+                                Text(zh("创建提醒"))
                             }
                         }
                     }
@@ -351,7 +353,7 @@ fun HomeScreen(
             } else {
                 // 提醒中
                 if (reminding.isNotEmpty()) {
-                    item { SectionHeader("提醒中", StatusReminding, count = reminding.size) }
+                    item { SectionHeader(zh("提醒中"), StatusReminding, count = reminding.size) }
                     items(reminding, key = { it.id }) { reminder ->
                         SwipeableReminderCard(
                             reminder = reminder,
@@ -367,7 +369,7 @@ fun HomeScreen(
 
                 // 等待中
                 if (waiting.isNotEmpty()) {
-                    item { SectionHeader("等待中", StatusWaiting, count = waiting.size) }
+                    item { SectionHeader(zh("等待中"), StatusWaiting, count = waiting.size) }
                     items(waiting, key = { it.id }) { reminder ->
                         SwipeableReminderCard(
                             reminder = reminder,
@@ -382,7 +384,7 @@ fun HomeScreen(
 
                 // 已完成
                 if (completed.isNotEmpty()) {
-                    item { SectionHeader("已完成", StatusCompleted, count = completed.size) }
+                    item { SectionHeader(zh("已完成"), StatusCompleted, count = completed.size) }
                     items(completed, key = { it.id }) { reminder ->
                         SwipeableReminderCard(
                             reminder = reminder,
@@ -402,8 +404,8 @@ fun HomeScreen(
     pendingDelete?.let { reminder ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("删除提醒") },
-            text = { Text("确定要删除「${reminder.title}」吗？此操作不可恢复。") },
+            title = { Text(zh("删除提醒")) },
+            text = { Text(zhf("确定要删除「%s」吗？此操作不可恢复。", reminder.title)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -411,12 +413,12 @@ fun HomeScreen(
                         pendingDelete = null
                     }
                 ) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
+                    Text(zh("删除"), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingDelete = null }) {
-                    Text("取消")
+                    Text(zh("取消"))
                 }
             }
         )
@@ -440,7 +442,7 @@ fun HomeScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Text(
-                    "${y}年${m}月${d}日 的任务",
+                    zhf("%1$s年%2$s月%3$s日 的任务", y, m, d),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -448,7 +450,7 @@ fun HomeScreen(
 
                 if (dateReminders.isEmpty()) {
                     Text(
-                        "这一天没有提醒",
+                        zh("这一天没有提醒"),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 16.dp)
@@ -576,9 +578,9 @@ fun SwipeableReminderCard(
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = when {
-                        animated > 0f && isDone -> "撤销"
-                        animated > 0f -> "完成"
-                        else -> "删除"
+                        animated > 0f && isDone -> zh("撤销")
+                        animated > 0f -> zh("完成")
+                        else -> zh("删除")
                     },
                     color = Color.White,
                     style = MaterialTheme.typography.labelMedium
@@ -656,7 +658,7 @@ fun OverviewCard(unhandledCount: Int, nextReminder: ReminderEntity?) {
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            "待处理 $unhandledCount 项",
+                            zhf("待处理 %s 项", unhandledCount),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -666,7 +668,7 @@ fun OverviewCard(unhandledCount: Int, nextReminder: ReminderEntity?) {
                     val nextText = nextReminder?.let {
                         val f = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
                         "${it.title} · ${f.format(Date(it.nextTriggerAt))}"
-                    } ?: "暂无即将到来的提醒"
+                    } ?: zh("暂无即将到来的提醒")
                     Text(
                         nextText,
                         style = MaterialTheme.typography.bodySmall,
@@ -690,13 +692,13 @@ fun OverviewCard(unhandledCount: Int, nextReminder: ReminderEntity?) {
 /** 规则提醒的显示文本，如「每季度第2周周二」 */
 fun ruleLabel(reminder: ReminderEntity): String {
     val periodLabel = when (reminder.rulePeriod) {
-        "monthly" -> "每月"
-        "yearly" -> "每年"
-        else -> "每季度"
+        "monthly" -> zh("每月")
+        "yearly" -> zh("每年")
+        else -> zh("每季度")
     }
-    val weekday = arrayOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
-        .getOrElse((reminder.ruleWeekday ?: 1) - 1) { "周${reminder.ruleWeekday}" }
-    return "${periodLabel}第${reminder.ruleWeek ?: 1}周$weekday"
+    val weekday = arrayOf(zh("周一"), zh("周二"), zh("周三"), zh("周四"), zh("周五"), zh("周六"), zh("周日"))
+        .getOrElse((reminder.ruleWeekday ?: 1) - 1) { zhf("周%s", reminder.ruleWeekday) }
+    return zhf("%1$s第%2$s周%3$s", periodLabel, reminder.ruleWeek ?: 1, weekday)
 }
 
 /** 提醒类型 → 展示用 emoji（设计图风格彩色图标容器） */
@@ -737,33 +739,33 @@ fun ReminderCard(
 ) {
     val dateFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
     val statusText = when (reminder.status) {
-        "notifying" -> "需要确认"
-        "overdue" -> "已逾期"   // v1.9.7: 递增重试到上限
-        "idle", "pending" -> "等待中"
-        "confirmed" -> "已完成"
+        "notifying" -> zh("需要确认")
+        "overdue" -> zh("已逾期")   // v1.9.7: 递增重试到上限
+        "idle", "pending" -> zh("等待中")
+        "confirmed" -> zh("已完成")
         else -> ""
     }
     val kindLabel = when {
         reminder.kind == "date" && reminder.dateType == "holiday" -> "🎉${reminder.holidayName ?: ""}"
-        reminder.kind == "date" && reminder.dateType == "lunar_birthday" -> "🌙农历生日"
-        reminder.kind == "date" && reminder.dateType == "solar_birthday" -> "🎂生日"
+        reminder.kind == "date" && reminder.dateType == "lunar_birthday" -> zh("🌙农历生日")
+        reminder.kind == "date" && reminder.dateType == "solar_birthday" -> zh("🎂生日")
         reminder.kind == "rule" -> ruleLabel(reminder)
         else -> when (reminder.cycle) {
-            "once" -> "仅一次"
-            "daily" -> "每天"
-            "weekly" -> "每周"
-            "biweekly" -> "每两周"
-            "monthly" -> "每月"
-            "quarterly" -> "每季度"
-            "yearly" -> "每年"
-            "custom" -> "每${reminder.customDays}天"
+            "once" -> zh("仅一次")
+            "daily" -> zh("每天")
+            "weekly" -> zh("每周")
+            "biweekly" -> zh("每两周")
+            "monthly" -> zh("每月")
+            "quarterly" -> zh("每季度")
+            "yearly" -> zh("每年")
+            "custom" -> zhf("每%s天", reminder.customDays)
             else -> reminder.cycle
         }
     }
     val priorityLabel = when (reminder.priority) {
-        "high" -> "🔴高"
-        "low" -> "⚪低"
-        else -> "🟢中"
+        "high" -> zh("🔴高")
+        "low" -> zh("⚪低")
+        else -> zh("🟢中")
     }
     val isDone = reminder.status == "confirmed"
 
@@ -774,8 +776,8 @@ fun ReminderCard(
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onDelete,
-                onClickLabel = "打开详情",
-                onLongClickLabel = "长按删除"
+                onClickLabel = zh("打开详情"),
+                onLongClickLabel = zh("长按删除")
             ),
         shape = RoundedCornerShape(Tokens.RadiusCell),
         colors = CardDefaults.cardColors(
@@ -822,7 +824,7 @@ fun ReminderCard(
                     )
                     if (reminder.retryCount > 0 && !isDone) {
                         Text(
-                            text = " · 第${reminder.retryCount}次重试",
+                            text = zhf(" · 第%s次重试", reminder.retryCount),
                             style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFFF39C12)
                         )

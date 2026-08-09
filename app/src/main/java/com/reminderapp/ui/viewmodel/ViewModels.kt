@@ -8,6 +8,7 @@ import com.reminderapp.service.ReminderEngine
 import com.reminderapp.service.ReminderScheduler
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import com.reminderapp.i18n.zh
 
 class HomeViewModel(
     private val dao: com.reminderapp.data.dao.ReminderDao,
@@ -173,7 +174,7 @@ class ReminderDetailViewModel(
             notificationMgr.sendReminderNotification(
                 updated.id,
                 "⏰ ${updated.title}",
-                updated.note.ifEmpty { "该事项仍需要你确认" }
+                updated.note.ifEmpty { zh("该事项仍需要你确认") }
             )
             // v1.9.7: 对齐 iOS —— 重试必须重新排期，否则下一次到点永远不会响；
             // 已逾期（达到重试上限）不再排期

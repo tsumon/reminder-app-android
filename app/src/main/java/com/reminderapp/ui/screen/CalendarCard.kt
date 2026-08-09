@@ -31,6 +31,8 @@ import com.reminderapp.ui.theme.Tokens
 import androidx.compose.ui.platform.LocalContext
 import java.text.SimpleDateFormat
 import java.util.*
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 /**
  * 主页日历卡片：公历 + 农历 + 星期几 + 任务缩略标记
@@ -71,7 +73,7 @@ fun CalendarCard(
     val todayLunar = remember {
         LunarCalendar.solarToLunar(todayCal.timeInMillis)?.description ?: ""
     }
-    val weekDayNames = arrayOf("周日", "周一", "周二", "周三", "周四", "周五", "周六")
+    val weekDayNames = arrayOf(zh("周日"), zh("周一"), zh("周二"), zh("周三"), zh("周四"), zh("周五"), zh("周六"))
     val todayWeekday = weekDayNames[todayCal.get(Calendar.DAY_OF_WEEK) - 1]
     // v1.8.7 任务②: 今天的节假日状态后缀（联网数据，无则空）
     val todayStatusSuffix = HolidayRemoteService.status(
@@ -79,7 +81,7 @@ fun CalendarCard(
         todayCal.get(Calendar.YEAR),
         todayCal.get(Calendar.MONTH) + 1,
         todayCal.get(Calendar.DAY_OF_MONTH)
-    )?.let { if (it.isHoliday) " · ${it.name}休" else " · 调休上班" } ?: ""
+    )?.let { if (it.isHoliday) zhf(" · %s休", it.name) else zh(" · 调休上班") } ?: ""
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -120,7 +122,7 @@ fun CalendarCard(
                         if (displayMonth < 0) { displayMonth = 11; displayYear-- }
                     }
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "上一月")
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = zh("上一月"))
                 }
                 // 月份标题：点击弹「月份选择器」（v1.8.7 UI 优化）
                 Column(
@@ -133,20 +135,20 @@ fun CalendarCard(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "${displayYear}年${displayMonth + 1}月",
+                            text = zhf("%1$s年%2$s月", displayYear, displayMonth + 1),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Icon(
                             Icons.Filled.KeyboardArrowDown,
-                            contentDescription = "选择月份",
+                            contentDescription = zh("选择月份"),
                             modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Text(
-                        text = "农历$todayLunar · $todayWeekday$todayStatusSuffix",
+                        text = zhf("农历%1$s · %2$s%3$s", todayLunar, todayWeekday, todayStatusSuffix),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -159,7 +161,7 @@ fun CalendarCard(
                         displayYear = todayCal.get(Calendar.YEAR)
                         displayMonth = todayCal.get(Calendar.MONTH)
                     }) {
-                        Text("今天", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                        Text(zh("今天"), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                     }
                 }
                 IconButton(
@@ -168,7 +170,7 @@ fun CalendarCard(
                         if (displayMonth > 11) { displayMonth = 0; displayYear++ }
                     }
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "下一月")
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = zh("下一月"))
                 }
             }
 
@@ -250,23 +252,23 @@ fun CalendarCard(
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { displayYear-- }) {
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "上一年")
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = zh("上一年"))
                     }
                     Text(
-                        text = "${displayYear} 年",
+                        text = zhf("%s 年", displayYear),
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     IconButton(onClick = { displayYear++ }) {
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "下一年")
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = zh("下一年"))
                     }
                 }
             },
             text = {
-                val monthNames = listOf("一月", "二月", "三月", "四月", "五月", "六月",
-                    "七月", "八月", "九月", "十月", "十一月", "十二月")
+                val monthNames = listOf(zh("一月"), zh("二月"), zh("三月"), zh("四月"), zh("五月"), zh("六月"),
+                    zh("七月"), zh("八月"), zh("九月"), zh("十月"), zh("十一月"), zh("十二月"))
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     monthNames.chunked(4).forEach { row ->
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -296,7 +298,7 @@ fun CalendarCard(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showMonthPicker = false }) { Text("取消") }
+                TextButton(onClick = { showMonthPicker = false }) { Text(zh("取消")) }
             }
         )
     }
@@ -361,7 +363,7 @@ private fun DayCell(
         )
         // 休/班角标：放假红「休」、调休上班橙「班」；普通日占位保持对齐（v1.8.7 任务②）
         Text(
-            text = holidayStatus?.let { if (it.isHoliday) "休" else "班" } ?: "",
+            text = holidayStatus?.let { if (it.isHoliday) zh("休") else zh("班") } ?: "",
             style = MaterialTheme.typography.labelSmall.copy(fontSize = Tokens.FontTiny, fontWeight = FontWeight.Bold),
             color = if (holidayStatus?.isHoliday == true) Tokens.HolidayRest else Tokens.HolidayWork,
             maxLines = 1

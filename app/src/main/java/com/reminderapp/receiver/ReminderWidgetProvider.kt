@@ -17,6 +17,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 /**
  * 桌面小组件：显示未处理提醒数 + 距离最近的提醒
@@ -99,7 +101,7 @@ class ReminderWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widget_next_title, data.nextTitle)
             views.setTextViewText(R.id.widget_next_time, data.nextTimeText ?: "")
         } else {
-            views.setTextViewText(R.id.widget_next_title, "暂无提醒")
+            views.setTextViewText(R.id.widget_next_title, zh("暂无提醒"))
             views.setTextViewText(R.id.widget_next_time, "")
         }
 
@@ -148,7 +150,7 @@ class ReminderWidgetProvider : AppWidgetProvider() {
 
                 // 今天农历（系统历法，离线可用）
                 val lunar = com.reminderapp.service.LunarCalendar.solarToLunar(now)
-                val lunarText = lunar?.description?.let { "农历 $it" } ?: ""
+                val lunarText = lunar?.description?.let { zhf("农历 %s", it) } ?: ""
 
                 // 下一次提醒：绝对时间 + 倒计时
                 val nextTimeText = next?.let { r ->
@@ -168,11 +170,11 @@ class ReminderWidgetProvider : AppWidgetProvider() {
         /** 生成倒计时文案：2小时15分后 / 3天2小时后 / 45天后 */
         private fun countdownText(diffMillis: Long): String {
             val minutes = diffMillis / 60000L
-            if (minutes < 60) return "${minutes.coerceAtLeast(0)}分钟后"
+            if (minutes < 60) return zhf("%s分钟后", minutes.coerceAtLeast(0))
             val hours = minutes / 60
-            if (hours < 24) return "${hours}小时${minutes % 60}分后"
+            if (hours < 24) return zhf("%1$s小时%2$s分后", hours, minutes % 60)
             val days = hours / 24
-            return "${days}天${hours % 24}小时后"
+            return zhf("%1$s天%2$s小时后", days, hours % 24)
         }
 
         /** App 数据变化后调用，刷新所有已添加的小组件（异步，绝不阻塞调用方） */

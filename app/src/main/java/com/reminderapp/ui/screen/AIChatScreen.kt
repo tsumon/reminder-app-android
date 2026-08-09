@@ -33,6 +33,8 @@ import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import java.util.*
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 // ---- Message Model ----
 
@@ -100,7 +102,7 @@ fun AIChatScreen(
         if (granted) {
             startListening()
         } else {
-            Toast.makeText(context, "需要录音权限才能使用语音输入", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, zh("需要录音权限才能使用语音输入"), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -110,7 +112,7 @@ fun AIChatScreen(
     // 欢迎消息
     LaunchedEffect(Unit) {
         if (!settings.isConfigured) {
-            val guide = "👋 你好！请先在设置中配置 API Key（支持 DeepSeek / 通义千问 / 豆包等，均有免费额度）。\n\n我能帮你：\n• 创建提醒「每天提醒我喝水」\n• 查看列表「有什么提醒」\n• 确认完成「确认喝水」\n• 推迟/删除提醒"
+            val guide = zh("👋 你好！请先在设置中配置 API Key（支持 DeepSeek / 通义千问 / 豆包等，均有免费额度）。\n\n我能帮你：\n• 创建提醒「每天提醒我喝水」\n• 查看列表「有什么提醒」\n• 确认完成「确认喝水」\n• 推迟/删除提醒")
             messages = listOf(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = guide))
         }
     }
@@ -125,15 +127,15 @@ fun AIChatScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("AI 助手") },
+                title = { Text(zh("AI 助手")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = zh("返回"))
                     }
                 },
                 actions = {
                     IconButton(onClick = onNavigateSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = "设置")
+                        Icon(Icons.Filled.Settings, contentDescription = zh("设置"))
                     }
                 }
             )
@@ -167,7 +169,7 @@ fun AIChatScreen(
                             modifier = Modifier.size(40.dp)
                         ) {
                             Icon(
-                                Icons.Filled.Mic, contentDescription = "语音",
+                                Icons.Filled.Mic, contentDescription = zh("语音"),
                                 tint = if (isListening) MaterialTheme.colorScheme.error
                                        else MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -177,7 +179,7 @@ fun AIChatScreen(
                         OutlinedTextField(
                             value = inputText,
                             onValueChange = { inputText = it },
-                            placeholder = { Text("输入或点击麦克风说话...") },
+                            placeholder = { Text(zh("输入或点击麦克风说话...")) },
                             modifier = Modifier.weight(1f),
                             maxLines = 3,
                             shape = RoundedCornerShape(20.dp)
@@ -208,14 +210,14 @@ fun AIChatScreen(
                                 } else {
                                     // 未配置 API Key：解锁按钮并提示
                                     isLoading = false
-                                    Toast.makeText(context, "请先在 AI 设置中配置 API Key", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, zh("请先在 AI 设置中配置 API Key"), Toast.LENGTH_SHORT).show()
                                 }
                             },
                             enabled = inputText.isNotBlank() && !isLoading,
                             modifier = Modifier.size(40.dp)
                         ) {
                             Icon(
-                                Icons.Filled.Send, contentDescription = "发送",
+                                Icons.Filled.Send, contentDescription = zh("发送"),
                                 tint = if (inputText.isNotBlank() && !isLoading) MaterialTheme.colorScheme.primary
                                        else MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -255,11 +257,11 @@ fun AIChatScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            "跟我说你想提醒什么",
+                            zh("跟我说你想提醒什么"),
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
-                            "\"每天8点提醒我吃药\"\n\"每年提醒我妈生日\"",
+                            zh("\"每天8点提醒我吃药\"\n\"每年提醒我妈生日\""),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -376,7 +378,7 @@ private suspend fun sendToAI(
                 continue
             }
 
-            val content = reply.content ?: "好的，已处理。"
+            val content = reply.content ?: zh("好的，已处理。")
             msgs.add(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = content))
             onLoading(false)
             onMessages(msgs)
@@ -390,7 +392,7 @@ private suspend fun sendToAI(
         }
     }
 
-    msgs.add(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = "对话轮次过多，请重新描述你的需求。"))
+    msgs.add(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = zh("对话轮次过多，请重新描述你的需求。")))
     onLoading(false)
     onMessages(msgs)
 }
@@ -411,12 +413,12 @@ private suspend fun executeTool(
         "confirm_reminder" -> handleConfirm(args, database, scheduler, notificationMgr)
         "snooze_reminder" -> handleSnooze(args, database, scheduler, notificationMgr)
         "delete_reminder" -> handleDelete(args, database)
-        else -> "未知工具: $name"
+        else -> zhf("未知工具: %s", name)
     }
 }
 
 private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase, scheduler: ReminderScheduler, notificationMgr: NotificationManager): String {
-    val title = (args["title"] as? String) ?: "未命名提醒"
+    val title = (args["title"] as? String) ?: zh("未命名提醒")
     val kind = (args["kind"] as? String) ?: "cycle"
     val note = (args["note"] as? String) ?: ""
     val cycle = (args["cycle"] as? String) ?: "weekly"
@@ -444,18 +446,18 @@ private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase,
     // v1.9.6 fix: kind/cycle/dateType 白名单校验。
     // 非法值会静默降级（调度走 else 分支、日历不显示）→「创建成功但永远不对」的幽灵提醒
     if (kind !in setOf("cycle", "date", "rule")) {
-        return "提醒类型无效（$kind），只支持：周期(cycle)/日期(date)/规则(rule)。"
+        return zhf("提醒类型无效（%s），只支持：周期(cycle)/日期(date)/规则(rule)。", kind)
     }
     if (kind == "cycle" && cycle !in setOf("daily", "weekly", "biweekly", "monthly", "quarterly", "yearly", "custom", "once")) {
-        return "周期类型无效（$cycle），只支持：每天/每周/每两周/每月/每季度/每年/自定义/一次。"
+        return zhf("周期类型无效（%s），只支持：每天/每周/每两周/每月/每季度/每年/自定义/一次。", cycle)
     }
     // v1.9.6 fix: kind=date 必须带 dateType——null 会退化成「一年后随机时刻」的幽灵提醒
     if (kind == "date" && dateType !in setOf("solar_birthday", "lunar_birthday", "holiday")) {
-        return "日期提醒需要指定类型（公历生日/农历生日/节假日），例如：农历八月十五。请补充类型，我再为你创建。"
+        return zh("日期提醒需要指定类型（公历生日/农历生日/节假日），例如：农历八月十五。请补充类型，我再为你创建。")
     }
     // v1.9.6 fix: cycle=custom 必须 customDays>=1，否则 interval=0 → Worker 立即重触发死循环
     if (cycle == "custom" && customDays < 1) {
-        return "自定义周期需要指定间隔天数（如：每3天），custom_days 至少为 1。"
+        return zh("自定义周期需要指定间隔天数（如：每3天），custom_days 至少为 1。")
     }
 
     val now = System.currentTimeMillis()
@@ -476,14 +478,14 @@ private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase,
     if (kind == "date" && dateType != "holiday" &&
         (targetMonth !in 1..12 || targetDay !in 1..31)
     ) {
-        return "需要具体的公历/农历月日才能创建日期提醒（例如：农历八月十五、公历5月1日）。请补充月日，我再为你创建。"
+        return zh("需要具体的公历/农历月日才能创建日期提醒（例如：农历八月十五、公历5月1日）。请补充月日，我再为你创建。")
     }
     if (kind == "date" && dateType == "holiday" && holidayName.isNullOrBlank()) {
-        return "需要指定节假日名称（例如：春节、中秋节）才能创建节假日提醒。"
+        return zh("需要指定节假日名称（例如：春节、中秋节）才能创建节假日提醒。")
     }
     // v1.9.0 fix: 规则提醒必须带全 频率/第几周/周几
     if (kind == "rule" && (rulePeriod == null || ruleWeek == null || ruleWeekday == null)) {
-        return "规则提醒需要指定频率（每月/每季度/每年）、第几周和星期几，例如：每季度第一周周四。请补充完整，我再为你创建。"
+        return zh("规则提醒需要指定频率（每月/每季度/每年）、第几周和星期几，例如：每季度第一周周四。请补充完整，我再为你创建。")
     }
 
     val entity = ReminderEntity(
@@ -505,17 +507,17 @@ private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase,
     // v1.9.6 fix: 漏 touchLocalChange → AI 新建的提醒永远不同步 / 被远程旧数据覆盖
     com.reminderapp.service.SyncStore.touchLocalChange()
     com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
-    return "已创建提醒：「$title」"
+    return zhf("已创建提醒：「%s」", title)
 }
 
 private suspend fun handleList(database: AppDatabase): String {
     val list = database.reminderDao().getAllSync()
-    if (list.isEmpty()) return "当前没有提醒。"
-    val sb = StringBuilder("当前共有 ${list.size} 个提醒：")
+    if (list.isEmpty()) return zh("当前没有提醒。")
+    val sb = StringBuilder(zhf("当前共有 %s 个提醒：", list.size))
     for (r in list) {
         val display = when {
-            r.kind == "date" && r.dateType == "holiday" -> r.holidayName ?: "节假日"
-            r.kind == "date" -> "日期"
+            r.kind == "date" && r.dateType == "holiday" -> r.holidayName ?: zh("节假日")
+            r.kind == "date" -> zh("日期")
             else -> r.cycle
         }
         sb.append("\n · ${r.title} [$display]")
@@ -526,9 +528,9 @@ private suspend fun handleList(database: AppDatabase): String {
 private suspend fun handleConfirm(args: Map<String, Any?>, database: AppDatabase, scheduler: ReminderScheduler, notificationMgr: NotificationManager): String {
     val keyword = (args["title_keyword"] as? String ?: "").lowercase()
     // 空关键词 contains("") 恒 true 会命中第一条无关提醒 → 必须守卫
-    if (keyword.isEmpty()) return "请指定要确认的提醒标题（如：确认「交房租」）。"
+    if (keyword.isEmpty()) return zh("请指定要确认的提醒标题（如：确认「交房租」）。")
     val list = database.reminderDao().getAllSync()
-    val match = list.find { it.title.lowercase().contains(keyword) } ?: return "未找到包含「$keyword」的提醒"
+    val match = list.find { it.title.lowercase().contains(keyword) } ?: return zhf("未找到包含「%s」的提醒", keyword)
     val updated = ReminderEngine.confirm(match)
     database.reminderDao().update(updated)
     // v1.9.6 fix: 确认后取消已显示的通知，避免通知栏残留可反复点击
@@ -536,27 +538,27 @@ private suspend fun handleConfirm(args: Map<String, Any?>, database: AppDatabase
     scheduler.schedule(updated)
     com.reminderapp.service.SyncStore.touchLocalChange()
     com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
-    return "已确认「${match.title}」，下次提醒时间已更新。"
+    return zhf("已确认「%s」，下次提醒时间已更新。", match.title)
 }
 
 private suspend fun handleSnooze(args: Map<String, Any?>, database: AppDatabase, scheduler: ReminderScheduler, notificationMgr: NotificationManager): String {
     val keyword = (args["title_keyword"] as? String ?: "").lowercase()
-    if (keyword.isEmpty()) return "请指定要推迟的提醒标题（如：推迟「交房租」）。"
+    if (keyword.isEmpty()) return zh("请指定要推迟的提醒标题（如：推迟「交房租」）。")
     val list = database.reminderDao().getAllSync()
-    val match = list.find { it.title.lowercase().contains(keyword) } ?: return "未找到包含「$keyword」的提醒"
+    val match = list.find { it.title.lowercase().contains(keyword) } ?: return zhf("未找到包含「%s」的提醒", keyword)
     val updated = ReminderEngine.snooze(match)
     database.reminderDao().update(updated)
     scheduler.schedule(updated)
     com.reminderapp.service.SyncStore.touchLocalChange()
     com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
-    return "已推迟「${match.title}」，15 分钟后再次提醒。"
+    return zhf("已推迟「%s」，15 分钟后再次提醒。", match.title)
 }
 
 private suspend fun handleDelete(args: Map<String, Any?>, database: AppDatabase): String {
     val keyword = (args["title_keyword"] as? String ?: "").lowercase()
-    if (keyword.isEmpty()) return "请指定要删除的提醒标题（如：删除「交房租」）。"
+    if (keyword.isEmpty()) return zh("请指定要删除的提醒标题（如：删除「交房租」）。")
     val list = database.reminderDao().getAllSync()
-    val match = list.find { it.title.lowercase().contains(keyword) } ?: return "未找到包含「$keyword」的提醒"
+    val match = list.find { it.title.lowercase().contains(keyword) } ?: return zhf("未找到包含「%s」的提醒", keyword)
     // v1.9.6 fix: 必须先取消 WorkManager 排期 + 已显示通知，再用软删。
     // 原实现物理 delete：遗留任务触发时 Worker 先发通知才查库 → 幽灵通知；
     // 且物理删会级联清掉统计记录（与 UI 路径软删不一致）
@@ -565,5 +567,5 @@ private suspend fun handleDelete(args: Map<String, Any?>, database: AppDatabase)
     database.reminderDao().softDelete(match.id)
     com.reminderapp.service.SyncStore.touchLocalChange()
     com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
-    return "已删除「${match.title}」"
+    return zhf("已删除「%s」", match.title)
 }

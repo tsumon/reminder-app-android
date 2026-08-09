@@ -13,6 +13,8 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 /**
  * WebDAV 同步：将全部提醒导出为 JSON 上传/下载，以 exportedAt 时间戳判断新旧
@@ -43,7 +45,7 @@ object WebDavSync {
      */
     suspend fun syncNow(context: Context): SyncResult = withContext(Dispatchers.IO) {
         if (!SyncStore.isConfigured) {
-            return@withContext SyncResult.Error("请先配置 WebDAV 服务器")
+            return@withContext SyncResult.Error(zh("请先配置 WebDAV 服务器"))
         }
 
         val db = AppDatabase.getInstance(context)
@@ -75,7 +77,7 @@ object WebDavSync {
                     // 远程新 → 覆盖本地
                     val items = BackupService.importFromJson(remoteJson)
                     if (items == null) {
-                        SyncResult.Error("远程文件解析失败")
+                        SyncResult.Error(zh("远程文件解析失败"))
                     } else {
                         replaceLocal(db, items)
                         SyncStore.lastLocalChange = remoteVersion
@@ -214,7 +216,7 @@ object WebDavSync {
     suspend fun testConnection(): SyncResult = withContext(Dispatchers.IO) {
         val base = SyncStore.url.trim().trimEnd('/')
         if (base.isEmpty() || SyncStore.username.isEmpty() || SyncStore.password.isEmpty()) {
-            return@withContext SyncResult.Error("请先填写 WebDAV 地址、用户名和应用密码")
+            return@withContext SyncResult.Error(zh("请先填写 WebDAV 地址、用户名和应用密码"))
         }
 
         // 1. 验证读权限
@@ -260,41 +262,41 @@ object WebDavSync {
 
     /** 「可读但不可写」的精准提示（testConnection 第二步失败时使用） */
     private fun writeFailureHint(code: Int): String = when (code) {
-        401 -> "账号或密码错误（HTTP 401）：坚果云请用「应用密码」——网页端 → 账户信息 → 安全选项 → 添加应用密码，不能用登录密码。"
-        403 -> "账号只读不可写（HTTP 403）：可能原因：① 第三方登录注册的坚果云账号（如 Google/微信登录）不支持 WebDAV 写入，请用坚果云独立注册的账号；② 账号未在网页端启用 WebDAV（账户信息 → 安全选项）。"
-        404 -> "账号只读不可写（HTTP 404）：可能原因：① 第三方登录注册的坚果云账号不支持 WebDAV 写入，请用坚果云独立注册的账号；② 应用密码生成后未刷新权限，删除旧密码重新生成一次。"
-        405 -> "服务器不允许写入（HTTP 405）：地址可能不是 WebDAV 路径，请确认填 https://dav.jianguoyun.com/dav/（坚果云以 /dav/ 结尾）。"
-        else -> "可读但不可写（HTTP $code）：账号可能被禁用 WebDAV，或地址权限不足，请联系服务器管理员。"
+        401 -> zh("账号或密码错误（HTTP 401）：坚果云请用「应用密码」——网页端 → 账户信息 → 安全选项 → 添加应用密码，不能用登录密码。")
+        403 -> zh("账号只读不可写（HTTP 403）：可能原因：① 第三方登录注册的坚果云账号（如 Google/微信登录）不支持 WebDAV 写入，请用坚果云独立注册的账号；② 账号未在网页端启用 WebDAV（账户信息 → 安全选项）。")
+        404 -> zh("账号只读不可写（HTTP 404）：可能原因：① 第三方登录注册的坚果云账号不支持 WebDAV 写入，请用坚果云独立注册的账号；② 应用密码生成后未刷新权限，删除旧密码重新生成一次。")
+        405 -> zh("服务器不允许写入（HTTP 405）：地址可能不是 WebDAV 路径，请确认填 https://dav.jianguoyun.com/dav/（坚果云以 /dav/ 结尾）。")
+        else -> zhf("可读但不可写（HTTP %s）：账号可能被禁用 WebDAV，或地址权限不足，请联系服务器管理员。", code)
     }
 
     /** 把 HTTP 状态码/异常转成可操作的中文提示（尤其坚果云 401 应用密码） */
     private fun friendlyMessage(code: Int): String = when (code) {
-        401 -> "认证失败（HTTP 401）：请确认用户名；密码必须是坚果云「应用密码」——在坚果云网页端「账户信息 → 安全选项 → 添加应用密码」生成，不能用登录密码。"
-        403 -> "无权限（HTTP 403）：请检查该 WebDAV 路径是否可写（如 dav.jianguoyun.com/dav/ 根目录）。"
-        404 -> "目录不存在（HTTP 404）：请确认 WebDAV 地址指向已存在的目录，坚果云请填 https://dav.jianguoyun.com/dav/（根目录），不要带不存在的子路径。"
-        405 -> "服务器不支持该操作（HTTP 405）：请确认填的是 WebDAV 地址（如 …/dav/），不是网盘网页地址。"
-        409 -> "资源冲突（HTTP 409）。"
-        423 -> "资源被锁定（HTTP 423）。"
-        507 -> "存储空间不足（HTTP 507）。"
-        else -> "HTTP $code：请检查服务器地址/账号，或稍后重试。"
+        401 -> zh("认证失败（HTTP 401）：请确认用户名；密码必须是坚果云「应用密码」——在坚果云网页端「账户信息 → 安全选项 → 添加应用密码」生成，不能用登录密码。")
+        403 -> zh("无权限（HTTP 403）：请检查该 WebDAV 路径是否可写（如 dav.jianguoyun.com/dav/ 根目录）。")
+        404 -> zh("目录不存在（HTTP 404）：请确认 WebDAV 地址指向已存在的目录，坚果云请填 https://dav.jianguoyun.com/dav/（根目录），不要带不存在的子路径。")
+        405 -> zh("服务器不支持该操作（HTTP 405）：请确认填的是 WebDAV 地址（如 …/dav/），不是网盘网页地址。")
+        409 -> zh("资源冲突（HTTP 409）。")
+        423 -> zh("资源被锁定（HTTP 423）。")
+        507 -> zh("存储空间不足（HTTP 507）。")
+        else -> zhf("HTTP %s：请检查服务器地址/账号，或稍后重试。", code)
     }
 
     private fun friendlyMessage(e: Throwable): String {
         if (e is Exception) return friendlyMessage(e as Exception)
-        return "未知错误：${e.message ?: e.javaClass.simpleName}"
+        return zhf("未知错误：%s", e.message ?: e.javaClass.simpleName)
     }
 
     private fun friendlyMessage(e: Exception): String {
-        val m = e.message ?: return "无法连接服务器：请检查网络和地址。"
+        val m = e.message ?: return zh("无法连接服务器：请检查网络和地址。")
         if (m.startsWith("HTTP")) {
             val code = m.removePrefix("HTTP").trim().toIntOrNull()
             if (code != null) return friendlyMessage(code)
         }
         val low = m.lowercase()
         return when {
-            low.contains("timeout") -> "连接超时：请检查网络或服务器地址。"
+            low.contains("timeout") -> zh("连接超时：请检查网络或服务器地址。")
             low.contains("failed to connect") || low.contains("network") ||
-                low.contains("unable to resolve") -> "无法连接服务器：请检查网络和地址。"
+                low.contains("unable to resolve") -> zh("无法连接服务器：请检查网络和地址。")
             else -> m
         }
     }

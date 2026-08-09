@@ -9,6 +9,8 @@ import com.reminderapp.data.entity.ReminderRecordEntity
 import com.reminderapp.model.ReminderStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 /**
  * WorkManager Worker — 到时间后发送通知
@@ -29,7 +31,7 @@ class ReminderWorker(
 
     override fun doWork(): Result {
         val reminderId = inputData.getLong("reminder_id", 0)
-        val title = inputData.getString("title") ?: "提醒"
+        val title = inputData.getString("title") ?: zh("提醒")
         val body = inputData.getString("body") ?: ""
         val kind = inputData.getString("kind") ?: "cycle"
 
@@ -37,7 +39,7 @@ class ReminderWorker(
 
         // 预告通知：直接发送，不做任何重排
         if (kind == "advance") {
-            notificationManager.sendAdvanceNotification(reminderId, "📅 即将到来：$title", body)
+            notificationManager.sendAdvanceNotification(reminderId, zhf("📅 即将到来：%s", title), body)
             return Result.success()
         }
 

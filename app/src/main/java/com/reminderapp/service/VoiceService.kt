@@ -7,6 +7,8 @@ import android.speech.SpeechRecognizer
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.Locale
 import kotlin.coroutines.resume
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 /**
  * 语音识别服务（Android 原生 SpeechRecognizer）
@@ -19,7 +21,7 @@ class VoiceService(private val context: Context) {
      */
     suspend fun recognize(): Result<String> = suspendCancellableCoroutine { cont ->
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            cont.resume(Result.failure(Exception("语音识别不可用")))
+            cont.resume(Result.failure(Exception(zh("语音识别不可用"))))
             return@suspendCancellableCoroutine
         }
 
@@ -35,11 +37,11 @@ class VoiceService(private val context: Context) {
 
             override fun onError(error: Int) {
                 val msg = when (error) {
-                    SpeechRecognizer.ERROR_NO_MATCH -> "未能识别语音，请再说一次"
-                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "语音超时"
-                    SpeechRecognizer.ERROR_NETWORK -> "网络不可用"
-                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "缺少录音权限"
-                    else -> "语音识别错误($error)"
+                    SpeechRecognizer.ERROR_NO_MATCH -> zh("未能识别语音，请再说一次")
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> zh("语音超时")
+                    SpeechRecognizer.ERROR_NETWORK -> zh("网络不可用")
+                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> zh("缺少录音权限")
+                    else -> zhf("语音识别错误(%s)", error)
                 }
                 recognizer.destroy()
                 if (!cont.isCancelled) cont.resume(Result.failure(Exception(msg)))

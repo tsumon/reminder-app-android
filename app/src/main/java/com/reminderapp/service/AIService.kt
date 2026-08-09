@@ -9,6 +9,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 /**
  * OpenAI 兼容 API 调用服务
@@ -74,15 +76,15 @@ class AIService {
 
         // use{} 确保异常路径也关闭 response，避免连接泄漏
         val responseBody = client.newCall(request).execute().use { response ->
-            val body = response.body?.string() ?: throw Exception("空响应")
-            if (response.code == 401) throw Exception("API Key 无效，请检查设置")
-            if (!response.isSuccessful) throw Exception("API 错误 ${response.code}: ${body.take(200)}")
+            val body = response.body?.string() ?: throw Exception(zh("空响应"))
+            if (response.code == 401) throw Exception(zh("API Key 无效，请检查设置"))
+            if (!response.isSuccessful) throw Exception(zhf("API 错误 %1$s: %2$s", response.code, body.take(200)))
             body
         }
 
         val result = gson.fromJson(responseBody, ChatResponse::class.java)
-            ?: throw Exception("响应格式错误")
+            ?: throw Exception(zh("响应格式错误"))
 
-        result.choices?.firstOrNull()?.message ?: throw Exception("AI 返回为空")
+        result.choices?.firstOrNull()?.message ?: throw Exception(zh("AI 返回为空"))
     }
 }

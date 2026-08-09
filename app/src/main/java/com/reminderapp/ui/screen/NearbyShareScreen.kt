@@ -42,6 +42,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.ServerSocket
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 /**
  * 近场传输：同一局域网内互传提醒
@@ -58,7 +60,7 @@ fun NearbyShareScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var mode by remember { mutableStateOf("发送") }
+    var mode by remember { mutableStateOf(zh("发送")) }
     var server by remember { mutableStateOf<ServerSocket?>(null) }
     var serverLog by remember { mutableStateOf("") }
     var serverLogIsError by remember { mutableStateOf(false) }
@@ -74,7 +76,7 @@ fun NearbyShareScreen(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) showScanner = true
-        else Toast.makeText(context, "需要相机权限才能扫码", Toast.LENGTH_SHORT).show()
+        else Toast.makeText(context, zh("需要相机权限才能扫码"), Toast.LENGTH_SHORT).show()
     }
 
     // 生成二维码（发送页用，IP 变化时重新生成）
@@ -93,10 +95,10 @@ fun NearbyShareScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("附近传输") },
+                title = { Text(zh("附近传输")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = zh("返回"))
                     }
                 }
             )
@@ -113,7 +115,7 @@ fun NearbyShareScreen(
         ) {
             // 模式切换
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                listOf("发送", "接收").forEachIndexed { index, m ->
+                listOf(zh("发送"), zh("接收")).forEachIndexed { index, m ->
                     SegmentedButton(
                         selected = mode == m,
                         onClick = { mode = m },
@@ -124,16 +126,16 @@ fun NearbyShareScreen(
                 }
             }
 
-            if (mode == "发送") {
+            if (mode == zh("发送")) {
                 // ══════ 发送 ══════
                 Icon(Icons.Filled.Wifi, contentDescription = null, modifier = Modifier.size(48.dp),
                     tint = MaterialTheme.colorScheme.primary)
-                Text("两台设备连接同一 Wi-Fi 后即可互传",
+                Text(zh("两台设备连接同一 Wi-Fi 后即可互传"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
 
                 if (ipAddress != null && qrBitmap != null) {
-                    Text("本机地址", style = MaterialTheme.typography.labelMedium,
+                    Text(zh("本机地址"), style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(
                         "http://$ipAddress:${NearbyShareService.PORT}",
@@ -144,17 +146,17 @@ fun NearbyShareScreen(
                     // 二维码：对方扫码即自动接收
                     Image(
                         bitmap = qrBitmap.asImageBitmap(),
-                        contentDescription = "分享二维码",
+                        contentDescription = zh("分享二维码"),
                         modifier = Modifier
                             .size(200.dp)
                             .padding(8.dp)
                             .background(Color.White, RoundedCornerShape(16.dp))
                     )
-                    Text("对方用「扫码接收」扫这里，自动开始接收",
+                    Text(zh("对方用「扫码接收」扫这里，自动开始接收"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
-                    Text("无法获取局域网 IP，请确认已连接 Wi-Fi",
+                    Text(zh("无法获取局域网 IP，请确认已连接 Wi-Fi"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error)
                 }
@@ -172,7 +174,7 @@ fun NearbyShareScreen(
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                     ) {
-                        Text("停止共享")
+                        Text(zh("停止共享"))
                     }
                 } else {
                     if (serverLog.isNotEmpty()) {
@@ -203,9 +205,9 @@ fun NearbyShareScreen(
                     ) {
                         Icon(Icons.Filled.Send, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("开始共享当前提醒")
+                        Text(zh("开始共享当前提醒"))
                     }
-                    Text("对方在「接收」页扫码或输入上方地址即可收到全部提醒",
+                    Text(zh("对方在「接收」页扫码或输入上方地址即可收到全部提醒"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 24.dp))
@@ -214,7 +216,7 @@ fun NearbyShareScreen(
                 // ══════ 接收 ══════
                 Icon(Icons.Filled.ArrowDownward, contentDescription = null, modifier = Modifier.size(48.dp),
                     tint = MaterialTheme.colorScheme.primary)
-                Text("扫发送方二维码，或手动输入地址",
+                Text(zh("扫发送方二维码，或手动输入地址"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
 
@@ -231,18 +233,18 @@ fun NearbyShareScreen(
                 ) {
                     Icon(Icons.Filled.QrCodeScanner, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("扫码接收（扫对方二维码）")
+                    Text(zh("扫码接收（扫对方二维码）"))
                 }
 
                 // 或手动输入
                 HorizontalDivider()
-                Text("或手动输入对方地址",
+                Text(zh("或手动输入对方地址"),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(
                     value = receiveIP,
                     onValueChange = { receiveIP = it },
-                    label = { Text("对方 IP 地址") },
+                    label = { Text(zh("对方 IP 地址")) },
                     placeholder = { Text("192.168.1.100") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -250,7 +252,7 @@ fun NearbyShareScreen(
 
                 if (isReceiving) {
                     CircularProgressIndicator(modifier = Modifier.size(28.dp))
-                    Text("正在下载...", style = MaterialTheme.typography.bodySmall)
+                    Text(zh("正在下载..."), style = MaterialTheme.typography.bodySmall)
                 } else {
                     Button(
                         onClick = {
@@ -265,7 +267,7 @@ fun NearbyShareScreen(
                         enabled = receiveIP.isNotBlank() && !isReceiving,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("下载并导入")
+                        Text(zh("下载并导入"))
                     }
                 }
 
@@ -322,10 +324,10 @@ fun NearbyShareScreen(
                             )
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("对准对方的二维码", color = Color.White,
+                    Text(zh("对准对方的二维码"), color = Color.White,
                         style = MaterialTheme.typography.bodyMedium)
                     TextButton(onClick = { showScanner = false }) {
-                        Text("取消", color = Color.White)
+                        Text(zh("取消"), color = Color.White)
                     }
                 }
             }
@@ -353,12 +355,12 @@ private fun receive(
         }
         setReceiving(false)
         if (json == null) {
-            setResult("下载失败：请确认两台设备在同一 Wi-Fi、地址正确，且发送方已开始共享", true)
+            setResult(zh("下载失败：请确认两台设备在同一 Wi-Fi、地址正确，且发送方已开始共享"), true)
             return@launch
         }
         val entities = BackupService.importFromJson(json)
         if (entities == null) {
-            setResult("数据解析失败", true)
+            setResult(zh("数据解析失败"), true)
             return@launch
         }
         // 导入去重：⚠️ 不能用 id——发送方的 id 是它本地自增的，
@@ -386,6 +388,6 @@ private fun receive(
         }
         SyncStore.touchLocalChange()
         com.reminderapp.receiver.ReminderWidgetProvider.refresh(context)
-        setResult("导入完成：新增 $imported 条，跳过重复 $skipped 条", false)
+        setResult(zhf("导入完成：新增 %1$s 条，跳过重复 %2$s 条", imported, skipped), false)
     }
 }

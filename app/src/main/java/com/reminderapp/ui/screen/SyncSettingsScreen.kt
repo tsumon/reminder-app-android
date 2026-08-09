@@ -14,6 +14,8 @@ import com.reminderapp.service.WebDavSync
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,10 +38,10 @@ fun SyncSettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("同步设置") },
+                title = { Text(zh("同步设置")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = zh("返回"))
                     }
                 }
             )
@@ -54,7 +56,7 @@ fun SyncSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                "通过 WebDAV 同步提醒数据（支持甲骨文 VPS 自建、坚果云等）。同步以最后修改时间为准，较新的覆盖较旧的。",
+                zh("通过 WebDAV 同步提醒数据（支持甲骨文 VPS 自建、坚果云等）。同步以最后修改时间为准，较新的覆盖较旧的。"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -62,7 +64,7 @@ fun SyncSettingsScreen(
             OutlinedTextField(
                 value = url,
                 onValueChange = { url = it },
-                label = { Text("WebDAV 地址") },
+                label = { Text(zh("WebDAV 地址")) },
                 placeholder = { Text("https://example.com/dav/reminder") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
@@ -71,7 +73,7 @@ fun SyncSettingsScreen(
             OutlinedTextField(
                 value = username,
                 onValueChange = { username = it },
-                label = { Text("用户名") },
+                label = { Text(zh("用户名")) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
@@ -79,7 +81,7 @@ fun SyncSettingsScreen(
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
-                label = { Text("密码") },
+                label = { Text(zh("密码")) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
@@ -88,7 +90,7 @@ fun SyncSettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("启动时自动同步", style = MaterialTheme.typography.bodyLarge)
+                Text(zh("启动时自动同步"), style = MaterialTheme.typography.bodyLarge)
                 Switch(
                     checked = autoSync,
                     onCheckedChange = { autoSync = it }
@@ -97,7 +99,7 @@ fun SyncSettingsScreen(
 
             if (SyncStore.lastSyncAt > 0) {
                 Text(
-                    "上次同步：${dateFormat.format(Date(SyncStore.lastSyncAt))}",
+                    zhf("上次同步：%s", dateFormat.format(Date(SyncStore.lastSyncAt))),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -117,7 +119,7 @@ fun SyncSettingsScreen(
                         testing = false
                         when (result) {
                             is WebDavSync.SyncResult.Success -> {
-                                resultMsg = "连接成功 ✓ 账号与路径可用，可以开始同步。"
+                                resultMsg = zh("连接成功 ✓ 账号与路径可用，可以开始同步。")
                                 resultIsError = false
                             }
                             is WebDavSync.SyncResult.Error -> {
@@ -130,7 +132,7 @@ fun SyncSettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !testing && !syncing && url.isNotBlank() && username.isNotBlank() && password.isNotBlank()
             ) {
-                Text(if (testing) "测试中..." else "测试连接")
+                Text(if (testing) zh("测试中...") else zh("测试连接"))
             }
 
             Button(
@@ -146,7 +148,7 @@ fun SyncSettingsScreen(
                         syncing = false
                         when (result) {
                             is WebDavSync.SyncResult.Success -> {
-                                resultMsg = "同步完成"
+                                resultMsg = zh("同步完成")
                                 resultIsError = false
                             }
                             is WebDavSync.SyncResult.Error -> {
@@ -159,7 +161,7 @@ fun SyncSettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !syncing && url.isNotBlank() && username.isNotBlank()
             ) {
-                Text(if (syncing) "同步中..." else "立即同步")
+                Text(if (syncing) zh("同步中...") else zh("立即同步"))
             }
 
             if (resultMsg.isNotEmpty()) {

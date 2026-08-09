@@ -28,6 +28,8 @@ import com.reminderapp.service.StatsService
 import com.reminderapp.ui.theme.Tokens
 import java.util.Calendar
 import java.util.Locale
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 /**
  * 统计洞察页（v1.8.7 任务③）：完成率 / 连续打卡 / 最常忘记时段 / 月历热力图
@@ -45,10 +47,10 @@ fun StatsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("统计洞察") },
+                title = { Text(zh("统计洞察")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = zh("返回"))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -68,19 +70,19 @@ fun StatsScreen(
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     StatMiniCard(
-                        title = "本月完成",
+                        title = zh("本月完成"),
                         value = summary.confirmCount.toString(),
                         color = Tokens.StatusCompleted,
                         modifier = Modifier.weight(1f)
                     )
                     StatMiniCard(
-                        title = "连续天数",
+                        title = zh("连续天数"),
                         value = summary.currentStreak.toString(),
                         color = Color(0xFFFF9800),
                         modifier = Modifier.weight(1f)
                     )
                     StatMiniCard(
-                        title = "完成率",
+                        title = zh("完成率"),
                         value = summary.completionRate?.let { "${(it * 100).toInt()}%" } ?: "—",
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.weight(1f)
@@ -93,14 +95,14 @@ fun StatsScreen(
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     StreakCard(
-                        title = "当前连续",
+                        title = zh("当前连续"),
                         value = summary.currentStreak,
                         icon = Icons.Filled.Check,
                         color = Color(0xFFFF9800),
                         modifier = Modifier.weight(1f)
                     )
                     StreakCard(
-                        title = "最长连续",
+                        title = zh("最长连续"),
                         value = summary.longestStreak,
                         icon = Icons.Filled.Star,
                         color = MaterialTheme.colorScheme.primary,
@@ -161,7 +163,7 @@ private fun CompletionCard(summary: StatsService.Summary) {
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "完成率",
+                        zh("完成率"),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -169,8 +171,8 @@ private fun CompletionCard(summary: StatsService.Summary) {
             }
             Spacer(modifier = Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                LabelChip("确认 ${summary.confirmCount}", Icons.Filled.CheckCircle, Tokens.StatusCompleted)
-                LabelChip("漏掉 ${summary.missedCount}", Icons.Filled.Notifications, Tokens.StatusReminding)
+                LabelChip(zhf("确认 %s", summary.confirmCount), Icons.Filled.CheckCircle, Tokens.StatusCompleted)
+                LabelChip(zhf("漏掉 %s", summary.missedCount), Icons.Filled.Notifications, Tokens.StatusReminding)
             }
         }
     }
@@ -233,7 +235,7 @@ private fun StreakCard(
         ) {
             Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
             Spacer(modifier = Modifier.height(4.dp))
-            Text("$value 天", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(zhf("%s 天", value), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -246,12 +248,12 @@ private fun ForgetHoursCard(summary: StatsService.Summary) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.DateRange, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("最常忘记时段", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(zh("最常忘记时段"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.height(8.dp))
             if (summary.forgetHours.isEmpty()) {
                 Text(
-                    "坚持得很好，没有漏掉过提醒 🎉",
+                    zh("坚持得很好，没有漏掉过提醒 🎉"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -266,9 +268,9 @@ private fun ForgetHoursCard(summary: StatsService.Summary) {
                     ) {
                         Text(medals.getOrElse(idx) { "·" })
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("$hour:00 前后", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        Text(zhf("%s:00 前后", hour), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                         Spacer(modifier = Modifier.weight(1f))
-                        Text("漏 $count 次", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(zhf("漏 %s 次", count), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -291,14 +293,14 @@ private fun HeatmapCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.DateRange, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("月历热力图", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(zh("月历热力图"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.weight(1f))
                 IconButton(onClick = onPrevMonth, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "上一月")
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = zh("上一月"))
                 }
-                Text("${year}年${month + 1}月", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                Text(zhf("%1$s年%2$s月", year, month + 1), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                 IconButton(onClick = onNextMonth, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "下一月")
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = zh("下一月"))
                 }
             }
 
@@ -365,7 +367,7 @@ private fun HeatmapCard(
 
             // 图例
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("少", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(zh("少"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.width(6.dp))
                 for (lv in 0..3) {
                     Box(
@@ -377,7 +379,7 @@ private fun HeatmapCard(
                     )
                 }
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("多", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(zh("多"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.weight(1f))
                 Icon(Icons.Filled.DateRange, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
             }

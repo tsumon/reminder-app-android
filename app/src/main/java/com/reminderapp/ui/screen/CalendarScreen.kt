@@ -15,6 +15,8 @@ import com.reminderapp.service.ReminderEngine
 import com.reminderapp.ui.theme.StatusReminding
 import com.reminderapp.ui.theme.StatusWaiting
 import java.util.*
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 /**
  * 日历 Tab（v1.9.8 UI 对齐设计图）：
@@ -39,7 +41,7 @@ fun CalendarScreen(
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("日历", style = MaterialTheme.typography.headlineMedium)
+                        Text(zh("日历"), style = MaterialTheme.typography.headlineMedium)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -64,11 +66,11 @@ fun CalendarScreen(
             val ts = selectedDate
             item {
                 if (ts == null) {
-                    SectionHeader("点击日期查看当天任务", StatusWaiting)
+                    SectionHeader(zh("点击日期查看当天任务"), StatusWaiting)
                 } else {
                     val cal = Calendar.getInstance().apply { timeInMillis = ts }
                     SectionHeader(
-                        "${cal.get(Calendar.YEAR)}年${cal.get(Calendar.MONTH) + 1}月${cal.get(Calendar.DAY_OF_MONTH)}日 · 当天任务",
+                        zhf("%1$s年%2$s月%3$s日 · 当天任务", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH)),
                         StatusReminding
                     )
                 }
@@ -85,7 +87,7 @@ fun CalendarScreen(
                 if (dateReminders.isEmpty()) {
                     item {
                         Text(
-                            "这一天没有提醒",
+                            zh("这一天没有提醒"),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(vertical = 20.dp)

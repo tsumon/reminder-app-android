@@ -1,4 +1,5 @@
 package com.reminderapp.model
+import com.reminderapp.i18n.zh
 
 /**
  * 前端展示用的提醒模型（从 Entity 映射）
@@ -29,30 +30,30 @@ data class Reminder(
 enum class ReminderKind { CYCLE, DATE, RULE }
 
 enum class RulePeriod(val label: String) {
-    MONTHLY("每月"),
-    QUARTERLY("每季度"),
-    YEARLY("每年")
+    MONTHLY(zh("每月")),
+    QUARTERLY(zh("每季度")),
+    YEARLY(zh("每年"))
 }
 
 // 周一=1 ... 周日=7
-val weekdayLabels = arrayOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
-val weekLabels = arrayOf("第1周", "第2周", "第3周", "第4周", "第5周")
+val weekdayLabels = arrayOf(zh("周一"), zh("周二"), zh("周三"), zh("周四"), zh("周五"), zh("周六"), zh("周日"))
+val weekLabels = arrayOf(zh("第1周"), zh("第2周"), zh("第3周"), zh("第4周"), zh("第5周"))
 
 enum class Cycle(val label: String) {
-    ONCE("仅一次"),
-    DAILY("每天"),
-    WEEKLY("每周"),
-    BIWEEKLY("每两周"),
-    MONTHLY("每月"),
-    QUARTERLY("每季度"),
-    YEARLY("每年"),
-    CUSTOM("自定义天数")
+    ONCE(zh("仅一次")),
+    DAILY(zh("每天")),
+    WEEKLY(zh("每周")),
+    BIWEEKLY(zh("每两周")),
+    MONTHLY(zh("每月")),
+    QUARTERLY(zh("每季度")),
+    YEARLY(zh("每年")),
+    CUSTOM(zh("自定义天数"))
 }
 
 enum class DateReminderType(val label: String) {
-    SOLAR_BIRTHDAY("新历生日"),
-    LUNAR_BIRTHDAY("农历生日"),
-    HOLIDAY("节假日")
+    SOLAR_BIRTHDAY(zh("新历生日")),
+    LUNAR_BIRTHDAY(zh("农历生日")),
+    HOLIDAY(zh("节假日"))
 }
 
 enum class ReminderStatus { IDLE, PENDING, NOTIFYING, CONFIRMED }

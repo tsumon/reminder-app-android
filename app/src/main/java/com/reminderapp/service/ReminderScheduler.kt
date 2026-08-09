@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.work.*
 import com.reminderapp.data.entity.ReminderEntity
 import java.util.concurrent.TimeUnit
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 /**
  * 提醒调度器 — 用 WorkManager 管理后台定时任务
@@ -61,7 +63,7 @@ class ReminderScheduler(private val context: Context) {
                         workDataOf(
                             "reminder_id" to reminder.id,
                             "title" to reminder.title,
-                            "body" to "还有 $d 天就是「${reminder.title}」了，提前做好准备",
+                            "body" to zhf("还有 %1$s 天就是「%2$s」了，提前做好准备", d, reminder.title),
                             "kind" to "advance"
                         )
                     )
@@ -118,6 +120,6 @@ class ReminderScheduler(private val context: Context) {
     }
 
     private fun buildNotificationBody(reminder: ReminderEntity): String {
-        return reminder.note.ifEmpty { "该提醒事项需要你确认完成" }
+        return reminder.note.ifEmpty { zh("该提醒事项需要你确认完成") }
     }
 }

@@ -11,6 +11,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.util.concurrent.TimeUnit
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 /**
  * GitHub 在线升级（v1.8.7 任务：在线升级）
@@ -135,8 +137,8 @@ object UpdateService {
         val file = File(dir, "reminder-update.apk")
         val req = Request.Builder().url(url).build()
         client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw IllegalStateException("下载失败 HTTP ${resp.code}")
-            val body = resp.body ?: throw IllegalStateException("下载失败: 空响应")
+            if (!resp.isSuccessful) throw IllegalStateException(zhf("下载失败 HTTP %s", resp.code))
+            val body = resp.body ?: throw IllegalStateException(zh("下载失败: 空响应"))
             file.outputStream().use { out -> body.byteStream().copyTo(out) }
         }
         file

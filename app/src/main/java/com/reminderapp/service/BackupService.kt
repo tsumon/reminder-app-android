@@ -7,6 +7,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import com.reminderapp.i18n.zh
 
 /**
  * 提醒数据导入/导出（JSON 格式，双端统一）
@@ -68,7 +69,7 @@ object BackupService {
                 val o = arr.getJSONObject(i)
                 val entity = ReminderEntity(
                     id = o.optLong("id", 0),
-                    title = o.optString("title", "未命名提醒"),
+                    title = o.optString("title", zh("未命名提醒")),
                     note = o.optString("note", ""),
                     kind = o.optString("kind", "cycle"),
                     cycle = o.optString("cycle", "weekly"),

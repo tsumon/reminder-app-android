@@ -24,6 +24,8 @@ import com.reminderapp.BuildConfig
 import com.reminderapp.service.UpdateService
 import com.reminderapp.ui.theme.Tokens
 import kotlinx.coroutines.launch
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 /**
  * 设置页：同步/AI/关于（版本号 + 检查更新 + 更新日志）
@@ -44,10 +46,10 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("设置") },
+                title = { Text(zh("设置")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = zh("返回"))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -68,8 +70,8 @@ fun SettingsScreen(
                 SettingsCard {
                     SettingRow(
                         icon = Icons.Filled.CloudSync,
-                        title = "WebDAV 同步",
-                        subtitle = "坚果云/自建服务器备份与多端同步",
+                        title = zh("WebDAV 同步"),
+                        subtitle = zh("坚果云/自建服务器备份与多端同步"),
                         onClick = onOpenSyncSettings
                     )
                 }
@@ -80,8 +82,8 @@ fun SettingsScreen(
                 SettingsCard {
                     SettingRow(
                         icon = Icons.Filled.SmartToy,
-                        title = "AI 助手设置",
-                        subtitle = "API 地址、模型与本地模式",
+                        title = zh("AI 助手设置"),
+                        subtitle = zh("API 地址、模型与本地模式"),
                         onClick = onOpenAISettings
                     )
                 }
@@ -102,7 +104,7 @@ fun SettingsScreen(
                             tint = Tokens.BrandPrimary, modifier = Modifier.size(22.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text("版本", style = MaterialTheme.typography.bodyLarge)
+                        Text(zh("版本"), style = MaterialTheme.typography.bodyLarge)
                         Spacer(modifier = Modifier.weight(1f))
                         Text(
                             "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
@@ -123,13 +125,13 @@ fun SettingsScreen(
                                     checking = false
                                     when {
                                         info == null -> android.widget.Toast.makeText(
-                                            context, "检查更新失败，请检查网络后重试",
+                                            context, zh("检查更新失败，请检查网络后重试"),
                                             android.widget.Toast.LENGTH_SHORT
                                         ).show()
                                         UpdateService.isNewer(info.latestVersion, UpdateService.currentVersion()) ->
                                             updateInfo = info
                                         else -> android.widget.Toast.makeText(
-                                            context, "当前已是最新版本 v${UpdateService.currentVersion()}",
+                                            context, zhf("当前已是最新版本 v%s", UpdateService.currentVersion()),
                                             android.widget.Toast.LENGTH_SHORT
                                         ).show()
                                     }
@@ -143,7 +145,7 @@ fun SettingsScreen(
                             tint = Tokens.BrandPrimary, modifier = Modifier.size(22.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text("检查更新", style = MaterialTheme.typography.bodyLarge)
+                        Text(zh("检查更新"), style = MaterialTheme.typography.bodyLarge)
                         Spacer(modifier = Modifier.weight(1f))
                         if (checking) {
                             CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -164,7 +166,7 @@ fun SettingsScreen(
                             tint = Tokens.BrandPrimary, modifier = Modifier.size(22.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text("更新日志", style = MaterialTheme.typography.bodyLarge)
+                        Text(zh("更新日志"), style = MaterialTheme.typography.bodyLarge)
                         Spacer(modifier = Modifier.weight(1f))
                         Icon(
                             Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null,
@@ -176,7 +178,7 @@ fun SettingsScreen(
 
             item {
                 Text(
-                    "循环提醒 · 支持多端同步与在线升级",
+                    zh("循环提醒 · 支持多端同步与在线升级"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
@@ -192,7 +194,7 @@ fun SettingsScreen(
     if (showChangelog) {
         AlertDialog(
             onDismissRequest = { showChangelog = false },
-            title = { Text("更新日志") },
+            title = { Text(zh("更新日志")) },
             text = {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     changelog.forEach { (version, items) ->
@@ -208,7 +210,7 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showChangelog = false }) { Text("好") }
+                TextButton(onClick = { showChangelog = false }) { Text(zh("好")) }
             }
         )
     }
@@ -217,8 +219,8 @@ fun SettingsScreen(
     updateInfo?.let { info ->
         AlertDialog(
             onDismissRequest = { updateInfo = null },
-            title = { Text("发现新版本 v${info.latestVersion}") },
-            text = { Text("当前版本 v${UpdateService.currentVersion()}，是否下载安装？") },
+            title = { Text(zhf("发现新版本 v%s", info.latestVersion)) },
+            text = { Text(zhf("当前版本 v%s，是否下载安装？", UpdateService.currentVersion())) },
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch {
@@ -229,7 +231,7 @@ fun SettingsScreen(
                                 UpdateService.install(context, apk)
                             } catch (e: Exception) {
                                 android.widget.Toast.makeText(
-                                    context, "下载失败: ${e.message}", android.widget.Toast.LENGTH_LONG
+                                    context, zhf("下载失败: %s", e.message), android.widget.Toast.LENGTH_LONG
                                 ).show()
                             }
                         } else {
@@ -237,10 +239,10 @@ fun SettingsScreen(
                         }
                         updateInfo = null
                     }
-                }) { Text("前往下载") }
+                }) { Text(zh("前往下载")) }
             },
             dismissButton = {
-                TextButton(onClick = { updateInfo = null }) { Text("稍后再说") }
+                TextButton(onClick = { updateInfo = null }) { Text(zh("稍后再说")) }
             }
         )
     }

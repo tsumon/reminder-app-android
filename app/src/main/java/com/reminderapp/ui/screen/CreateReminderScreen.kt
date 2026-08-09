@@ -23,6 +23,8 @@ import com.reminderapp.service.LunarCalendar
 import com.reminderapp.service.NaturalDateParser
 import com.reminderapp.service.ReminderEngine
 import java.util.*
+import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -108,10 +110,10 @@ fun CreateReminderScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("新建提醒") },
+                title = { Text(zh("新建提醒")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.Default.ArrowBack, contentDescription = zh("返回"))
                     }
                 },
                 actions = {
@@ -123,7 +125,7 @@ fun CreateReminderScreen(
                             if (isDateMode && selectedDateType == null) {
                                 android.widget.Toast.makeText(
                                     context,
-                                    "请选择日期类型（公历生日/农历生日/节假日）",
+                                    zh("请选择日期类型（公历生日/农历生日/节假日）"),
                                     android.widget.Toast.LENGTH_SHORT
                                 ).show()
                                 return@TextButton
@@ -131,7 +133,7 @@ fun CreateReminderScreen(
                             if (isDateMode && selectedDateType == DateReminderType.HOLIDAY && selectedHolidayName.isNullOrBlank()) {
                                 android.widget.Toast.makeText(
                                     context,
-                                    "请选择节假日",
+                                    zh("请选择节假日"),
                                     android.widget.Toast.LENGTH_SHORT
                                 ).show()
                                 return@TextButton
@@ -191,7 +193,7 @@ fun CreateReminderScreen(
                         },
                         enabled = title.isNotBlank()
                     ) {
-                        Text("保存", color = MaterialTheme.colorScheme.primary)
+                        Text(zh("保存"), color = MaterialTheme.colorScheme.primary)
                     }
                 }
             )
@@ -225,7 +227,7 @@ fun CreateReminderScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            "一句话创建",
+                            zh("一句话创建"),
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
@@ -233,7 +235,7 @@ fun CreateReminderScreen(
                     OutlinedTextField(
                         value = nlText,
                         onValueChange = { nlText = it; nlHint = null; nlError = false },
-                        placeholder = { Text("明天下午3点开会 / 每周一9点晨会 / 农历8月15 中秋") },
+                        placeholder = { Text(zh("明天下午3点开会 / 每周一9点晨会 / 农历8月15 中秋")) },
                         modifier = Modifier.fillMaxWidth(),
                         maxLines = 2
                     )
@@ -246,7 +248,7 @@ fun CreateReminderScreen(
                                 val p = NaturalDateParser.parse(nlText)
                                 if (p == null) {
                                     nlError = true
-                                    nlHint = "没听懂，换个说法试试～"
+                                    nlHint = zh("没听懂，换个说法试试～")
                                 } else {
                                     nlError = false
                                     // 标题
@@ -297,19 +299,19 @@ fun CreateReminderScreen(
                                         }
                                     }
                                     val cycleText = when (p.repeatMode) {
-                                        "lunar" -> "农历每年"
-                                        "yearly" -> "每年"
-                                        "daily" -> "每天"
-                                        "weekly" -> "每周"
-                                        "monthly" -> "每月"
-                                        else -> "仅一次"
+                                        "lunar" -> zh("农历每年")
+                                        "yearly" -> zh("每年")
+                                        "daily" -> zh("每天")
+                                        "weekly" -> zh("每周")
+                                        "monthly" -> zh("每月")
+                                        else -> zh("仅一次")
                                     }
                                     nlHint = "「${p.title}」· $cycleText · ${p.label}"
                                 }
                             },
                             enabled = nlText.isNotBlank()
                         ) {
-                            Text("智能识别")
+                            Text(zh("智能识别"))
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         nlHint?.let {
@@ -328,7 +330,7 @@ fun CreateReminderScreen(
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
-                label = { Text("标题") },
+                label = { Text(zh("标题")) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
@@ -337,36 +339,36 @@ fun CreateReminderScreen(
             OutlinedTextField(
                 value = note,
                 onValueChange = { note = it },
-                label = { Text("备注（可选）") },
+                label = { Text(zh("备注（可选）")) },
                 modifier = Modifier.fillMaxWidth(),
                 maxLines = 3
             )
 
             // 提醒类型切换
-            Text("提醒类型", style = MaterialTheme.typography.labelLarge)
+            Text(zh("提醒类型"), style = MaterialTheme.typography.labelLarge)
             Row {
                 FilterChip(
                     selected = !isDateMode && !isRuleMode,
                     onClick = { isDateMode = false; isRuleMode = false },
-                    label = { Text("周期提醒") },
+                    label = { Text(zh("周期提醒")) },
                     modifier = Modifier.padding(end = 8.dp)
                 )
                 FilterChip(
                     selected = isDateMode,
                     onClick = { isDateMode = true; isRuleMode = false },
-                    label = { Text("日期提醒") },
+                    label = { Text(zh("日期提醒")) },
                     modifier = Modifier.padding(end = 8.dp)
                 )
                 FilterChip(
                     selected = isRuleMode,
                     onClick = { isDateMode = false; isRuleMode = true },
-                    label = { Text("规则提醒") }
+                    label = { Text(zh("规则提醒")) }
                 )
             }
 
             if (isRuleMode) {
                 // === 规则提醒：每月/每季度/每年 第N周 周X ===
-                Text("频率", style = MaterialTheme.typography.labelLarge)
+                Text(zh("频率"), style = MaterialTheme.typography.labelLarge)
                 ExposedDropdownMenuBox(
                     expanded = rulePeriodExpanded,
                     onExpandedChange = { rulePeriodExpanded = it }
@@ -394,13 +396,13 @@ fun CreateReminderScreen(
                     }
                 }
 
-                Text("第几周", style = MaterialTheme.typography.labelLarge)
+                Text(zh("第几周"), style = MaterialTheme.typography.labelLarge)
                 ExposedDropdownMenuBox(
                     expanded = ruleWeekExpanded,
                     onExpandedChange = { ruleWeekExpanded = it }
                 ) {
                     OutlinedTextField(
-                        value = weekLabels.getOrElse(ruleWeek - 1) { "第${ruleWeek}周" },
+                        value = weekLabels.getOrElse(ruleWeek - 1) { zhf("第%s周", ruleWeek) },
                         onValueChange = {},
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = ruleWeekExpanded) },
@@ -412,7 +414,7 @@ fun CreateReminderScreen(
                     ) {
                         (1..5).forEach { w ->
                             DropdownMenuItem(
-                                text = { Text("第${w}周") },
+                                text = { Text(zhf("第%s周", w)) },
                                 onClick = {
                                     ruleWeek = w
                                     ruleWeekExpanded = false
@@ -422,13 +424,13 @@ fun CreateReminderScreen(
                     }
                 }
 
-                Text("星期几", style = MaterialTheme.typography.labelLarge)
+                Text(zh("星期几"), style = MaterialTheme.typography.labelLarge)
                 ExposedDropdownMenuBox(
                     expanded = ruleWeekdayExpanded,
                     onExpandedChange = { ruleWeekdayExpanded = it }
                 ) {
                     OutlinedTextField(
-                        value = weekdayLabels.getOrElse(ruleWeekday - 1) { "周${ruleWeekday}" },
+                        value = weekdayLabels.getOrElse(ruleWeekday - 1) { zhf("周%s", ruleWeekday) },
                         onValueChange = {},
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = ruleWeekdayExpanded) },
@@ -452,7 +454,7 @@ fun CreateReminderScreen(
             } else if (!isDateMode) {
                 // === 周期提醒 ===
                 // 周期选择
-                Text("周期", style = MaterialTheme.typography.labelLarge)
+                Text(zh("周期"), style = MaterialTheme.typography.labelLarge)
                 ExposedDropdownMenuBox(
                     expanded = cycleExpanded,
                     onExpandedChange = { cycleExpanded = it }
@@ -484,20 +486,20 @@ fun CreateReminderScreen(
                     OutlinedTextField(
                         value = customDays.toString(),
                         onValueChange = { customDays = it.toIntOrNull() ?: 1 },
-                        label = { Text("自定义天数") },
+                        label = { Text(zh("自定义天数")) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
                 }
             } else {
                 // === 日期提醒 ===
-                Text("日期类型", style = MaterialTheme.typography.labelLarge)
+                Text(zh("日期类型"), style = MaterialTheme.typography.labelLarge)
                 ExposedDropdownMenuBox(
                     expanded = dateTypeExpanded,
                     onExpandedChange = { dateTypeExpanded = it }
                 ) {
                     OutlinedTextField(
-                        value = selectedDateType?.label ?: "请选择",
+                        value = selectedDateType?.label ?: zh("请选择"),
                         onValueChange = {},
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dateTypeExpanded) },
@@ -526,7 +528,7 @@ fun CreateReminderScreen(
                             onExpandedChange = { holidayExpanded = it }
                         ) {
                             OutlinedTextField(
-                                value = selectedHolidayName ?: "选择节日",
+                                value = selectedHolidayName ?: zh("选择节日"),
                                 onValueChange = {},
                                 readOnly = true,
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = holidayExpanded) },
@@ -551,19 +553,19 @@ fun CreateReminderScreen(
                         }
                     }
                     selectedDateType == DateReminderType.LUNAR_BIRTHDAY -> {
-                        Text("农历月日", style = MaterialTheme.typography.labelLarge)
+                        Text(zh("农历月日"), style = MaterialTheme.typography.labelLarge)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(
                                 value = targetMonth.toString(),
                                 onValueChange = { targetMonth = it.toIntOrNull()?.coerceIn(1, 12) ?: 1 },
-                                label = { Text("月") },
+                                label = { Text(zh("月")) },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
                             OutlinedTextField(
                                 value = targetDay.toString(),
                                 onValueChange = { targetDay = it.toIntOrNull()?.coerceIn(1, 30) ?: 1 },
-                                label = { Text("日") },
+                                label = { Text(zh("日")) },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
@@ -573,28 +575,28 @@ fun CreateReminderScreen(
                             LunarCalendar.lunarToSolar(triggerYear, targetMonth, targetDay)
                         }
                         if (solarDate != null) {
-                            val sdf = java.text.SimpleDateFormat("yyyy年MM月dd日", Locale.getDefault())
+                            val sdf = java.text.SimpleDateFormat(zh("yyyy年MM月dd日"), Locale.getDefault())
                             Text(
-                                "${triggerYear}年对应公历：${sdf.format(Date(solarDate))}",
+                                zhf("%1$s年对应公历：%2$s", triggerYear, sdf.format(Date(solarDate))),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                     else -> {
-                        Text("月日", style = MaterialTheme.typography.labelLarge)
+                        Text(zh("月日"), style = MaterialTheme.typography.labelLarge)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(
                                 value = targetMonth.toString(),
                                 onValueChange = { targetMonth = it.toIntOrNull()?.coerceIn(1, 12) ?: 1 },
-                                label = { Text("月") },
+                                label = { Text(zh("月")) },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
                             OutlinedTextField(
                                 value = targetDay.toString(),
                                 onValueChange = { targetDay = it.toIntOrNull()?.coerceIn(1, 31) ?: 1 },
-                                label = { Text("日") },
+                                label = { Text(zh("日")) },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
@@ -603,42 +605,42 @@ fun CreateReminderScreen(
                 }
 
                 // 提前提醒天数
-                Text("提前提醒", style = MaterialTheme.typography.labelLarge)
+                Text(zh("提前提醒"), style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(1, 3, 7, 14).forEach { days ->
                         FilterChip(
                             selected = advanceDays == days,
                             onClick = { advanceDays = days },
-                            label = { Text("${days}天") }
+                            label = { Text(zhf("%s天", days)) }
                         )
                     }
                 }
             }
 
             // 优先级
-            Text("优先级", style = MaterialTheme.typography.labelLarge)
+            Text(zh("优先级"), style = MaterialTheme.typography.labelLarge)
             Row {
                 FilterChip(
                     selected = priority == "high",
                     onClick = { priority = "high" },
-                    label = { Text("🔴 高") },
+                    label = { Text(zh("🔴 高")) },
                     modifier = Modifier.padding(end = 8.dp)
                 )
                 FilterChip(
                     selected = priority == "normal",
                     onClick = { priority = "normal" },
-                    label = { Text("🟢 中") },
+                    label = { Text(zh("🟢 中")) },
                     modifier = Modifier.padding(end = 8.dp)
                 )
                 FilterChip(
                     selected = priority == "low",
                     onClick = { priority = "low" },
-                    label = { Text("⚪ 低") }
+                    label = { Text(zh("⚪ 低")) }
                 )
             }
 
             // 提醒时间
-            Text("提醒时间（点击选择）", style = MaterialTheme.typography.labelLarge)
+            Text(zh("提醒时间（点击选择）"), style = MaterialTheme.typography.labelLarge)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Card(
                     modifier = Modifier
@@ -650,13 +652,13 @@ fun CreateReminderScreen(
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(
-                            "日期",
+                            zh("日期"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            "${triggerYear}年${triggerMonth}月${triggerDay}日",
+                            zhf("%1$s年%2$s月%3$s日", triggerYear, triggerMonth, triggerDay),
                             style = MaterialTheme.typography.titleSmall
                         )
                     }
@@ -671,7 +673,7 @@ fun CreateReminderScreen(
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(
-                            "时间",
+                            zh("时间"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -704,10 +706,10 @@ fun CreateReminderScreen(
                             triggerDay = cal.get(Calendar.DAY_OF_MONTH)
                         }
                         showDateDialog = false
-                    }) { Text("确定") }
+                    }) { Text(zh("确定")) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showDateDialog = false }) { Text("取消") }
+                    TextButton(onClick = { showDateDialog = false }) { Text(zh("取消")) }
                 }
             ) {
                 DatePicker(state = dateState)
@@ -727,10 +729,10 @@ fun CreateReminderScreen(
                         triggerHour = timeState.hour
                         triggerMinute = timeState.minute
                         showTimeDialog = false
-                    }) { Text("确定") }
+                    }) { Text(zh("确定")) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showTimeDialog = false }) { Text("取消") }
+                    TextButton(onClick = { showTimeDialog = false }) { Text(zh("取消")) }
                 },
                 text = { TimePicker(state = timeState) }
             )
