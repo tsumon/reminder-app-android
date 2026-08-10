@@ -26,12 +26,17 @@ class LunarCalendarRegressionTest {
 
     // ===== 与产品代码相同的逻辑（com.ibm.icu 版）=====
     // ⚠️ 与产品代码 LunarCalendar.kt 的 buildCorrectionTable / lunarToSolar / solarToLunar
-    // 保持逐行一致（NO_NIAN_SHA_YEARS + SHIFTED_YEARS + 裸算往返校验），确保回归测试真正镜像产品行为。
+    // 保持逐行一致（NO_NIAN_SHA_YEARS + YEAR_DAY_DELTA + 裸算往返校验），确保回归测试真正镜像产品行为。
 
     // 与产品代码 LunarCalendar.kt buildCorrectionTable 的「无年三十」集合逐行一致：
     // 2025/2026/2027/2028/2030 无腊月三十；2029 农历有腊月三十（公历 2030-02-02）。
     private val NO_NIAN_SHA_YEARS = setOf(2025, 2026, 2027, 2028, 2030)
-    private val SHIFTED_YEARS = setOf(2027, 2028, 2029, 2030)
+
+    // 各农历年相对 ICU(CLDR) 裸算的官方口径修正（天）：
+    //  -1 = ICU 偏晚（春节晚 1 天）需前移；+1 = ICU 偏早（春节早 1 天）需后移；缺省 = 0（已一致）。
+    //  实测 icu4j 75.1：仅 2027 偏晚 1 天（裸 02-07 → 官方 02-06），2030 偏早 1 天（裸 02-02 → 官方 02-03）；
+    //  2028/2029 ICU 裸算已与官方一致，无需平移。切勿对 2028/2029 套用 -1（会把正确日期改错）。
+    private val YEAR_DAY_DELTA = mapOf(2027 to -1, 2030 to 1)
 
     private fun rawSolarToLunar(millis: Long): Lunar {
         val cc = ChineseCalendar()
@@ -77,8 +82,9 @@ class LunarCalendarRegressionTest {
                         map[key] = null // 官方无年三十
                         continue
                     }
-                    if (year in SHIFTED_YEARS) {
-                        map[key] = raw - 24L * 60 * 60 * 1000 // 整年 -1
+                    val delta = YEAR_DAY_DELTA[year]
+                    if (delta != null && delta != 0) {
+                        map[key] = raw + delta * 24L * 60 * 60 * 1000 // 按年定向平移
                     }
                 }
             }
