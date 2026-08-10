@@ -112,7 +112,7 @@ fun AIChatScreen(
     // 欢迎消息
     LaunchedEffect(Unit) {
         if (!settings.isConfigured) {
-            val guide = zh("👋 你好！请先在设置中配置 API Key（支持 DeepSeek / 通义千问 / 豆包等，均有免费额度）。\n\n我能帮你：\n• 创建提醒「每天提醒我喝水」\n• 查看列表「有什么提醒」\n• 确认完成「确认喝水」\n• 推迟/删除提醒")
+            val guide = zh("👋 你好！请先在设置中配置 API Key（支持 DeepSeek / 通义千问 / 豆包等，均有免费额度）。\n\n我能帮你：\n• 创建提醒「每天提醒我喝水」\n• 查看列表「有什么提醒」\n• 确认完成「确认喝水」\n• 修改提醒「把交房租改成每月5号」\n• 推迟/删除提醒")
             messages = listOf(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = guide))
         }
     }
@@ -413,6 +413,7 @@ private suspend fun executeTool(
         "confirm_reminder" -> handleConfirm(args, database, scheduler, notificationMgr)
         "snooze_reminder" -> handleSnooze(args, database, scheduler, notificationMgr)
         "delete_reminder" -> handleDelete(args, database)
+        "update_reminder" -> handleUpdate(args, database, scheduler)
         else -> zhf("未知工具: %s", name)
     }
 }
@@ -568,4 +569,61 @@ private suspend fun handleDelete(args: Map<String, Any?>, database: AppDatabase)
     com.reminderapp.service.SyncStore.touchLocalChange()
     com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
     return zhf("已删除「%s」", match.title)
+}
+
+private suspend fun handleUpdate(
+    args: Map<String, Any?>,
+    database: AppDatabase,
+    scheduler: ReminderScheduler
+): String {
+    val keyword = (args["title_keyword"] as? String ?: "").lowercase()
+    if (keyword.isEmpty()) return zh("请指定要修改的提醒标题（如：把「交房租」改成每月 5 号）。")
+    val list = database.reminderDao().getAllSync()
+    val match = list.find { it.title.lowercase().contains(keyword) } ?: return zhf("未找到包含「%s」的提醒", keyword)
+    val ctx = com.reminderapp.ReminderApp.instance
+
+    // 仅在用户传了该字段时更新；不传的字段保留原值
+    val newTitle = args["new_title"] as? String
+    val newNote = (args["note"] as? String) ?: match.note
+    val cycleRaw = args["cycle"] as? String
+    val customDays = (args["custom_days"] as? Double)?.toInt() ?: match.customDays
+    val rulePeriod = args["rule_period"] as? String ?: match.rulePeriod
+    val ruleWeek = (args["rule_week"] as? Double)?.toInt() ?: match.ruleWeek
+    val ruleWeekday = (args["rule_weekday"] as? Double)?.toInt() ?: match.ruleWeekday
+    val dateType = args["date_type"] as? String ?: match.dateType
+    val targetMonth = (args["target_month"] as? Double)?.toInt() ?: match.targetMonth
+    val targetDay = (args["target_day"] as? Double)?.toInt() ?: match.targetDay
+    val advanceDays = (args["advance_days"] as? Double)?.toInt() ?: match.advanceDays
+    val reminderHour = (args["reminder_hour"] as? Double)?.toInt() ?: match.reminderHour
+    val reminderMinute = (args["reminder_minute"] as? Double)?.toInt() ?: match.reminderMinute
+    val holidayName = args["holiday_name"] as? String ?: match.holidayName
+
+    if (cycleRaw == "custom" && customDays < 1) {
+        return zh("自定义周期需要指定间隔天数（如：每3天），custom_days 至少为 1。")
+    }
+
+    val updated = match.copy(
+        title = newTitle ?: match.title,
+        note = newNote,
+        cycle = cycleRaw ?: match.cycle,
+        customDays = customDays,
+        rulePeriod = rulePeriod,
+        ruleWeek = ruleWeek,
+        ruleWeekday = ruleWeekday,
+        dateType = dateType,
+        targetMonth = targetMonth,
+        targetDay = targetDay,
+        advanceDays = advanceDays,
+        reminderHour = reminderHour,
+        reminderMinute = reminderMinute,
+        holidayName = holidayName,
+        holidayAdjustNote = null
+    )
+    val nextTrigger = ReminderEngine.calculateNextTrigger(updated)
+    val finalUpdated = updated.copy(nextTriggerAt = nextTrigger, holidayAdjustNote = null)
+    database.reminderDao().update(finalUpdated)
+    scheduler.schedule(finalUpdated)
+    com.reminderapp.service.SyncStore.touchLocalChange()
+    com.reminderapp.receiver.ReminderWidgetProvider.refresh(ctx)
+    return zhf("已修改「%s」", finalUpdated.title)
 }

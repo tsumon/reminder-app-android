@@ -58,6 +58,8 @@ class ReminderApp : Application() {
         scope.launch {
             HolidayRemoteService.refresh(this@ReminderApp, year)
             HolidayRemoteService.refresh(this@ReminderApp, year + 1)
+            // Item 2: 启动后预检——把落在 ~1 个月内、恰逢法定节假日的循环/规则提醒前移
+            HolidayPreCheck.run(this@ReminderApp)
         }
     }
 

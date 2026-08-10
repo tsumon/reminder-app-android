@@ -355,7 +355,7 @@ private fun receive(
         }
         setReceiving(false)
         if (json == null) {
-            setResult(zh("下载失败：请确认两台设备在同一 Wi-Fi、地址正确，且发送方已开始共享"), true)
+            setResult(zh("下载失败：请确认两台设备在同一 Wi-Fi、发送方已点「开始共享」、地址正确；如仍失败请检查路由器是否开启客户端隔离"), true)
             return@launch
         }
         val entities = BackupService.importFromJson(json)

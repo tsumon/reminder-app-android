@@ -41,6 +41,13 @@ data class ReminderEntity(
     @ColumnInfo(name = "next_trigger_at") val nextTriggerAt: Long,
     @ColumnInfo(name = "last_confirmed_at") val lastConfirmedAt: Long? = null,
     @ColumnInfo(name = "retry_count") val retryCount: Int = 0,
+
+    // === 节假日前移（Item 2）===
+    // 非空表示该次触发因恰逢法定节假日被前移到假期前最近工作日，
+    // 文案形如「因中秋节放假，已前移至假期前最近工作日（09-14）」。
+    // 确认完成后清空；仅 kind∈{cycle,rule} 的提醒会参与前移，生日/节假日日期提醒不参与。
+    @ColumnInfo(name = "holiday_adjust_note") val holidayAdjustNote: String? = null,
+
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "is_active") val isActive: Boolean = true
 )

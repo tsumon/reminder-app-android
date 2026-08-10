@@ -263,7 +263,8 @@ object ReminderEngine {
             return reminder.copy(
                 status = ReminderStatus.CONFIRMED.name.lowercase(),
                 lastConfirmedAt = System.currentTimeMillis(),
-                retryCount = 0
+                retryCount = 0,
+                holidayAdjustNote = null
             )
         }
         val nextTrigger = calculateNextTrigger(reminder)
@@ -271,7 +272,8 @@ object ReminderEngine {
             status = ReminderStatus.PENDING.name.lowercase(),
             nextTriggerAt = nextTrigger,
             lastConfirmedAt = System.currentTimeMillis(),
-            retryCount = 0
+            retryCount = 0,
+            holidayAdjustNote = null
         )
     }
 

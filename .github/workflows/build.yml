@@ -86,6 +86,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/release/*.apk
+          # 只挂带版本号的那一份；裸名（app-release.apk）作为 build artifact 已上传，不重复出现在 Release
+          files: app/build/outputs/apk/release/app-release-${{ env.VERSION }}.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

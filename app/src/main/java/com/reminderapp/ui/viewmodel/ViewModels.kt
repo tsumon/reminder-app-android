@@ -80,6 +80,10 @@ class HomeViewModel(
             scheduler.schedule(updated)
             com.reminderapp.service.SyncStore.touchLocalChange()
             com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+            // Item 2: 确认后预检下一次触发是否遇节假日
+            viewModelScope.launch {
+                com.reminderapp.service.HolidayPreCheck.run(com.reminderapp.ReminderApp.instance)
+            }
             // v1.8.7 任务⑥: 埋点
             com.reminderapp.service.TelemetryService.logEvent(
                 "confirm",
@@ -93,7 +97,7 @@ class HomeViewModel(
         viewModelScope.launch {
             val next = if (reminder.nextTriggerAt <= System.currentTimeMillis())
                 ReminderEngine.calculateNextTrigger(reminder) else reminder.nextTriggerAt
-            val updated = reminder.copy(status = "pending", nextTriggerAt = next, retryCount = 0)
+            val updated = reminder.copy(status = "pending", nextTriggerAt = next, retryCount = 0, holidayAdjustNote = null)
             dao.update(updated)
             scheduler.schedule(updated)
             com.reminderapp.service.SyncStore.touchLocalChange()
@@ -150,6 +154,10 @@ class ReminderDetailViewModel(
             _reminder.value = updated
             com.reminderapp.service.SyncStore.touchLocalChange()
             com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+            // Item 2: 确认后预检下一次触发是否遇节假日
+            viewModelScope.launch {
+                com.reminderapp.service.HolidayPreCheck.run(com.reminderapp.ReminderApp.instance)
+            }
         }
     }
 

@@ -14,6 +14,7 @@ object AITools {
         - 用户要确认某个提醒已完成 → 调用 confirm_reminder
         - 用户要推迟某个提醒 → 调用 snooze_reminder
         - 用户要删除提醒 → 调用 delete_reminder
+        - 用户要修改/调整已有提醒（改标题、改周期、改时间、改备注等） → 调用 update_reminder（只传要改的字段，其余保留原值）
         - 用户问'有什么提醒''列表' → 调用 list_reminders
 
         **生日 / 日期提醒（重要）：**
@@ -123,6 +124,34 @@ object AITools {
                     "type" to "object",
                     "properties" to mapOf(
                         "title_keyword" to mapOf("type" to "string")
+                    ),
+                    "required" to listOf("title_keyword")
+                )
+            )
+        ),
+        mapOf(
+            "type" to "function",
+            "function" to mapOf(
+                "name" to "update_reminder",
+                "description" to "修改一个已有提醒的字段（不改的字段不要传，会保留原值）。用于：把XX改成每周二、把交房租时间改到10点、把XX备注改成XXX等。",
+                "parameters" to mapOf(
+                    "type" to "object",
+                    "properties" to mapOf(
+                        "title_keyword" to mapOf("type" to "string", "description" to "提醒标题关键词，用于定位要修改的提醒"),
+                        "new_title" to mapOf("type" to "string", "description" to "新的标题（可选）"),
+                        "note" to mapOf("type" to "string", "description" to "新的备注（可选）"),
+                        "cycle" to mapOf("type" to "string", "enum" to listOf("daily", "weekly", "biweekly", "monthly", "quarterly", "yearly", "custom", "once")),
+                        "custom_days" to mapOf("type" to "integer"),
+                        "rule_period" to mapOf("type" to "string", "enum" to listOf("monthly", "quarterly", "yearly")),
+                        "rule_week" to mapOf("type" to "integer"),
+                        "rule_weekday" to mapOf("type" to "integer"),
+                        "date_type" to mapOf("type" to "string", "enum" to listOf("solar_birthday", "lunar_birthday", "holiday")),
+                        "target_month" to mapOf("type" to "integer"),
+                        "target_day" to mapOf("type" to "integer"),
+                        "holiday_name" to mapOf("type" to "string"),
+                        "advance_days" to mapOf("type" to "integer"),
+                        "reminder_hour" to mapOf("type" to "integer"),
+                        "reminder_minute" to mapOf("type" to "integer")
                     ),
                     "required" to listOf("title_keyword")
                 )
