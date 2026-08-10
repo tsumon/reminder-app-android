@@ -4,8 +4,9 @@ import android.content.Context
 import android.content.SharedPreferences
 
 /**
- * 用户自定义 AI API 配置（SharedPreferences 持久化）
- * 仅 API 模式（免 API 网页跳转模式已移除）
+ * 用户自定义 AI API 配置。
+ * apiKey 以 AES/GCM（AndroidKeyStore，见 CryptoHelper）静态加密后存入 SharedPreferences，
+ * 其余字段（endpoint/model）明文存 SharedPreferences。仅 API 模式。
  */
 class AISettings(context: Context) {
 
@@ -17,8 +18,19 @@ class AISettings(context: Context) {
         set(value) = prefs.edit().putString("endpoint", value).apply()
 
     var apiKey: String
-        get() = prefs.getString("api_key", "") ?: ""
-        set(value) = prefs.edit().putString("api_key", value).apply()
+        get() {
+            val raw = prefs.getString("api_key", "") ?: ""
+            if (raw.isEmpty()) return ""
+            val decrypted = CryptoHelper.decrypt(raw)
+            if (decrypted.isNotEmpty()) return decrypted
+            // 旧版本明文兼容：首次读取时自动加密并回写，避免明文落盘
+            prefs.edit().putString("api_key", CryptoHelper.encrypt(raw)).apply()
+            return raw
+        }
+        set(value) {
+            val encrypted = if (value.isEmpty()) "" else CryptoHelper.encrypt(value)
+            prefs.edit().putString("api_key", encrypted).apply()
+        }
 
     var model: String
         get() = prefs.getString("model", "gpt-4o-mini") ?: "gpt-4o-mini"
