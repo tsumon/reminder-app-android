@@ -1514,23 +1514,6 @@ object LunarCalendar {
             "2028:12:30" to null,
             "2030:12:30" to null
     )
-                    if (year in SHIFTED_YEARS) {
-                        val cal = java.util.Calendar.getInstance().apply {
-                            timeInMillis = raw
-                            add(java.util.Calendar.DAY_OF_MONTH, -1)
-                        }
-                        map[key] = intArrayOf(
-                            cal.get(java.util.Calendar.YEAR),
-                            cal.get(java.util.Calendar.MONTH) + 1,
-                            cal.get(java.util.Calendar.DAY_OF_MONTH)
-                        )
-                    }
-                    // 非平移年份（仅 2025 且非腊月三十）→ 不覆盖，走系统历法原值
-                }
-            }
-        }
-        return map
-    }
 
     /**
      * 官方口径修正表（农历 → 公历）
