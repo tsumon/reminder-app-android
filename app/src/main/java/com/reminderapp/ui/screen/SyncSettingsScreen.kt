@@ -148,7 +148,8 @@ fun SyncSettingsScreen(
                         syncing = false
                         when (result) {
                             is WebDavSync.SyncResult.Success -> {
-                                resultMsg = zh("同步完成")
+                                // v2.0.16: 双端都改过 → 提示已按版本覆盖
+                                resultMsg = if (result.conflict) zh("已用最新版本覆盖（检测到双端都有修改，未合并）") else zh("同步完成")
                                 resultIsError = false
                             }
                             is WebDavSync.SyncResult.Error -> {

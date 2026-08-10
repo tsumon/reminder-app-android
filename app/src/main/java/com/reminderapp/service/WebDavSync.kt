@@ -36,7 +36,8 @@ object WebDavSync {
         .build()
 
     sealed class SyncResult {
-        object Success : SyncResult()
+        /** conflict=true：检测到上次同步后双端都有修改，已按版本覆盖（UI 提示用户） */
+        data class Success(val conflict: Boolean = false) : SyncResult()
         data class Error(val message: String) : SyncResult()
     }
 
@@ -50,30 +51,44 @@ object WebDavSync {
 
         val db = AppDatabase.getInstance(context)
         val dao = db.reminderDao()
-        val localVersion = SyncStore.lastLocalChange
+        // v2.0.17: 单调版本（localVer）为判新主依据；墙钟（localChange）仅兜底（旧文件/升级前本地无版本）
+        val localChange = SyncStore.lastLocalChange
+        val localVer = SyncStore.localVersion
 
         try {
             val remoteJson = download(remoteUrl())
 
             if (remoteJson == null) {
                 // 远程无文件 → 上传本地
-                val uploadJson = buildUploadJson(dao.getAllSync(), localVersion)
+                val uploadJson = buildUploadJson(dao.getAllSync(), localChange)
                 if (uploadJson != null) upload(uploadJson)
+                // v2.0.17: 记录已同步版本，防下轮误判（上传 dataVersion = 当前本地版本）
+                SyncStore.lastSyncVersion = SyncStore.localVersion
                 SyncStore.lastSyncAt = System.currentTimeMillis()
-                return@withContext SyncResult.Success
+                return@withContext SyncResult.Success(conflict = false)
             }
 
             val remoteVersion = try {
-                val raw = JSONObject(remoteJson).optLong("exportedAt", 0L)
+                val obj = JSONObject(remoteJson)
+                val raw = obj.optLong("exportedAt", 0L)
+                if (raw <= 0L) {
+                    // E4: 合法 JSON 但缺 exportedAt → 视为损坏，不能当「版本 0」走本地覆盖分支
+                    return@withContext SyncResult.Error(zh("远程文件解析失败：缺少 exportedAt（文件可能已损坏），未覆盖本地数据"))
+                }
                 // 统一时间戳单位：iOS 导出的是「秒」，Android 内部用「毫秒」。
                 // 秒级时间戳远小于 1e12（约 33658 年之前都成立），据此归一化为毫秒。
-                if (raw > 0L && raw < 1_000_000_000_000L) raw * 1000 else raw
+                if (raw < 1_000_000_000_000L) raw * 1000 else raw
             } catch (e: Exception) {
-                0L
+                // E4: 坏 JSON 不能静默当 0——否则本地会覆盖远程唯一备份（丢数据链）
+                return@withContext SyncResult.Error(zh("远程文件解析失败：不是有效的 JSON（文件可能已损坏），未覆盖本地数据"))
             }
 
+            // v2.0.17: 远程单调版本（旧文件无 dataVersion → 0，判新回退时间戳）
+            val remoteDataVersion = BackupService.dataVersionOf(remoteJson)
+
             return@withContext when {
-                remoteVersion > localVersion -> {
+                // v2.0.17 判新：双方都有单调版本 → 版本比较；任一为 0（旧文件/升级前）→ 时间戳兜底
+                remoteNewer(remoteDataVersion, remoteVersion, localVer, localChange) -> {
                     // 远程新 → 覆盖本地
                     val items = BackupService.importFromJson(remoteJson)
                     if (items == null) {
@@ -81,26 +96,59 @@ object WebDavSync {
                     } else {
                         replaceLocal(db, items)
                         SyncStore.lastLocalChange = remoteVersion
+                        // v2.0.17: 下载后本地数据 = 远程数据 → 单调版本对齐远程
+                        // （旧文件 dataVersion=0 时保持本地版本，兼容路径下次仍会上传）
+                        if (remoteDataVersion > 0L) {
+                            SyncStore.localVersion = remoteDataVersion
+                        }
+                        // v2.0.16/17 冲突提示：上次同步后本地也改过（版本化判定；旧文件回退不提示）
+                        val conflict = SyncStore.lastSyncVersion > 0L &&
+                            localVer > SyncStore.lastSyncVersion &&
+                            remoteDataVersion > SyncStore.lastSyncVersion
+                        if (remoteDataVersion > 0L) SyncStore.lastSyncVersion = remoteDataVersion
                         SyncStore.lastSyncAt = System.currentTimeMillis()
-                        SyncResult.Success
+                        SyncResult.Success(conflict = conflict)
                     }
                 }
-                localVersion > remoteVersion -> {
+                localNewer(remoteDataVersion, remoteVersion, localVer, localChange) -> {
                     // 本地新 → 上传
-                    val uploadJson = buildUploadJson(dao.getAllSync(), localVersion)
-                    if (uploadJson != null) upload(uploadJson)
+                    val uploadJson = buildUploadJson(dao.getAllSync(), localChange)
+                    if (uploadJson != null) {
+                        upload(uploadJson)
+                        // E1: 上传后必须推进 lastLocalChange（对齐 iOS setLastLocalChange(max(...))）——
+                        // 否则无编辑时下轮误判「远程新」→ 全量 replaceLocal 重建
+                        val uploadedAt = runCatching { JSONObject(uploadJson).optLong("exportedAt", 0L) }.getOrDefault(0L)
+                        if (uploadedAt > SyncStore.lastLocalChange) SyncStore.lastLocalChange = uploadedAt
+                    }
+                    // v2.0.16/17 冲突提示：上次同步后远程也改过（版本化判定）
+                    val conflict = SyncStore.lastSyncVersion > 0L &&
+                        localVer > SyncStore.lastSyncVersion &&
+                        remoteDataVersion > SyncStore.lastSyncVersion
+                    SyncStore.lastSyncVersion = localVer
                     SyncStore.lastSyncAt = System.currentTimeMillis()
-                    SyncResult.Success
+                    SyncResult.Success(conflict = conflict)
                 }
                 else -> {
                     SyncStore.lastSyncAt = System.currentTimeMillis()
-                    SyncResult.Success // 无变更
+                    SyncResult.Success(conflict = false) // 无变更
                 }
             }
         } catch (e: Exception) {
             SyncResult.Error(friendlyMessage(e))
         }
     }
+
+    // MARK: - v2.0.17 单调版本判新
+    // 双端都有 dataVersion 时用单调版本比较（防墙钟回拨/时钟偏差）；
+    // 任一为 0（旧版远程文件 / 升级前本地从未计数）回退 exportedAt 时间戳比较。
+
+    /** 远程是否更新 */
+    private fun remoteNewer(rdv: Long, rts: Long, lv: Long, lts: Long): Boolean =
+        if (rdv > 0L && lv > 0L) rdv > lv else rts > lts
+
+    /** 本地是否更新 */
+    private fun localNewer(rdv: Long, rts: Long, lv: Long, lts: Long): Boolean =
+        if (rdv > 0L && lv > 0L) lv > rdv else lts > rts
 
     /** 远程文件完整 URL（WebDAV 目录 + 文件名） */
     private fun remoteUrl(): String {
@@ -257,7 +305,7 @@ object WebDavSync {
                 .build()
             ).execute().close()
         }
-        SyncResult.Success
+        SyncResult.Success(conflict = false)
     }
 
     /** 「可读但不可写」的精准提示（testConnection 第二步失败时使用） */

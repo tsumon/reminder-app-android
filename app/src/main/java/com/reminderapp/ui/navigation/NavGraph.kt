@@ -255,7 +255,9 @@ fun NavGraph(
                     scope2.launch {
                         val result = com.reminderapp.service.WebDavSync.syncNow(context)
                         val msg = when (result) {
-                            is com.reminderapp.service.WebDavSync.SyncResult.Success -> zh("同步完成")
+                            // v2.0.16: 双端都改过 → 提示已按版本覆盖
+                            is com.reminderapp.service.WebDavSync.SyncResult.Success ->
+                                if (result.conflict) zh("已用最新版本覆盖（检测到双端都有修改，未合并）") else zh("同步完成")
                             is com.reminderapp.service.WebDavSync.SyncResult.Error -> result.message
                         }
                         android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()

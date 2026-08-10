@@ -596,44 +596,53 @@ private suspend fun handleUpdate(
     val advanceDays = (args["advance_days"] as? Double)?.toInt() ?: match.advanceDays
     val reminderHour = (args["reminder_hour"] as? Double)?.toInt() ?: match.reminderHour
     val reminderMinute = (args["reminder_minute"] as? Double)?.toInt() ?: match.reminderMinute
+    val hasHour = args.containsKey("reminder_hour")
+    val hasMinute = args.containsKey("reminder_minute")
     val holidayName = args["holiday_name"] as? String ?: match.holidayName
 
-    if (cycleRaw == "custom" && customDays < 1) {
-        return zh("自定义周期需要指定间隔天数（如：每3天），custom_days 至少为 1。")
-    }
+        // C3: 用「生效后的周期」判断——提醒已是 custom 时模型只传 custom_days 不传 cycle，旧守卫会漏
+        val effectiveCycle = cycleRaw ?: match.cycle
+        if (effectiveCycle == "custom" && customDays < 1) {
+            return zh("自定义周期需要指定间隔天数（如：每3天），custom_days 至少为 1。")
+        }
 
-    val updated = match.copy(
-        title = newTitle ?: match.title,
-        note = newNote,
-        cycle = cycleRaw ?: match.cycle,
-        customDays = customDays,
-        rulePeriod = rulePeriod,
-        ruleWeek = ruleWeek,
-        ruleWeekday = ruleWeekday,
-        dateType = dateType,
-        targetMonth = targetMonth,
-        targetDay = targetDay,
-        advanceDays = advanceDays,
-        reminderHour = reminderHour,
-        reminderMinute = reminderMinute,
-        holidayName = holidayName,
-        holidayAdjustNote = null
-    )
-    // Bug 3: cycle 类需同步改写锚点时分，否则 AI 改提醒时间对 cycle 无效
-    // （date/rule 已用 reminderHour/Minute 计算，仅 cycle 走 firstTriggerAt 锚点）
-    var updatedForTime = updated
-    if (updated.kind == "cycle" && updated.cycle != "once") {
-        val cal = Calendar.getInstance().apply { timeInMillis = updated.firstTriggerAt }
-        cal.set(Calendar.HOUR_OF_DAY, updated.reminderHour)
-        cal.set(Calendar.MINUTE, updated.reminderMinute)
-        cal.set(Calendar.SECOND, 0)
-        cal.set(Calendar.MILLISECOND, 0)
-        updatedForTime = updated.copy(firstTriggerAt = cal.timeInMillis)
-    }
-    val nextTrigger = ReminderEngine.calculateNextTrigger(updatedForTime)
-    val finalUpdated = updated.copy(nextTriggerAt = nextTrigger, holidayAdjustNote = null)
-    database.reminderDao().update(finalUpdated)
-    scheduler.schedule(finalUpdated)
+        val wasOverdue = match.status == "overdue"
+        val updated = match.copy(
+            title = newTitle ?: match.title,
+            note = newNote,
+            cycle = cycleRaw ?: match.cycle,
+            customDays = customDays,
+            rulePeriod = rulePeriod,
+            ruleWeek = ruleWeek,
+            ruleWeekday = ruleWeekday,
+            dateType = dateType,
+            targetMonth = targetMonth,
+            targetDay = targetDay,
+            advanceDays = advanceDays,
+            reminderHour = reminderHour,
+            reminderMinute = reminderMinute,
+            holidayName = holidayName,
+            holidayAdjustNote = null
+        )
+        // C1: AI 修改已逾期提醒必须重置状态，否则 Worker 幽灵守卫(status=="overdue" 直接 return)
+        // 会拦掉全部通知 → 「AI 说改好了，提醒却永久不响」。对齐 ViewModels.kt:100 确认路径的重置写法。
+        val updatedBase = if (wasOverdue) updated.copy(status = "pending", retryCount = 0) else updated
+        // Bug 3: cycle 类需同步改写锚点时分，否则 AI 改提醒时间对 cycle 无效
+        // （date/rule 已用 reminderHour/Minute 计算，仅 cycle 走 firstTriggerAt 锚点）
+        var updatedForTime = updatedBase
+        // A7: 仅当本次 AI 真传了时分字段才重写锚点，避免「只改标题」也被对齐一次、静默改变触发时分
+        if (updatedBase.kind == "cycle" && updatedBase.cycle != "once" && (hasHour || hasMinute)) {
+            val cal = Calendar.getInstance().apply { timeInMillis = updatedBase.firstTriggerAt }
+            cal.set(Calendar.HOUR_OF_DAY, updatedBase.reminderHour)
+            cal.set(Calendar.MINUTE, updatedBase.reminderMinute)
+            cal.set(Calendar.SECOND, 0)
+            cal.set(Calendar.MILLISECOND, 0)
+            updatedForTime = updatedBase.copy(firstTriggerAt = cal.timeInMillis)
+        }
+        val nextTrigger = ReminderEngine.calculateNextTrigger(updatedForTime)
+        val finalUpdated = updatedForTime.copy(nextTriggerAt = nextTrigger, holidayAdjustNote = null)
+        database.reminderDao().update(finalUpdated)
+        scheduler.schedule(finalUpdated)
     com.reminderapp.service.SyncStore.touchLocalChange()
     com.reminderapp.receiver.ReminderWidgetProvider.refresh(ctx)
     return zhf("已修改「%s」", finalUpdated.title)

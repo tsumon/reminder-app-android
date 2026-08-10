@@ -14,6 +14,9 @@ object SyncStore {
     private const val KEY_AUTO_SYNC = "auto_sync"
     private const val KEY_LAST_LOCAL_CHANGE = "last_local_change"
     private const val KEY_LAST_SYNC = "last_sync"
+    // v2.0.17: 单调版本——墙钟可回拨/双端时钟有偏差，判新改用自增版本，时间戳仅兜底
+    private const val KEY_LOCAL_VERSION = "local_version"
+    private const val KEY_LAST_SYNC_VERSION = "last_sync_version"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -54,9 +57,20 @@ object SyncStore {
         get() = prefs(ReminderApp.instance).getLong(KEY_LAST_LOCAL_CHANGE, 0L)
         set(value) = prefs(ReminderApp.instance).edit().putLong(KEY_LAST_LOCAL_CHANGE, value).apply()
 
-    /** 标记本地数据发生了变更 */
+    /** 本地自增单调版本（v2.0.17：判新主依据，防墙钟回拨/时钟偏差；每次本地变更 +1） */
+    var localVersion: Long
+        get() = prefs(ReminderApp.instance).getLong(KEY_LOCAL_VERSION, 0L)
+        set(value) = prefs(ReminderApp.instance).edit().putLong(KEY_LOCAL_VERSION, value).apply()
+
+    /** 上次成功同步时的本地版本（冲突判定：双端自上次同步后都有变化 = 冲突；0 = 从未同步过） */
+    var lastSyncVersion: Long
+        get() = prefs(ReminderApp.instance).getLong(KEY_LAST_SYNC_VERSION, 0L)
+        set(value) = prefs(ReminderApp.instance).edit().putLong(KEY_LAST_SYNC_VERSION, value).apply()
+
+    /** 标记本地数据发生了变更（墙钟时间戳 + 单调版本同时推进） */
     fun touchLocalChange() {
         lastLocalChange = System.currentTimeMillis()
+        localVersion = localVersion + 1
     }
 
     var lastSyncAt: Long

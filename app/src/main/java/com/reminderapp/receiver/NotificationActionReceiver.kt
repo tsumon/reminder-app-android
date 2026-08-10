@@ -45,7 +45,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
                         // v1.9.6 fix: 写操作记录（通知栏确认是常用路径，统计依赖它）
                         try {
                             db.reminderRecordDao().insert(
-                                com.reminderapp.data.entity.ReminderRecordEntity(reminderId = reminderId, action = "confirmed")
+                                com.reminderapp.data.entity.ReminderRecordEntity(reminderId = reminderId, action = com.reminderapp.data.entity.ReminderRecordEntity.ACTION_CONFIRMED)
                             )
                         } catch (_: Exception) {
                         }
@@ -60,7 +60,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
                         scheduler.schedule(updated)
                         try {
                             db.reminderRecordDao().insert(
-                                com.reminderapp.data.entity.ReminderRecordEntity(reminderId = reminderId, action = "snoozed")
+                                com.reminderapp.data.entity.ReminderRecordEntity(reminderId = reminderId, action = com.reminderapp.data.entity.ReminderRecordEntity.ACTION_SNOOZED)
                             )
                         } catch (_: Exception) {
                         }

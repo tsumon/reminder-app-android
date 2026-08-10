@@ -21,7 +21,14 @@ data class ReminderRecordEntity(
 
     @ColumnInfo(name = "reminder_id") val reminderId: Long,
 
-    // action: "confirmed" / "snoozed" / "notified"
+    // action 取值见 companion 常量（统计口径用；存储值勿改——已有历史数据落库）
     @ColumnInfo(name = "action") val action: String,
     @ColumnInfo(name = "timestamp") val timestamp: Long = System.currentTimeMillis()
-)
+) {
+    companion object {
+        /** 操作记录 action 常量（v2.0.16 枚举化，防 "notifying" 式拼写漂移；值与历史存储一致） */
+        const val ACTION_CONFIRMED = "confirmed"
+        const val ACTION_SNOOZED = "snoozed"
+        const val ACTION_NOTIFIED = "notified"
+    }
+}

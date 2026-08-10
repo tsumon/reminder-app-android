@@ -59,14 +59,6 @@ class ReminderWorker(
 
         notificationManager.sendReminderNotification(reminderId, title, body)
 
-        // 写 notified 操作记录（统计「漏掉/最常忘记时段」数据源）
-        runBlocking(Dispatchers.IO) {
-            try {
-                recordDao.insert(ReminderRecordEntity(reminderId = reminderId, action = "notified"))
-            } catch (_: Exception) {
-            }
-        }
-
         // 周期 / 日期 / 规则提醒：到点后递增重试（对齐 iOS escalateRetry），
         // 未确认不推进周期 —— 1h → 4h → 12h → 24h → 24h → overdue
         runBlocking(Dispatchers.IO) {
@@ -83,6 +75,12 @@ class ReminderWorker(
                 // 达到 5 次上限后标 overdue 停止轰炸，提醒留在列表等待用户手动处理。
                 val escalated = ReminderEngine.escalate(latest)
                 dao.update(escalated)
+                // E2: notified 记录只在「到点未确认、进入重试」时写（对齐 iOS escalateRetry 写 trigger）——
+                // 原实现每次发通知都写，用户按时确认也记一条，统计完成率恒 ≈50%
+                try {
+                    recordDao.insert(ReminderRecordEntity(reminderId = reminderId, action = ReminderRecordEntity.ACTION_NOTIFIED))
+                } catch (_: Exception) {
+                }
                 if (escalated.status != "overdue") {
                     ReminderScheduler(applicationContext).schedule(escalated)
                 }

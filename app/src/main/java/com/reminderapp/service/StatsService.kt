@@ -7,9 +7,10 @@ import java.util.Calendar
  * 统计洞察聚合（v1.8.7 任务③）— 镜像 iOS StatsService.swift
  *
  * 数据完全本地：复用 ReminderRecordEntity（操作记录）按日聚合。
- * 口径（双端一致）：
- * - 完成率 = confirmed / (confirmed + notified)
- *   （notified = 提醒过但未及时确认，即「漏掉」）
+ * 口径（双端一致，v2.0.17 落文档防漂移）：
+ * - 完成率 = 确认天数 / (确认天数 + 漏掉天数)
+ * - 「漏掉」= 到点未确认进入重试才算（Worker escalate 写 notified / iOS escalateRetry 写 trigger）；
+ *   按时确认**不**记漏 —— 否则每次发通知都记一条，完成率恒 ≈50%
  * - 连续打卡 = confirmed 记录按天去重后的连续天数（当前/最长）
  * - 最常忘记时段 = notified(未确认) 记录按小时分布 Top3
  * - 月历热力图 = 每月每天 confirmed 次数
@@ -30,8 +31,8 @@ object StatsService {
     )
 
     fun summarize(records: List<ReminderRecordEntity>): Summary {
-        val confirmTimes = records.filter { it.action == "confirmed" }.map { it.timestamp }
-        val missed = records.filter { it.action == "notified" }
+        val confirmTimes = records.filter { it.action == com.reminderapp.data.entity.ReminderRecordEntity.ACTION_CONFIRMED }.map { it.timestamp }
+        val missed = records.filter { it.action == com.reminderapp.data.entity.ReminderRecordEntity.ACTION_NOTIFIED }
 
         val confirmDays = confirmTimes.map { startOfDay(it) }.toSet()
         val confirmCount = confirmDays.size

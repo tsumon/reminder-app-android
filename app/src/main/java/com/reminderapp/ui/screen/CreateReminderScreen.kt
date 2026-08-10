@@ -485,7 +485,8 @@ fun CreateReminderScreen(
                 if (selectedCycle == Cycle.CUSTOM) {
                     OutlinedTextField(
                         value = customDays.toString(),
-                        onValueChange = { customDays = it.toIntOrNull() ?: 1 },
+                        // C2: 用户直接输 0 时 toIntOrNull()=0 非 null，会被原写法放行 → 周期锚点退回过去；兜底为 1
+                        onValueChange = { customDays = maxOf(1, it.toIntOrNull() ?: 1) },
                         label = { Text(zh("自定义天数")) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true

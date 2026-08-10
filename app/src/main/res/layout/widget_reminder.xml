@@ -102,6 +102,20 @@
             android:textStyle="bold"
             android:background="@drawable/widget_complete_bg"
             android:visibility="gone" />
+
+        <!-- 快捷稍后提醒按钮（v2.0.16）：点击广播推迟 15 分钟，与完成按钮互斥显示 -->
+        <TextView
+            android:id="@+id/widget_snooze_btn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:padding="4dp"
+            android:text="⏸ 稍后"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:background="@drawable/widget_complete_bg"
+            android:visibility="gone" />
     </LinearLayout>
 
 </LinearLayout>

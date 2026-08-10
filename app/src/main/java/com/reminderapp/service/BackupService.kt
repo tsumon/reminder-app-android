@@ -16,6 +16,7 @@ import com.reminderapp.i18n.zh
  * {
  *   "version": 1,
  *   "exportedAt": <timestamp>,
+ *   "dataVersion": <本地自增版本, v2.0.17>,
  *   "reminders": [ { ...ReminderEntity 全部字段... } ]
  * }
  */
@@ -23,11 +24,12 @@ object BackupService {
 
     private const val BACKUP_VERSION = 1
 
-    /** 将提醒列表导出为 JSON 字符串 */
+    /** 将提醒列表导出为 JSON 字符串（dataVersion 取当前本地单调版本，判新主依据） */
     fun exportToJson(reminders: List<ReminderEntity>): String {
         val root = JSONObject()
         root.put("version", BACKUP_VERSION)
         root.put("exportedAt", System.currentTimeMillis())
+        root.put("dataVersion", SyncStore.localVersion)
 
         val arr = JSONArray()
         reminders.forEach { r ->
@@ -95,6 +97,15 @@ object BackupService {
             list
         } catch (e: Exception) {
             null
+        }
+    }
+
+    /** 读取 JSON 中的 dataVersion（v2.0.17 单调版本；旧文件缺字段返回 0） */
+    fun dataVersionOf(json: String): Long {
+        return try {
+            JSONObject(json).optLong("dataVersion", 0L)
+        } catch (e: Exception) {
+            0L
         }
     }
 

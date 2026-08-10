@@ -105,7 +105,7 @@ class ReminderWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widget_next_time, "")
         }
 
-        // 快捷完成按钮：只有存在「即将到来的提醒」时才显示
+        // 快捷完成/稍后按钮：只有存在「即将到来的提醒」时才显示（v2.0.16 加稍后按钮）
         val completeId = data.completeReminderId
         if (completeId != null) {
             val completeIntent = Intent(context, WidgetActionReceiver::class.java).apply {
@@ -120,8 +120,22 @@ class ReminderWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_complete_btn, completePi)
             views.setViewVisibility(R.id.widget_complete_btn, android.view.View.VISIBLE)
+
+            val snoozeIntent = Intent(context, WidgetActionReceiver::class.java).apply {
+                action = WidgetActionReceiver.ACTION_SNOOZE
+                putExtra(WidgetActionReceiver.EXTRA_REMINDER_ID, completeId)
+            }
+            val snoozePi = PendingIntent.getBroadcast(
+                context,
+                (completeId.toInt() and 0x7FFFFFFF) xor 0x40000000,
+                snoozeIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            views.setOnClickPendingIntent(R.id.widget_snooze_btn, snoozePi)
+            views.setViewVisibility(R.id.widget_snooze_btn, android.view.View.VISIBLE)
         } else {
             views.setViewVisibility(R.id.widget_complete_btn, android.view.View.GONE)
+            views.setViewVisibility(R.id.widget_snooze_btn, android.view.View.GONE)
         }
 
         return views

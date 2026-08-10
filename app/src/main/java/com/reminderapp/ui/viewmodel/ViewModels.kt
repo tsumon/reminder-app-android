@@ -74,7 +74,7 @@ class HomeViewModel(
         viewModelScope.launch {
             val updated = ReminderEngine.confirm(reminder)
             dao.update(updated)
-            recordDao.insert(ReminderRecordEntity(reminderId = reminder.id, action = "confirmed"))
+            recordDao.insert(ReminderRecordEntity(reminderId = reminder.id, action = ReminderRecordEntity.ACTION_CONFIRMED))
             // v1.9.6 fix: 确认后取消已显示的通知，避免通知栏残留
             com.reminderapp.service.NotificationManager(com.reminderapp.ReminderApp.instance).cancelReminderNotifications(reminder.id)
             scheduler.schedule(updated)
@@ -148,7 +148,7 @@ class ReminderDetailViewModel(
             val r = _reminder.value ?: return@launch
             val updated = ReminderEngine.confirm(r)
             dao.update(updated)
-            recordDao.insert(ReminderRecordEntity(reminderId = r.id, action = "confirmed"))
+            recordDao.insert(ReminderRecordEntity(reminderId = r.id, action = ReminderRecordEntity.ACTION_CONFIRMED))
             scheduler.schedule(updated)
             notificationMgr.cancelReminderNotifications(r.id)
             _reminder.value = updated
@@ -166,7 +166,7 @@ class ReminderDetailViewModel(
             val r = _reminder.value ?: return@launch
             val updated = ReminderEngine.snooze(r)
             dao.update(updated)
-            recordDao.insert(ReminderRecordEntity(reminderId = r.id, action = "snoozed"))
+            recordDao.insert(ReminderRecordEntity(reminderId = r.id, action = ReminderRecordEntity.ACTION_SNOOZED))
             scheduler.schedule(updated)
             notificationMgr.cancelReminderNotifications(r.id)
             _reminder.value = updated
@@ -178,7 +178,7 @@ class ReminderDetailViewModel(
             val r = _reminder.value ?: return@launch
             val updated = ReminderEngine.escalate(r)
             dao.update(updated)
-            recordDao.insert(ReminderRecordEntity(reminderId = r.id, action = "notified"))
+            recordDao.insert(ReminderRecordEntity(reminderId = r.id, action = ReminderRecordEntity.ACTION_NOTIFIED))
             notificationMgr.sendReminderNotification(
                 updated.id,
                 "⏰ ${updated.title}",
