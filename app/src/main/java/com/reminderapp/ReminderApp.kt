@@ -5,6 +5,7 @@ import com.reminderapp.data.database.AppDatabase
 import com.reminderapp.i18n.LocaleManager
 import com.reminderapp.service.AIService
 import com.reminderapp.service.AISettings
+import com.reminderapp.service.HolidayPreCheck
 import com.reminderapp.service.HolidayRemoteService
 import com.reminderapp.service.NotificationManager
 import com.reminderapp.service.ReminderScheduler

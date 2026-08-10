@@ -5,7 +5,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.reminderapp.R
@@ -122,15 +121,4 @@ class NotificationManager(private val context: Context) {
         notificationManager.cancel(reminderId.toInt() + 2000)
     }
 
-    /**
-     * 请求通知权限（Android 13+）
-     */
-    fun requestPermissionIfNeeded(callback: (Boolean) -> Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // 权限请求需要在 Activity 层处理
-            callback(true)
-        } else {
-            callback(true)
-        }
-    }
 }

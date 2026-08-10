@@ -28,6 +28,13 @@ object HolidayService {
      * 获取指定年份中节日的公历日期
      */
     fun getHolidaySolarDate(year: Int, holiday: Holiday): Long? {
+        // 除夕 = 农历正月初一的前一天（即腊月最后一天）。
+        // 2025–2029 连续无年三十，硬写 12/30 会得到错误日期（甚至跨到下一年），
+        // 故统一取「春节 - 1 天」，自动落到腊月廿九。
+        if (holiday.name == "除夕") {
+            val springFestival = LunarCalendar.lunarToSolar(year, 1, 1) ?: return null
+            return springFestival - 24L * 60 * 60 * 1000
+        }
         return if (holiday.isLunar) {
             LunarCalendar.lunarToSolar(year, holiday.month, holiday.day)
         } else {
