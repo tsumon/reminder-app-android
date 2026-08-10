@@ -619,7 +619,18 @@ private suspend fun handleUpdate(
         holidayName = holidayName,
         holidayAdjustNote = null
     )
-    val nextTrigger = ReminderEngine.calculateNextTrigger(updated)
+    // Bug 3: cycle 类需同步改写锚点时分，否则 AI 改提醒时间对 cycle 无效
+    // （date/rule 已用 reminderHour/Minute 计算，仅 cycle 走 firstTriggerAt 锚点）
+    var updatedForTime = updated
+    if (updated.kind == "cycle" && updated.cycle != "once") {
+        val cal = Calendar.getInstance().apply { timeInMillis = updated.firstTriggerAt }
+        cal.set(Calendar.HOUR_OF_DAY, updated.reminderHour)
+        cal.set(Calendar.MINUTE, updated.reminderMinute)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        updatedForTime = updated.copy(firstTriggerAt = cal.timeInMillis)
+    }
+    val nextTrigger = ReminderEngine.calculateNextTrigger(updatedForTime)
     val finalUpdated = updated.copy(nextTriggerAt = nextTrigger, holidayAdjustNote = null)
     database.reminderDao().update(finalUpdated)
     scheduler.schedule(finalUpdated)
