@@ -149,25 +149,6 @@ fun HomeScreen(
                     containerColor = MaterialTheme.colorScheme.background
                 ),
                 actions = {
-                    // 品牌头像（设计图风格：M3 紫渐变圆）
-                    Box(
-                        modifier = Modifier
-                            .padding(end = 4.dp)
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(Color(0xFF7C66C2), Color(0xFF5B4891))
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            zh("周"),
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
-                        )
-                    }
                     Box {
                         IconButton(onClick = { menuExpanded = true }) {
                             Icon(
