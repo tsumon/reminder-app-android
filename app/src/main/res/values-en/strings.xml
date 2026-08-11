@@ -33,8 +33,12 @@
     <string name="reminder_time">Reminder time</string>
     <string name="notification_channel_name">Recurring reminder</string>
     <string name="notification_channel_desc">Reminder notifications with confirm and snooze actions</string>
+    <string name="critical_channel_name">Critical reminder</string>
+    <string name="critical_channel_desc">Highest priority, pops up full-screen on lock screen so important items are never missed</string>
     <string name="advance_channel_name">Advance notice</string>
     <string name="advance_channel_desc">Advance notice for date reminders</string>
+    <string name="weekly_channel_name">Weekly report</string>
+    <string name="weekly_channel_desc">Weekly completion statistics every Sunday</string>
     <string name="confirm_action">Mark done</string>
     <string name="snooze_action">Snooze</string>
     <string name="no_reminders">No reminders</string>
@@ -377,4 +381,11 @@
     <string name="s_0333">🟢Medium</string>
     <string name="s_0334">Language</string>
     <string name="s_0335">Follow System</string>
+    <string name="s_0336">📊 Weekly report</string>
+    <string name="s_0337">Completed %1$d · Missed %2$d</string>
+    <string name="s_0338">Completion rate %1$s</string>
+    <string name="s_0339">Streak: %1$d days</string>
+    <string name="s_0340">N/A</string>
+    <string name="s_0341">Check-in success 🎉</string>
+    <string name="s_0342">Check-in success, %1$d-day streak 🎉</string>
 </resources>

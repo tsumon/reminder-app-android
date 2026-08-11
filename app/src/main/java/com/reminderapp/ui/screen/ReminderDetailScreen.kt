@@ -10,16 +10,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Snooze
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.reminderapp.data.entity.ReminderEntity
@@ -28,6 +33,11 @@ import com.reminderapp.ui.theme.*
 import com.reminderapp.ui.viewmodel.ReminderDetailViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import android.app.NotificationManager
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import com.reminderapp.i18n.zh
 import com.reminderapp.i18n.zhf
 
@@ -39,6 +49,7 @@ fun ReminderDetailScreen(
 ) {
     val reminder by viewModel.reminder.collectAsState()
     val records by viewModel.records.collectAsState()
+    val checkInFeedback by viewModel.checkInFeedback.collectAsState()
 
     val currentReminder = reminder ?: return
 
@@ -76,6 +87,8 @@ fun ReminderDetailScreen(
     val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
     val shortFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
     var showDeleteDialog by remember { mutableStateOf(false) }
+    // H2: 关键提醒全屏权限引导对话框（Android 14+ 未授予时弹出）
+    var showFullScreenPermissionDialog by remember { mutableStateOf(false) }
     var appeared by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { appeared = true }
 
@@ -89,6 +102,23 @@ fun ReminderDetailScreen(
                     }
                 },
                 actions = {
+                    val context = LocalContext.current
+                    // 批次3 功能6: 分享单条提醒卡片（导出 JSON 经系统分享面板发出）
+                    IconButton(onClick = {
+                        val json = com.reminderapp.service.BackupService.exportSingle(currentReminder)
+                        val sendIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(android.content.Intent.EXTRA_TITLE, currentReminder.title)
+                            putExtra(android.content.Intent.EXTRA_TEXT, json)
+                        }
+                        context.startActivity(android.content.Intent.createChooser(sendIntent, zh("分享提醒卡片")))
+                    }) {
+                        Icon(
+                            Icons.Default.Share,
+                            contentDescription = zh("分享提醒卡片"),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     IconButton(onClick = { showDeleteDialog = true }) {
                         Icon(
                             Icons.Default.Delete,
@@ -200,6 +230,23 @@ fun ReminderDetailScreen(
                 }
             }
 
+            // 已逾期：给一个明确的「补打今天」入口——按今天完成、推进周期、计入统计
+            if (currentReminder.status == "overdue") {
+                OutlinedButton(
+                    onClick = { viewModel.confirm(isMakeUp = true) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics {
+                            contentDescription = zh("补打今天：把这条逾期提醒按今天完成，并推进到下一个周期")
+                        },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = StatusOverdue)
+                ) {
+                    Icon(Icons.Default.EventAvailable, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(zh("补打今天"))
+                }
+            }
+
             // 信息卡片
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -233,6 +280,46 @@ fun ReminderDetailScreen(
                         "low" -> zh("⚪ 低")
                         else -> zh("🟢 中")
                     })
+                    // 批次3 功能5: 关键提醒开关
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics {
+                                contentDescription = zh("关键提醒开关：开启后触发时全屏弹出，确保不被漏看")
+                            },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                zh("关键提醒"),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                zh("重要事项，触发时全屏弹出并不穿透勿扰"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        val nm = LocalContext.current.getSystemService(NotificationManager::class.java)
+                        Switch(
+                            checked = currentReminder.isCritical,
+                            onCheckedChange = {
+                                if (it) {
+                                    // H2 + I6: 首次开启关键提醒，若全屏权限或勿扰访问权限未授予则引导授权
+                                    val needFullScreen = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+                                        (nm == null || !nm.canUseFullScreenIntent())
+                                    // I6: 勿扰访问权限用框架 NotificationManager
+                                    val needPolicy = nm?.isNotificationPolicyAccessGranted != true
+                                    if (needFullScreen || needPolicy) {
+                                        showFullScreenPermissionDialog = true
+                                    }
+                                }
+                                viewModel.setCritical(it)
+                            }
+                        )
+                    }
                     if (currentReminder.kind == "date") {
                         infoRow(zh("类型"), zh("日期提醒"))
                         val dateTypeLabel = when (currentReminder.dateType) {
@@ -322,6 +409,19 @@ fun ReminderDetailScreen(
             onDismiss = { showDeleteDialog = false }
         )
     }
+
+    // H2: 关键提醒全屏权限引导对话框
+    if (showFullScreenPermissionDialog) {
+        FullScreenPermissionDialog(onDismiss = { showFullScreenPermissionDialog = false })
+    }
+
+    // 批次2 功能2: 打卡成功正向反馈卡片（顶部浮层，自动消失）
+    Box(modifier = Modifier.fillMaxSize()) {
+        com.reminderapp.ui.component.CheckInFeedbackCard(
+            text = checkInFeedback,
+            onDismiss = viewModel::consumeCheckInFeedback
+        )
+    }
 }
 
 @Composable
@@ -363,6 +463,51 @@ private fun DeleteConfirmDialog(
             TextButton(onClick = onDismiss) {
                 Text(zh("取消"))
             }
+        }
+    )
+}
+
+// H2 + I6: 关键提醒全屏 / 勿扰访问权限引导对话框
+@Composable
+private fun FullScreenPermissionDialog(
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val nm = context.getSystemService(NotificationManager::class.java)
+    val needFullScreen = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+        (nm == null || !nm.canUseFullScreenIntent())
+    // I6: 勿扰访问权限用框架 NotificationManager
+    val needPolicy = nm?.isNotificationPolicyAccessGranted != true
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(zh("开启关键提醒所需权限")) },
+        text = {
+            Text(
+                zh(
+                    "关键提醒需要以下权限才能正常弹出并穿透勿扰：" +
+                        (if (needFullScreen) "\n· 全屏界面（Android 14+ 默认不授予，需手动开启）" else "") +
+                        (if (needPolicy) "\n· 勿扰访问（允许关键提醒在勿扰模式下响铃）" else "")
+                )
+            )
+        },
+        confirmButton = {
+            if (needFullScreen) {
+                TextButton(onClick = {
+                    onDismiss()
+                    val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
+                        data = Uri.fromParts("package", context.packageName, null)
+                    }
+                    context.startActivity(intent)
+                }) { Text(zh("去设置（全屏）")) }
+            } else if (needPolicy) {
+                TextButton(onClick = {
+                    onDismiss()
+                    context.startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+                }) { Text(zh("去设置（勿扰）")) }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(zh("稍后")) }
         }
     )
 }

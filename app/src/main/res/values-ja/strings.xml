@@ -33,8 +33,12 @@
     <string name="reminder_time">通知時刻</string>
     <string name="notification_channel_name">循環リマインダー</string>
     <string name="notification_channel_desc">確認・スヌーズ操作付きのリマインダー通知</string>
+    <string name="critical_channel_name">重要リマインダー</string>
+    <string name="critical_channel_desc">最優先で、ロック画面で全画面表示され、重要な予定を見逃しません</string>
     <string name="advance_channel_name">事前通知</string>
     <string name="advance_channel_desc">日付リマインダーの事前通知</string>
+    <string name="weekly_channel_name">統計週報</string>
+    <string name="weekly_channel_desc">毎週日曜日に今週の完了統計をプッシュ</string>
     <string name="confirm_action">完了にする</string>
     <string name="snooze_action">後で通知</string>
     <string name="no_reminders">リマインダーはありません</string>
@@ -377,4 +381,11 @@
     <string name="s_0333">🟢中</string>
     <string name="s_0334">言語</string>
     <string name="s_0335">システムに従う</string>
+    <string name="s_0336">📊 今週の統計レポート</string>
+    <string name="s_0337">完了 %1$d 件 · 見逃し %2$d 件</string>
+    <string name="s_0338">完了率 %1$s</string>
+    <string name="s_0339">連続達成 %1$d 日</string>
+    <string name="s_0340">なし</string>
+    <string name="s_0341">チェックイン成功 🎉</string>
+    <string name="s_0342">チェックイン成功、%1$d 日連続 🎉</string>
 </resources>

@@ -55,6 +55,8 @@ object BackupService {
             obj.put("nextTriggerAt", r.nextTriggerAt)
             obj.put("status", r.status)
             obj.put("isActive", r.isActive)
+            // H1: 关键提醒标记纳入备份/同步（缺省 false），覆盖 WebDAV/备份/局域网/分享卡片全部通道
+            obj.put("is_critical", r.isCritical)
             arr.put(obj)
         }
         root.put("reminders", arr)
@@ -90,7 +92,9 @@ object BackupService {
                     firstTriggerAt = o.optLong("firstTriggerAt", System.currentTimeMillis()),
                     nextTriggerAt = o.optLong("nextTriggerAt", System.currentTimeMillis()),
                     status = o.optString("status", "idle"),
-                    isActive = o.optBoolean("isActive", true)
+                    isActive = o.optBoolean("isActive", true),
+                    // H1: 导入时写回关键标记（缺省 false，兼容旧备份文件缺字段）
+                    isCritical = o.optBoolean("is_critical", false)
                 )
                 list.add(entity)
             }
@@ -100,12 +104,27 @@ object BackupService {
         }
     }
 
+    /** 批次3 功能6: 单条提醒分享卡片 —— 复用备份信封格式导出单条 */
+    fun exportSingle(reminder: ReminderEntity): String = exportToJson(listOf(reminder))
+
+    /** 批次3 功能6: 从分享卡片 JSON 解析出单条（失败返回 null） */
+    fun importSingle(json: String): ReminderEntity? = importFromJson(json)?.firstOrNull()
+
     /** 读取 JSON 中的 dataVersion（v2.0.17 单调版本；旧文件缺字段返回 0） */
     fun dataVersionOf(json: String): Long {
         return try {
             JSONObject(json).optLong("dataVersion", 0L)
         } catch (e: Exception) {
             0L
+        }
+    }
+
+    /** 轻量读取 JSON 内提醒条数（v2.0.21 F1：首次同步冲突判定用，不做完整解析） */
+    fun remindersCountOf(json: String): Int {
+        return try {
+            JSONObject(json).optJSONArray("reminders")?.length() ?: 0
+        } catch (e: Exception) {
+            0
         }
     }
 

@@ -57,7 +57,12 @@ class ReminderWorker(
             return Result.success()
         }
 
-        notificationManager.sendReminderNotification(reminderId, title, body)
+        // 批次3 功能5: 关键提醒走最高优先级渠道 + 全屏弹窗
+        if (reminder.isCritical) {
+            notificationManager.sendCriticalReminderNotification(reminderId, title, body)
+        } else {
+            notificationManager.sendReminderNotification(reminderId, title, body)
+        }
 
         // 周期 / 日期 / 规则提醒：到点后递增重试（对齐 iOS escalateRetry），
         // 未确认不推进周期 —— 1h → 4h → 12h → 24h → 24h → overdue

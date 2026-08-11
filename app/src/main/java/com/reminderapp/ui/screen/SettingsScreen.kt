@@ -8,6 +8,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowRight
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Info
@@ -45,6 +46,9 @@ fun SettingsScreen(
     var checking by remember { mutableStateOf(false) }
     var updateInfo by remember { mutableStateOf<UpdateService.UpdateInfo?>(null) }
     var showChangelog by remember { mutableStateOf(false) }
+    // 批次3 功能4: 日历订阅链接
+    var icsBusy by remember { mutableStateOf(false) }
+    var icsResult by remember { mutableStateOf<com.reminderapp.service.WebDavSync.IcsUploadResult?>(null) }
 
     Scaffold(
         topBar = {
@@ -123,6 +127,28 @@ fun SettingsScreen(
                         title = zh("WebDAV 同步"),
                         subtitle = zh("坚果云/自建服务器备份与多端同步"),
                         onClick = onOpenSyncSettings
+                    )
+                    HorizontalDivider()
+                    // 批次3 功能4: 把 .ics 上传到 WebDAV，拿到可订阅链接
+                    SettingRow(
+                        icon = Icons.Filled.CalendarMonth,
+                        title = if (icsBusy) zh("正在上传日历…") else zh("日历订阅链接"),
+                        subtitle = zh("上传 .ics 到 WebDAV，供系统日历订阅"),
+                        onClick = {
+                            if (!icsBusy) {
+                                scope.launch {
+                                    icsBusy = true
+                                    val list = try {
+                                        com.reminderapp.data.database.AppDatabase
+                                            .getInstance(context).reminderDao().getAllSync()
+                                    } catch (_: Exception) {
+                                        emptyList()
+                                    }
+                                    icsResult = com.reminderapp.service.WebDavSync.uploadIcs(list)
+                                    icsBusy = false
+                                }
+                            }
+                        }
                     )
                 }
             }
@@ -237,6 +263,59 @@ fun SettingsScreen(
                         .wrapContentWidth(Alignment.CenterHorizontally)
                 )
             }
+        }
+    }
+
+    // 批次3 功能4: 日历订阅链接结果弹窗
+    icsResult?.let { result ->
+        when (result) {
+            is com.reminderapp.service.WebDavSync.IcsUploadResult.Success -> AlertDialog(
+                onDismissRequest = { icsResult = null },
+                title = { Text(zh("日历已上传")) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            zhf("已把 %s 条提醒导出为 reminders.ics 并上传到你的 WebDAV 目录。", result.count),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            result.url,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            zh(
+                                "这个地址需要账号密码，系统日历无法直接订阅。请在网盘网页端找到该文件 → 创建分享链接 →" +
+                                    "把分享直链填进「日历 → 添加订阅日历」。之后每次点这里重新上传，订阅端刷新即可看到最新日程。"
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                            as android.content.ClipboardManager
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("ics", result.url))
+                        android.widget.Toast.makeText(
+                            context, zh("链接已复制"), android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                        icsResult = null
+                    }) { Text(zh("复制链接")) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { icsResult = null }) { Text(zh("关闭")) }
+                }
+            )
+            is com.reminderapp.service.WebDavSync.IcsUploadResult.Error -> AlertDialog(
+                onDismissRequest = { icsResult = null },
+                title = { Text(zh("上传失败")) },
+                text = { Text(result.message) },
+                confirmButton = {
+                    TextButton(onClick = { icsResult = null }) { Text(zh("好")) }
+                }
+            )
         }
     }
 

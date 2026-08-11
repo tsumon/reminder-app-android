@@ -6,9 +6,11 @@ import com.reminderapp.data.entity.ReminderEntity
 import com.reminderapp.data.entity.ReminderRecordEntity
 import com.reminderapp.service.ReminderEngine
 import com.reminderapp.service.ReminderScheduler
+import com.reminderapp.service.StatsService
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 
 class HomeViewModel(
     private val dao: com.reminderapp.data.dao.ReminderDao,
@@ -21,6 +23,15 @@ class HomeViewModel(
 
     private val _groupedReminders = MutableStateFlow(GroupedReminders())
     val groupedReminders: StateFlow<GroupedReminders> = _groupedReminders.asStateFlow()
+
+    // 批次2 功能2: 正向反馈 —— 打卡成功后展示「打卡成功 · 连续 N 天」卡片
+    private val _checkInFeedback = MutableStateFlow<String?>(null)
+    val checkInFeedback: StateFlow<String?> = _checkInFeedback.asStateFlow()
+
+    /** UI 消费打卡反馈（展示后清除，避免重复弹出） */
+    fun consumeCheckInFeedback() {
+        _checkInFeedback.value = null
+    }
 
     init {
         viewModelScope.launch {
@@ -69,8 +80,13 @@ class HomeViewModel(
         }
     }
 
-    /** 滑动完成：确认当前提醒（周期类自动前进到下一次；一次性提醒归档） */
-    fun confirmReminder(reminder: ReminderEntity) {
+    /**
+     * 滑动完成：确认当前提醒（周期类自动前进到下一次；一次性提醒归档）
+     *
+     * @param isMakeUp 是否为「补打今天」（逾期后补打卡）。行为与普通确认一致
+     *                 （按今天完成 + 推进周期 + 计入统计），只区分反馈文案。
+     */
+    fun confirmReminder(reminder: ReminderEntity, isMakeUp: Boolean = false) {
         viewModelScope.launch {
             val updated = ReminderEngine.confirm(reminder)
             dao.update(updated)
@@ -80,15 +96,33 @@ class HomeViewModel(
             scheduler.schedule(updated)
             com.reminderapp.service.SyncStore.touchLocalChange()
             com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+            // 批次2 功能2: 打卡成功 → 正向反馈卡片（含连续打卡天数）
+            publishCheckInFeedback(isMakeUp)
             // Item 2: 确认后预检下一次触发是否遇节假日
             viewModelScope.launch {
                 com.reminderapp.service.HolidayPreCheck.run(com.reminderapp.ReminderApp.instance)
             }
             // v1.8.7 任务⑥: 埋点
             com.reminderapp.service.TelemetryService.logEvent(
-                "confirm",
+                if (isMakeUp) "confirm_makeup" else "confirm",
                 mapOf("kind" to reminder.kind, "cycle" to reminder.cycle)
             )
+        }
+    }
+
+    /** 批次2 功能2: 计算当前连续打卡天数并发布正向反馈 */
+    private suspend fun publishCheckInFeedback(isMakeUp: Boolean = false) {
+        val okText = if (isMakeUp) zh("补打卡成功 🎉") else zh("打卡成功 🎉")
+        try {
+            val records = recordDao.getAll()
+            val streak = StatsService.summarize(records).currentStreak
+            _checkInFeedback.value =
+                if (streak > 1) {
+                    if (isMakeUp) zhf("补打卡成功，已连续 %1\$d 天 🎉", streak)
+                    else zhf("打卡成功，已连续 %1\$d 天 🎉", streak)
+                } else okText
+        } catch (_: Exception) {
+            _checkInFeedback.value = okText
         }
     }
 
@@ -136,6 +170,15 @@ class ReminderDetailViewModel(
     private val _records = MutableStateFlow<List<ReminderRecordEntity>>(emptyList())
     val records: StateFlow<List<ReminderRecordEntity>> = _records.asStateFlow()
 
+    // 批次2 功能2: 正向反馈 —— 确认后展示「打卡成功 · 连续 N 天」卡片
+    private val _checkInFeedback = MutableStateFlow<String?>(null)
+    val checkInFeedback: StateFlow<String?> = _checkInFeedback.asStateFlow()
+
+    /** UI 消费打卡反馈（展示后清除，避免重复弹出） */
+    fun consumeCheckInFeedback() {
+        _checkInFeedback.value = null
+    }
+
     init {
         viewModelScope.launch {
             _reminder.value = dao.getById(reminderId)
@@ -143,7 +186,14 @@ class ReminderDetailViewModel(
         }
     }
 
-    fun confirm() {
+    /**
+     * 确认完成。
+     *
+     * @param isMakeUp 是否为「补打今天」（逾期后补打卡）。行为与普通确认完全一致
+     *                 （按今天完成 + 推进周期 + 计入统计），只是反馈文案区分，
+     *                 不改 Room schema，避免为一句文案做迁移。
+     */
+    fun confirm(isMakeUp: Boolean = false) {
         viewModelScope.launch {
             val r = _reminder.value ?: return@launch
             val updated = ReminderEngine.confirm(r)
@@ -154,6 +204,18 @@ class ReminderDetailViewModel(
             _reminder.value = updated
             com.reminderapp.service.SyncStore.touchLocalChange()
             com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+            // 批次2 功能2: 打卡成功 → 正向反馈卡片
+            val okText = if (isMakeUp) zh("补打卡成功 🎉") else zh("打卡成功 🎉")
+            try {
+                val streak = StatsService.summarize(recordDao.getAll()).currentStreak
+                _checkInFeedback.value =
+                    if (streak > 1) {
+                        if (isMakeUp) zhf("补打卡成功，已连续 %1\$d 天 🎉", streak)
+                        else zhf("打卡成功，已连续 %1\$d 天 🎉", streak)
+                    } else okText
+            } catch (_: Exception) {
+                _checkInFeedback.value = okText
+            }
             // Item 2: 确认后预检下一次触发是否遇节假日
             viewModelScope.launch {
                 com.reminderapp.service.HolidayPreCheck.run(com.reminderapp.ReminderApp.instance)
@@ -173,17 +235,45 @@ class ReminderDetailViewModel(
         }
     }
 
+    /** 批次3 功能5: 切换关键提醒标记（落库 + 按对应渠道重排通知） */
+    fun setCritical(value: Boolean) {
+        viewModelScope.launch {
+            val r = _reminder.value ?: return@launch
+            val updated = r.copy(isCritical = value)
+            dao.update(updated)
+            notificationMgr.cancelReminderNotifications(r.id)
+            // 仅当提醒仍生效时重排，使其走对应的通知渠道
+            if (updated.isActive &&
+                updated.status != "confirmed" &&
+                updated.status != "overdue"
+            ) {
+                scheduler.schedule(updated)
+            }
+            _reminder.value = updated
+            com.reminderapp.service.SyncStore.touchLocalChange()
+        }
+    }
+
     fun escalate() {
         viewModelScope.launch {
             val r = _reminder.value ?: return@launch
             val updated = ReminderEngine.escalate(r)
             dao.update(updated)
             recordDao.insert(ReminderRecordEntity(reminderId = r.id, action = ReminderRecordEntity.ACTION_NOTIFIED))
-            notificationMgr.sendReminderNotification(
-                updated.id,
-                "⏰ ${updated.title}",
-                updated.note.ifEmpty { zh("该事项仍需要你确认") }
-            )
+            // 批次3 功能5: 关键提醒走最高优先级渠道 + 全屏弹窗
+            if (updated.isCritical) {
+                notificationMgr.sendCriticalReminderNotification(
+                    updated.id,
+                    "⏰ ${updated.title}",
+                    updated.note.ifEmpty { zh("该事项仍需要你确认") }
+                )
+            } else {
+                notificationMgr.sendReminderNotification(
+                    updated.id,
+                    "⏰ ${updated.title}",
+                    updated.note.ifEmpty { zh("该事项仍需要你确认") }
+                )
+            }
             // v1.9.7: 对齐 iOS —— 重试必须重新排期，否则下一次到点永远不会响；
             // 已逾期（达到重试上限）不再排期
             if (updated.status != "overdue") scheduler.schedule(updated)

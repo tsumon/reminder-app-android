@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.combinedClickable
@@ -29,6 +30,8 @@ import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,7 +45,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.reminderapp.ReminderApp
 import com.reminderapp.data.entity.ReminderEntity
+import com.reminderapp.service.BackupService
 import com.reminderapp.service.ReminderEngine
 import com.reminderapp.ui.theme.*
 import com.reminderapp.ui.viewmodel.HomeViewModel
@@ -116,6 +121,7 @@ fun HomeScreen(
 ) {
     val grouped by viewModel.groupedReminders.collectAsState()
     val allReminders by viewModel.allReminders.collectAsState()
+    val checkInFeedback by viewModel.checkInFeedback.collectAsState()
 
     // 进入首页时：确保所有提醒都有排期 + 补偿检测遗漏提醒
     // （系统可能清理掉 WorkManager 任务，不重排的话提醒就再也不响了）
@@ -131,6 +137,14 @@ fun HomeScreen(
     var selectedDate by remember { mutableStateOf<Long?>(null) }
     // 智能清单
     var smartList by remember { mutableStateOf(SmartList.ALL) }
+
+    // 批次3 功能6: 单条分享卡片粘贴导入
+    var showCardImportDialog by remember { mutableStateOf(false) }
+    var cardImportText by remember { mutableStateOf("") }
+    var cardImportMsg by remember { mutableStateOf<String?>(null) }
+    // I10: 导入分享卡片需写库（suspend），用协程作用域
+    val scope = rememberCoroutineScope()
+    val cardImportContext = androidx.compose.ui.platform.LocalContext.current
 
     Scaffold(
         topBar = {
@@ -193,6 +207,15 @@ fun HomeScreen(
                                 onClick = {
                                     menuExpanded = false
                                     onImport()
+                                }
+                            )
+                            // 批次3 功能6: 单条分享卡片粘贴导入（聊天里收到的 JSON 直接粘进来）
+                            DropdownMenuItem(
+                                text = { Text(zh("导入分享卡片")) },
+                                leadingIcon = { Icon(Icons.Default.FileDownload, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    showCardImportDialog = true
                                 }
                             )
                             DropdownMenuItem(
@@ -343,7 +366,8 @@ fun HomeScreen(
                             onComplete = { viewModel.confirmReminder(reminder) },
                             onDelete = { pendingDelete = reminder },
                             onClick = { onReminderClick(reminder.id) },
-                            modifier = Modifier.animateItemPlacement()
+                            modifier = Modifier.animateItemPlacement(),
+                            onMakeUp = { viewModel.confirmReminder(reminder, isMakeUp = true) }
                         )
                     }
                 }
@@ -405,6 +429,77 @@ fun HomeScreen(
         )
     }
 
+    // 批次3 功能6: 单条分享卡片粘贴导入对话框（聊天里收到的 JSON 直接粘进来）
+    if (showCardImportDialog) {
+        AlertDialog(
+            onDismissRequest = { showCardImportDialog = false },
+            title = { Text(zh("导入分享卡片")) },
+            text = {
+                Column {
+                    Text(zh("把聊天里收到的提醒卡片 JSON 粘贴到下面，即可导入这条提醒："))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = cardImportText,
+                        onValueChange = { cardImportText = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 120.dp),
+                        placeholder = { Text("{ \"version\": 1, \"reminders\": [ ... ] }") },
+                        singleLine = false,
+                        isError = cardImportMsg != null
+                    )
+                    cardImportMsg?.let { msg ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val json = cardImportText.trim()
+                    if (json.isEmpty()) {
+                        cardImportMsg = zh("请先粘贴分享卡片内容")
+                        return@TextButton
+                    }
+                    val entity = BackupService.importSingle(json)
+                    if (entity == null) {
+                        cardImportMsg = zh("不是有效的分享卡片内容")
+                        return@TextButton
+                    }
+                    try {
+                        // 强制 id=0 让 Room 重新自增，避免与现有行主键冲突
+                        var imported = entity.copy(id = 0)
+                        // I10: 导入时重算下次触发时间（对齐 WebDAV replaceLocal），
+                        //     避免备份里的过期 nextTriggerAt 导致立即触发或永不触发
+                        imported = imported.copy(nextTriggerAt = com.reminderapp.service.ReminderEngine.calculateNextTrigger(imported))
+                        scope.launch {
+                            val newId = ReminderApp.instance.database.reminderDao().insert(imported)
+                            ReminderApp.instance.scheduler.schedule(imported.copy(id = newId))
+                            com.reminderapp.service.SyncStore.touchLocalChange()
+                            com.reminderapp.receiver.ReminderWidgetProvider.refresh(cardImportContext)
+                            cardImportText = ""
+                            cardImportMsg = null
+                            showCardImportDialog = false
+                        }
+                    } catch (e: Exception) {
+                        cardImportMsg = zhf("导入失败：%s", e.message ?: zh("未知错误"))
+                    }
+                }) {
+                    Text(zh("导入"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCardImportDialog = false }) {
+                    Text(zh("取消"))
+                }
+            }
+        )
+    }
+
     // 点击日历日期 → 底部弹窗展示当日任务
     selectedDate?.let { ts ->
         val cal = Calendar.getInstance().apply { timeInMillis = ts }
@@ -442,13 +537,21 @@ fun HomeScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(dateReminders, key = { it.id }) { r ->
-                            ReminderCard(r, StatusReminding, onDelete = { pendingDelete = r }) { onReminderClick(r.id) }
+                            ReminderCard(r, StatusReminding, onDelete = { pendingDelete = r }, onClick = { onReminderClick(r.id) })
                         }
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
+    }
+
+    // 批次2 功能2: 打卡成功正向反馈卡片（顶部浮层，自动消失）
+    Box(modifier = Modifier.fillMaxSize()) {
+        com.reminderapp.ui.component.CheckInFeedbackCard(
+            text = checkInFeedback,
+            onDismiss = viewModel::consumeCheckInFeedback
+        )
     }
 }
 
@@ -522,7 +625,9 @@ fun SwipeableReminderCard(
     onComplete: () -> Unit,
     onDelete: () -> Unit,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** 批次3 功能2：逾期提醒的「补打今天」入口，传 null 则不显示 */
+    onMakeUp: (() -> Unit)? = null
 ) {
     val isDone = reminder.status == "confirmed"
     val density = LocalDensity.current
@@ -590,7 +695,7 @@ fun SwipeableReminderCard(
                     )
                 }
         ) {
-            ReminderCard(reminder, statusColor, onDelete = onDelete, onClick = onClick)
+            ReminderCard(reminder, statusColor, onDelete = onDelete, onClick = onClick, onMakeUp = onMakeUp)
         }
     }
 }
@@ -716,7 +821,9 @@ fun ReminderCard(
     reminder: ReminderEntity,
     statusColor: Color,
     onDelete: () -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    /** 批次3 功能2：逾期提醒的「补打今天」入口，传 null 则不显示 */
+    onMakeUp: (() -> Unit)? = null
 ) {
     val dateFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
     val statusText = when (reminder.status) {
@@ -811,18 +918,35 @@ fun ReminderCard(
                         )
                     }
                 }
-                // 状态胶囊（设计图独立 chip）
+                // 状态胶囊（设计图独立 chip）+ 逾期时的「补打今天」快捷入口
                 if (statusText.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(5.dp))
-                    Text(
-                        text = statusText,
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = statusColor,
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(statusColor.copy(alpha = 0.12f))
-                            .padding(horizontal = 10.dp, vertical = 3.dp)
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = statusColor,
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(statusColor.copy(alpha = 0.12f))
+                                .padding(horizontal = 10.dp, vertical = 3.dp)
+                        )
+                        if (reminder.status == "overdue" && onMakeUp != null) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = zh("补打今天"),
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White,
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(StatusOverdue)
+                                    .clickable(
+                                        onClickLabel = zh("补打今天：按今天完成并推进到下一个周期")
+                                    ) { onMakeUp() }
+                                    .padding(horizontal = 10.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
                 }
                 if (reminder.note.isNotEmpty() && statusText.isEmpty()) {
                     Text(

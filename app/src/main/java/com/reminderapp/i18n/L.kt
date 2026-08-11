@@ -349,6 +349,13 @@ object L {
         "🟢中" to R.string.s_0333,
         "语言" to R.string.s_0334,
         "跟随系统" to R.string.s_0335,
+        "📊 本周统计周报" to R.string.s_0336,
+        "完成 %1\$d 项 · 漏掉 %2\$d 项" to R.string.s_0337,
+        "完成率 %1\$s" to R.string.s_0338,
+        "连续打卡 %1\$d 天" to R.string.s_0339,
+        "暂无" to R.string.s_0340,
+        "打卡成功 🎉" to R.string.s_0341,
+        "打卡成功，已连续 %1\$d 天 🎉" to R.string.s_0342,
     )
 }
 

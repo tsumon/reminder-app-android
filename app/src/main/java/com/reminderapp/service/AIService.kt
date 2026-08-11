@@ -56,13 +56,39 @@ class AIService {
         messages: List<Map<String, Any?>>,
         endpoint: String,
         apiKey: String
+    ): ChatMessage = send(model, messages, endpoint, apiKey, useTools = true)
+
+    /**
+     * 纯文本补全（不带 tools）——用于周报 AI 解读这类「只要一段话」的场景，
+     * 避免模型误触发 function call 导致 content 为空。
+     */
+    suspend fun complete(
+        model: String,
+        messages: List<Map<String, Any?>>,
+        endpoint: String,
+        apiKey: String
+    ): String = send(model, messages, endpoint, apiKey, useTools = false).content.orEmpty().trim()
+
+    private suspend fun send(
+        model: String,
+        messages: List<Map<String, Any?>>,
+        endpoint: String,
+        apiKey: String,
+        useTools: Boolean
     ): ChatMessage = withContext(Dispatchers.IO) {
-        val body = mapOf(
-            "model" to model,
-            "messages" to messages,
-            "tools" to AITools.toolDefinitions(),
-            "tool_choice" to "auto"
-        )
+        val body = if (useTools) {
+            mapOf(
+                "model" to model,
+                "messages" to messages,
+                "tools" to AITools.toolDefinitions(),
+                "tool_choice" to "auto"
+            )
+        } else {
+            mapOf(
+                "model" to model,
+                "messages" to messages
+            )
+        }
 
         val jsonBody = gson.toJson(body)
         val requestBody = jsonBody.toRequestBody("application/json".toMediaType())

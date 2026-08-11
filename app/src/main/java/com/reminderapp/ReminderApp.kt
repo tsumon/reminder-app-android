@@ -49,8 +49,46 @@ class ReminderApp : Application() {
         aiService = AIService()
         aiSettings = AISettings(this)
 
+        // 批次2 功能3: 注册统计周报周期任务（首次对齐下一个周日 20:00，之后每 7 天）
+        scheduleWeeklyReport()
+
         // v1.8.7 任务②: 后台刷新联网节假日数据（当年 + 下一年，跨年预取）
         refreshRemoteHolidays()
+    }
+
+    /**
+     * 批次2 功能3: 统计周报 —— 每天跑一次的周期任务，首次对齐下一个 20:00。
+     *
+     * v2.0.21 修 G1：原为 7 天周期，一旦周日 20:00 的那次被 Doze/省电推迟到周一，
+     * Worker 里「非周日直接 return」就让本周周报永久漏发。改为每天触发，
+     * 由 WeeklyReportWorker 自行判定「该发哪一周」（周日发本周、周一~周三补发上一周）。
+     */
+    private fun scheduleWeeklyReport() {
+        val now = System.currentTimeMillis()
+        // 对齐下一个 20:00（今天 20:00 已过则顺延到明天）
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = now
+            set(Calendar.HOUR_OF_DAY, 20)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        if (cal.timeInMillis <= now) cal.add(Calendar.DAY_OF_MONTH, 1)
+        val initialDelay = maxOf(0L, cal.timeInMillis - now)
+
+        val request = androidx.work.PeriodicWorkRequestBuilder<com.reminderapp.service.WeeklyReportWorker>(
+            1, java.util.concurrent.TimeUnit.DAYS
+        )
+            .setInitialDelay(initialDelay, java.util.concurrent.TimeUnit.MILLISECONDS)
+            .build()
+
+        // UPDATE：从 v2.0.20 升级上来的用户已排了 7 天周期的旧任务，
+        // 用 KEEP 会一直保留旧周期（新逻辑永不生效）；UPDATE 就地换参数且不丢执行历史。
+        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            com.reminderapp.service.WeeklyReportWorker.UNIQUE_NAME,
+            androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
+            request
+        )
     }
 
     private fun refreshRemoteHolidays() {

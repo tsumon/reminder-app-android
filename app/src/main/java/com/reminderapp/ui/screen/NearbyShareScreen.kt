@@ -365,14 +365,14 @@ private fun receive(
         }
         // 导入去重：⚠️ 不能用 id——发送方的 id 是它本地自增的，
         // 接收端已有 id 1..N 时会把对方同 id 的提醒误跳过（丢数据）。
-        // 只用指纹（title|nextTriggerAt|kind|cycle，加类型防「同名同时间」误判）
+        // 指纹（title|nextTriggerAt|kind|cycle|note，加 note 防「同名同时间同类型但备注不同的两条」误判漏导入）
         val existingFp = database.reminderDao().getAllSync()
-            .map { "${it.title}|${it.nextTriggerAt}|${it.kind}|${it.cycle}" }
+            .map { "${it.title}|${it.nextTriggerAt}|${it.kind}|${it.cycle}|${it.note ?: ""}" }
             .toSet()
         var imported = 0
         var skipped = 0
         for (r in entities) {
-            val fp = "${r.title}|${r.nextTriggerAt}|${r.kind}|${r.cycle}"
+            val fp = "${r.title}|${r.nextTriggerAt}|${r.kind}|${r.cycle}|${r.note ?: ""}"
             if (existingFp.contains(fp)) {
                 skipped++
                 continue

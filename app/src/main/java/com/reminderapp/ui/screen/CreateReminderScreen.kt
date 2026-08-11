@@ -11,6 +11,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.reminderapp.data.entity.ReminderEntity
 import com.reminderapp.model.Cycle
@@ -25,6 +27,17 @@ import com.reminderapp.service.ReminderEngine
 import java.util.*
 import com.reminderapp.i18n.zh
 import com.reminderapp.i18n.zhf
+import com.reminderapp.ReminderApp
+import com.reminderapp.data.entity.ReminderRecordEntity
+import com.reminderapp.service.FrequencySuggester
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import android.app.NotificationManager
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,6 +67,15 @@ fun CreateReminderScreen(
     // 优先级
     var priority by remember { mutableStateOf("normal") } // high / normal / low
 
+    // 批次3 功能5: 关键提醒开关（触发更高优先级渠道 + 全屏弹窗）
+    var isCritical by remember { mutableStateOf(false) }
+
+    // H2: 关键提醒全屏权限引导对话框（Android 14+ 未授予时弹出）
+    var showFullScreenPermissionDialog by remember { mutableStateOf(false) }
+
+    // 功能8 智能频率建议：建议文案（点击「智能建议频率」后回填周期选择）
+    var suggestionText by remember { mutableStateOf<String?>(null) }
+
     // 自然语言快速创建
     var nlText by remember { mutableStateOf("") }
     var nlHint by remember { mutableStateOf<String?>(null) }
@@ -80,6 +102,21 @@ fun CreateReminderScreen(
     var showTimeDialog by remember { mutableStateOf(false) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // H2 + I6: 关键提醒需要「全屏弹窗」(Android14+) 与「勿扰访问」两项权限；
+    // 首次开启关键提醒时若任一未授予，弹引导对话框（用户需在设置中手动开启）。
+    fun ensureCriticalPermissions() {
+        val nm = context.getSystemService(NotificationManager::class.java)
+        val needFullScreen = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+            (nm == null || !nm.canUseFullScreenIntent())
+        // I6: 勿扰访问权限用框架 NotificationManager（核心库 NotificationManagerCompat 该属性在
+        // 本项目 core 版本未暴露）；nm 可空，null 时视为需引导。
+        val needPolicy = nm?.isNotificationPolicyAccessGranted != true
+        if (needFullScreen || needPolicy) {
+            showFullScreenPermissionDialog = true
+        }
+    }
 
     fun buildFirstTriggerAt(): Long {
         val cal = Calendar.getInstance()
@@ -159,7 +196,8 @@ fun CreateReminderScreen(
                                     title = title.trim(),
                                     note = note.trim(),
                                     firstTriggerAt = firstTrigger,
-                                    nextTriggerAt = firstTrigger
+                                    nextTriggerAt = firstTrigger,
+                                    isCritical = isCritical
                                 )
                             } else if (isRuleMode) {
                                 ReminderEntity(
@@ -174,7 +212,8 @@ fun CreateReminderScreen(
                                     title = title.trim(),
                                     note = note.trim(),
                                     firstTriggerAt = firstTrigger,
-                                    nextTriggerAt = firstTrigger
+                                    nextTriggerAt = firstTrigger,
+                                    isCritical = isCritical
                                 )
                             } else {
                                 ReminderEntity(
@@ -185,7 +224,8 @@ fun CreateReminderScreen(
                                     title = title.trim(),
                                     note = note.trim(),
                                     firstTriggerAt = firstTrigger,
-                                    nextTriggerAt = firstTrigger
+                                    nextTriggerAt = firstTrigger,
+                                    isCritical = isCritical
                                 )
                             }
 
@@ -482,6 +522,41 @@ fun CreateReminderScreen(
                     }
                 }
 
+                // 功能8 智能频率建议入口
+                Button(
+                    onClick = {
+                        suggestionText = null
+                        scope.launch(Dispatchers.IO) {
+                            val db = ReminderApp.instance.database
+                            val all = db.reminderDao().getAllSyncBlocking()
+                            val recs = db.reminderRecordDao().getAll()
+                            val confirmByReminder = recs
+                                .filter { it.action == ReminderRecordEntity.ACTION_CONFIRMED }
+                                .groupBy { it.reminderId }
+                                .mapValues { (_, v) -> v.map { it.timestamp } }
+                            val s = FrequencySuggester.suggest(title, all, confirmByReminder)
+                            withContext(Dispatchers.Main) {
+                                selectedCycle = s.cycle
+                                customDays = s.customDays
+                                suggestionText = s.reason
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Filled.AutoAwesome, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(zh("智能建议频率"))
+                }
+                suggestionText?.let {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
                 if (selectedCycle == Cycle.CUSTOM) {
                     OutlinedTextField(
                         value = customDays.toString(),
@@ -640,6 +715,38 @@ fun CreateReminderScreen(
                 )
             }
 
+            // 批次3 功能5: 关键提醒开关
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(zh("关键提醒"), style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            zh("重要事项，触发时全屏弹出并不穿透勿扰，确保不被漏看"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = isCritical,
+                        onCheckedChange = {
+                            isCritical = it
+                            if (it) ensureCriticalPermissions()
+                        },
+                        modifier = Modifier.semantics {
+                            contentDescription = zh("关键提醒开关：开启后触发时全屏弹出，确保不被漏看")
+                        }
+                    )
+                }
+            }
+
             // 提醒时间
             Text(zh("提醒时间（点击选择）"), style = MaterialTheme.typography.labelLarge)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -736,6 +843,47 @@ fun CreateReminderScreen(
                     TextButton(onClick = { showTimeDialog = false }) { Text(zh("取消")) }
                 },
                 text = { TimePicker(state = timeState) }
+            )
+        }
+
+        // H2 + I6: 关键提醒全屏 / 勿扰访问权限引导（任一未授予时弹出）
+        if (showFullScreenPermissionDialog) {
+            val nm = context.getSystemService(NotificationManager::class.java)
+            val needFullScreen = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+                (nm == null || !nm.canUseFullScreenIntent())
+            // I6: 勿扰访问权限用框架 NotificationManager（同上）
+            val needPolicy = nm?.isNotificationPolicyAccessGranted != true
+            AlertDialog(
+                onDismissRequest = { showFullScreenPermissionDialog = false },
+                title = { Text(zh("开启关键提醒所需权限")) },
+                text = {
+                    Text(
+                        zh(
+                            "关键提醒需要以下权限才能正常弹出并穿透勿扰：" +
+                                (if (needFullScreen) "\n· 全屏界面（Android 14+ 默认不授予，需手动开启）" else "") +
+                                (if (needPolicy) "\n· 勿扰访问（允许关键提醒在勿扰模式下响铃）" else "")
+                        )
+                    )
+                },
+                confirmButton = {
+                    if (needFullScreen) {
+                        TextButton(onClick = {
+                            showFullScreenPermissionDialog = false
+                            val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
+                                data = Uri.fromParts("package", context.packageName, null)
+                            }
+                            context.startActivity(intent)
+                        }) { Text(zh("去设置（全屏）")) }
+                    } else if (needPolicy) {
+                        TextButton(onClick = {
+                            showFullScreenPermissionDialog = false
+                            context.startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+                        }) { Text(zh("去设置（勿扰）")) }
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showFullScreenPermissionDialog = false }) { Text(zh("稍后")) }
+                }
             )
         }
     }

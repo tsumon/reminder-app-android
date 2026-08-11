@@ -17,6 +17,8 @@ object SyncStore {
     // v2.0.17: 单调版本——墙钟可回拨/双端时钟有偏差，判新改用自增版本，时间戳仅兜底
     private const val KEY_LOCAL_VERSION = "local_version"
     private const val KEY_LAST_SYNC_VERSION = "last_sync_version"
+    // v2.0.21 F1: 是否成功同步过至少一次（首次同步版本不可比，需回退时间戳判新）
+    private const val KEY_HAS_SYNCED_ONCE = "has_synced_once"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -66,6 +68,23 @@ object SyncStore {
     var lastSyncVersion: Long
         get() = prefs(ReminderApp.instance).getLong(KEY_LAST_SYNC_VERSION, 0L)
         set(value) = prefs(ReminderApp.instance).edit().putLong(KEY_LAST_SYNC_VERSION, value).apply()
+
+    /**
+     * v2.0.21 F1: 是否成功同步过至少一次。
+     *
+     * 首次同步时远程 dataVersion 是「该账号历史累计值」（可能很大），而本地 localVersion 从 0 起，
+     * 两者不同源不可比——直接版本比较会永远判「远程新」，把本机新建的提醒静默覆盖掉。
+     * 因此首次同步回退时间戳判新。
+     *
+     * 兼容升级：老用户 lastSyncVersion 已 > 0，判定时会与本标记「或」处理，不受影响。
+     */
+    var hasSyncedOnce: Boolean
+        get() = prefs(ReminderApp.instance).getBoolean(KEY_HAS_SYNCED_ONCE, false)
+        set(value) = prefs(ReminderApp.instance).edit().putBoolean(KEY_HAS_SYNCED_ONCE, value).apply()
+
+    /** 是否为「首次同步」（版本不可比场景）：从未成功同步过且无历史同步版本 */
+    val isFirstSync: Boolean
+        get() = !hasSyncedOnce && lastSyncVersion <= 0L
 
     /** 标记本地数据发生了变更（墙钟时间戳 + 单调版本同时推进） */
     fun touchLocalChange() {

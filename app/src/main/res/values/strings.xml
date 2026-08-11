@@ -33,8 +33,12 @@
     <string name="reminder_time">提醒时间</string>
     <string name="notification_channel_name">循环提醒</string>
     <string name="notification_channel_desc">提醒事项通知，含确认和稍后操作</string>
+    <string name="critical_channel_name">关键提醒</string>
+    <string name="critical_channel_desc">最高优先级，锁屏时全屏弹出，确保重要事项不被漏看</string>
     <string name="advance_channel_name">提前预告</string>
     <string name="advance_channel_desc">日期提醒的提前预告通知</string>
+    <string name="weekly_channel_name">统计周报</string>
+    <string name="weekly_channel_desc">每周日推送本周完成统计</string>
     <string name="confirm_action">确认完成</string>
     <string name="snooze_action">稍后提醒</string>
     <string name="no_reminders">暂无提醒</string>
@@ -377,4 +381,11 @@
     <string name="s_0333">🟢中</string>
     <string name="s_0334">语言</string>
     <string name="s_0335">跟随系统</string>
+    <string name="s_0336">📊 本周统计周报</string>
+    <string name="s_0337">完成 %1$d 项 · 漏掉 %2$d 项</string>
+    <string name="s_0338">完成率 %1$s</string>
+    <string name="s_0339">连续打卡 %1$d 天</string>
+    <string name="s_0340">暂无</string>
+    <string name="s_0341">打卡成功 🎉</string>
+    <string name="s_0342">打卡成功，已连续 %1$d 天 🎉</string>
 </resources>

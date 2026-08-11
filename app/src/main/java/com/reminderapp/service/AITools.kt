@@ -25,6 +25,8 @@ object AITools {
 
         **批量创建（关键）：** 若用户一次给出多个生日（例如"老公生日:新历9月5号 / 婆婆生日:农历7月初五 / 老娘生日:新历1月14号，旧历12月18 / 啊姨生日:新历7月14号，旧历6月15"），必须为每一个人分别调用一次 create_reminder（一次只创建一条），title 用"XX生日"。优先取"新历/公历"日期；若只给了"旧历/农历"，则使用 lunar_birthday 与对应月日。不要合并、也不要漏掉任何一个人。
 
+        **批量整理（关键）：** 若用户粘贴了一段包含多条待办的文字（聊天记录 / 便签 / 需求文档 / 多行清单），→ 调用 import_tasks，把每段解析为一条提醒（尽量补全 title / 周期 / 时间），批量预览确认后再创建。不要逐条调用 create_reminder。
+
         **周期提醒：**
         - 每天 → kind=cycle, cycle=daily
         - 每周/周一 → kind=cycle, cycle=weekly
@@ -60,7 +62,7 @@ object AITools {
                         "title" to mapOf("type" to "string", "description" to "提醒标题"),
                         "note" to mapOf("type" to "string", "description" to "备注"),
                         "kind" to mapOf("type" to "string", "enum" to listOf("cycle", "date", "rule"), "description" to "周期/日期/规则(第N周周X)"),
-                        "cycle" to mapOf("type" to "string", "enum" to listOf("daily", "weekly", "biweekly", "monthly", "quarterly", "yearly")),
+                        "cycle" to mapOf("type" to "string", "enum" to listOf("daily", "weekly", "biweekly", "monthly", "quarterly", "yearly", "custom", "once")),
                         "custom_days" to mapOf("type" to "integer"),
                         "rule_period" to mapOf("type" to "string", "enum" to listOf("monthly", "quarterly", "yearly"), "description" to "规则提醒频率，如每季度/每年"),
                         "rule_week" to mapOf("type" to "integer", "description" to "规则提醒：第几周(1-5)"),
@@ -156,6 +158,43 @@ object AITools {
                     "required" to listOf("title_keyword")
                 )
             )
+        ),
+            mapOf(
+                "type" to "function",
+                "function" to mapOf(
+                    "name" to "import_tasks",
+                    "description" to "把用户给的多段待办文本批量解析为多条提醒并预览，确认后再批量创建",
+                    "parameters" to mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "items" to mapOf(
+                                "type" to "array",
+                                "description" to "逐条待办，每条解析为一条提醒",
+                                "items" to mapOf(
+                                    "type" to "object",
+                                    "properties" to mapOf(
+                                        "title" to mapOf("type" to "string", "description" to "提醒标题"),
+                                        "note" to mapOf("type" to "string", "description" to "备注"),
+                                        "kind" to mapOf("type" to "string", "enum" to listOf("cycle", "date", "rule"), "description" to "周期/日期/规则"),
+                                        "cycle" to mapOf("type" to "string", "enum" to listOf("daily", "weekly", "biweekly", "monthly", "quarterly", "yearly", "custom", "once")),
+                                        "custom_days" to mapOf("type" to "integer"),
+                                        "rule_period" to mapOf("type" to "string", "enum" to listOf("monthly", "quarterly", "yearly")),
+                                        "rule_week" to mapOf("type" to "integer"),
+                                        "rule_weekday" to mapOf("type" to "integer"),
+                                        "date_type" to mapOf("type" to "string", "enum" to listOf("solar_birthday", "lunar_birthday", "holiday")),
+                                        "target_month" to mapOf("type" to "integer"),
+                                        "target_day" to mapOf("type" to "integer"),
+                                        "holiday_name" to mapOf("type" to "string"),
+                                        "advance_days" to mapOf("type" to "integer"),
+                                        "reminder_hour" to mapOf("type" to "integer"),
+                                        "reminder_minute" to mapOf("type" to "integer")
+                                    )
+                                )
+                            )
+                        ),
+                        "required" to listOf("items")
+                    )
+                )
+            )
         )
-    )
 }

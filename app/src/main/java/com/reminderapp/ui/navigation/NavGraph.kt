@@ -57,8 +57,19 @@ fun NavGraph(
     scheduler: ReminderScheduler,
     notificationMgr: NotificationManager,
     aiService: AIService,
-    aiSettings: AISettings
+    aiSettings: AISettings,
+    deepLinkReminderId: Long? = null,
+    onDeepLinkConsumed: () -> Unit = {}
 ) {
+    // 批次2 功能1: 通知点击直达确认面板 —— 冷启动(onCreate)与热启动(onNewIntent)都走这里。
+    // 每次 deepLinkReminderId 变化（首次 set 或 onNewIntent 更新）导航一次，
+    // 导航后回调清空，避免「同 id 再次点击不触发 / 重组重复导航」。
+    LaunchedEffect(deepLinkReminderId) {
+        val id = deepLinkReminderId ?: return@LaunchedEffect
+        navController.navigate("detail/$id")
+        onDeepLinkConsumed()
+    }
+
     // v1.9.8 UI 对齐设计图：底部导航 4 Tab（首页 / 日历 / 统计 / AI）
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -172,13 +183,17 @@ fun NavGraph(
                         reminders.forEach { r ->
                             // 强制 id=0 让 Room 重新自增：备份 JSON 保留了原 id，
                             // 直接插入会与现有行（含软删行）主键冲突 → SQLiteConstraintException 崩溃
+                            var imported = r.copy(id = 0)
+                            // I10: 导入时重算下次触发时间（对齐 WebDAV replaceLocal），
+                            //     避免备份里的过期 nextTriggerAt 导致立即触发或永不触发
+                            imported = imported.copy(nextTriggerAt = com.reminderapp.service.ReminderEngine.calculateNextTrigger(imported))
                             val newId = try {
-                                database.reminderDao().insert(r.copy(id = 0))
+                                database.reminderDao().insert(imported)
                             } catch (e: Exception) {
                                 android.util.Log.e("NavGraph", "导入单条失败: ${e.message}")
                                 return@forEach
                             }
-                            scheduler.schedule(r.copy(id = newId))
+                            scheduler.schedule(imported.copy(id = newId))
                         }
                         com.reminderapp.service.SyncStore.touchLocalChange()
                         com.reminderapp.receiver.ReminderWidgetProvider.refresh(context)

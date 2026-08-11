@@ -36,6 +36,9 @@ import java.util.*
 import com.reminderapp.i18n.zh
 import com.reminderapp.i18n.zhf
 
+// 批量导入预览状态（import_tasks 工具解析后挂起，等用户在弹窗确认后再批量写入）
+private val pendingImportState = mutableStateOf<List<ReminderEntity>?>(null)
+
 // ---- Message Model ----
 
 data class ChatMessage(
@@ -286,6 +289,42 @@ fun AIChatScreen(
                     }
                 }
             }
+        // 批量导入预览弹窗（import_tasks 工具解析后确认）
+        val pendingImport = pendingImportState.value
+        if (pendingImport != null) {
+            AlertDialog(
+                onDismissRequest = { pendingImportState.value = null },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val items = pendingImport
+                        pendingImportState.value = null
+                        scope.launch {
+                            commitImport(items, database, scheduler, notificationMgr)
+                            Toast.makeText(context, zhf("已批量创建 %d 条提醒", items.size), Toast.LENGTH_SHORT).show()
+                        }
+                    }) { Text(zh("确认创建")) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingImportState.value = null }) { Text(zh("取消")) }
+                },
+                title = { Text(zh("批量创建提醒")) },
+                text = {
+                    LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
+                        items(count = pendingImport.size) { i ->
+                            val e = pendingImport[i]
+                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(e.title, style = MaterialTheme.typography.bodyMedium)
+                                    Text(describeReminder(e), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                }
+            )
+        }
         }
     }
 }
@@ -414,11 +453,17 @@ private suspend fun executeTool(
         "snooze_reminder" -> handleSnooze(args, database, scheduler, notificationMgr)
         "delete_reminder" -> handleDelete(args, database)
         "update_reminder" -> handleUpdate(args, database, scheduler)
+        "import_tasks" -> handleImportTasks(args, database, scheduler, notificationMgr, gson)
         else -> zhf("未知工具: %s", name)
     }
 }
 
-private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase, scheduler: ReminderScheduler, notificationMgr: NotificationManager): String {
+/**
+ * 解析工具参数 → 构造 ReminderEntity。
+ * 返回 (entity, null) 成功；或 (null, errorMessage) 校验失败。
+ * handleCreate 与 import_tasks 共用，避免重复解析逻辑。
+ */
+private fun tryBuildEntity(args: Map<String, Any?>): Pair<ReminderEntity?, String?> {
     val title = (args["title"] as? String) ?: zh("未命名提醒")
     val kind = (args["kind"] as? String) ?: "cycle"
     val note = (args["note"] as? String) ?: ""
@@ -447,18 +492,18 @@ private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase,
     // v1.9.6 fix: kind/cycle/dateType 白名单校验。
     // 非法值会静默降级（调度走 else 分支、日历不显示）→「创建成功但永远不对」的幽灵提醒
     if (kind !in setOf("cycle", "date", "rule")) {
-        return zhf("提醒类型无效（%s），只支持：周期(cycle)/日期(date)/规则(rule)。", kind)
+        return Pair(null, zhf("提醒类型无效（%s），只支持：周期(cycle)/日期(date)/规则(rule)。", kind))
     }
     if (kind == "cycle" && cycle !in setOf("daily", "weekly", "biweekly", "monthly", "quarterly", "yearly", "custom", "once")) {
-        return zhf("周期类型无效（%s），只支持：每天/每周/每两周/每月/每季度/每年/自定义/一次。", cycle)
+        return Pair(null, zhf("周期类型无效（%s），只支持：每天/每周/每两周/每月/每季度/每年/自定义/一次。", cycle))
     }
     // v1.9.6 fix: kind=date 必须带 dateType——null 会退化成「一年后随机时刻」的幽灵提醒
     if (kind == "date" && dateType !in setOf("solar_birthday", "lunar_birthday", "holiday")) {
-        return zh("日期提醒需要指定类型（公历生日/农历生日/节假日），例如：农历八月十五。请补充类型，我再为你创建。")
+        return Pair(null, zh("日期提醒需要指定类型（公历生日/农历生日/节假日），例如：农历八月十五。请补充类型，我再为你创建。"))
     }
     // v1.9.6 fix: cycle=custom 必须 customDays>=1，否则 interval=0 → Worker 立即重触发死循环
     if (cycle == "custom" && customDays < 1) {
-        return zh("自定义周期需要指定间隔天数（如：每3天），custom_days 至少为 1。")
+        return Pair(null, zh("自定义周期需要指定间隔天数（如：每3天），custom_days 至少为 1。"))
     }
 
     val now = System.currentTimeMillis()
@@ -479,14 +524,14 @@ private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase,
     if (kind == "date" && dateType != "holiday" &&
         (targetMonth !in 1..12 || targetDay !in 1..31)
     ) {
-        return zh("需要具体的公历/农历月日才能创建日期提醒（例如：农历八月十五、公历5月1日）。请补充月日，我再为你创建。")
+        return Pair(null, zh("需要具体的公历/农历月日才能创建日期提醒（例如：农历八月十五、公历5月1日）。请补充月日，我再为你创建。"))
     }
     if (kind == "date" && dateType == "holiday" && holidayName.isNullOrBlank()) {
-        return zh("需要指定节假日名称（例如：春节、中秋节）才能创建节假日提醒。")
+        return Pair(null, zh("需要指定节假日名称（例如：春节、中秋节）才能创建节假日提醒。"))
     }
     // v1.9.0 fix: 规则提醒必须带全 频率/第几周/周几
     if (kind == "rule" && (rulePeriod == null || ruleWeek == null || ruleWeekday == null)) {
-        return zh("规则提醒需要指定频率（每月/每季度/每年）、第几周和星期几，例如：每季度第一周周四。请补充完整，我再为你创建。")
+        return Pair(null, zh("规则提醒需要指定频率（每月/每季度/每年）、第几周和星期几，例如：每季度第一周周四。请补充完整，我再为你创建。"))
     }
 
     val entity = ReminderEntity(
@@ -501,14 +546,64 @@ private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase,
 
     // 用引擎重算 nextTriggerAt（日期/规则类按目标月日计算，避免落到 +1 分钟）
     val nextTrigger = ReminderEngine.calculateNextTrigger(entity)
-    val finalEntity = entity.copy(nextTriggerAt = nextTrigger)
+    return Pair(entity.copy(nextTriggerAt = nextTrigger), null)
+}
 
-    val id = database.reminderDao().insert(finalEntity)
-    scheduler.schedule(finalEntity.copy(id = id))
+private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase, scheduler: ReminderScheduler, notificationMgr: NotificationManager): String {
+    val (entity, err) = tryBuildEntity(args)
+    if (entity == null) return err ?: zh("创建失败")
+    val id = database.reminderDao().insert(entity)
+    scheduler.schedule(entity.copy(id = id))
     // v1.9.6 fix: 漏 touchLocalChange → AI 新建的提醒永远不同步 / 被远程旧数据覆盖
     com.reminderapp.service.SyncStore.touchLocalChange()
     com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
-    return zhf("已创建提醒：「%s」", title)
+    return zhf("已创建提醒：「%s」", entity.title)
+}
+
+/**
+ * import_tasks 工具：把多段待办文本解析为多条提醒，挂起预览弹窗等用户确认。
+ * 不直接写入数据库——确认逻辑在 commitImport（用户点「确认创建」时调用）。
+ */
+private suspend fun handleImportTasks(
+    args: Map<String, Any?>, database: AppDatabase, scheduler: ReminderScheduler, notificationMgr: NotificationManager, gson: Gson
+): String {
+    val rawItems = (args["items"] as? List<*>) ?: emptyList<Any?>()
+    if (rawItems.isEmpty()) return zh("没有解析到可批量创建的提醒。")
+    val built = mutableListOf<ReminderEntity>()
+    val skipped = mutableListOf<String>()
+    for (raw in rawItems) {
+        val m = (raw as? Map<*, *>)?.mapNotNull { (k, v) -> (k as? String)?.let { it to v } }?.toMap() ?: emptyMap()
+        val (e, err) = tryBuildEntity(m)
+        if (e != null) built.add(e) else skipped.add(err ?: zh("无法解析"))
+    }
+    if (built.isEmpty()) {
+        return zh("解析失败：") + skipped.joinToString("；")
+    }
+    pendingImportState.value = built
+    val sb = StringBuilder(zhf("已解析出 %d 条提醒，请确认后批量创建：", built.size))
+    built.forEachIndexed { i, e -> sb.append("\n${i + 1}. ${e.title} 〔${describeReminder(e)}〕") }
+    if (skipped.isNotEmpty()) sb.append("\n（${skipped.size} 条无法解析已跳过）")
+    return sb.toString()
+}
+
+private fun describeReminder(e: ReminderEntity): String {
+    return when {
+        e.kind == "date" && e.dateType == "holiday" -> e.holidayName ?: zh("节假日")
+        e.kind == "date" -> zh("日期")
+        else -> e.cycle
+    }
+}
+
+/** 用户确认预览后批量写入：逐条 insert + 调度 + 标记本地变更 + 刷新小组件 */
+private suspend fun commitImport(
+    items: List<ReminderEntity>, database: AppDatabase, scheduler: ReminderScheduler, notificationMgr: NotificationManager
+) {
+    for (e in items) {
+        val id = database.reminderDao().insert(e)
+        scheduler.schedule(e.copy(id = id))
+    }
+    com.reminderapp.service.SyncStore.touchLocalChange()
+    com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
 }
 
 private suspend fun handleList(database: AppDatabase): String {

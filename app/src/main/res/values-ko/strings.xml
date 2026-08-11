@@ -33,8 +33,12 @@
     <string name="reminder_time">알림 시각</string>
     <string name="notification_channel_name">반복 알림</string>
     <string name="notification_channel_desc">확인 및 스누즈 동작이 포함된 알림</string>
+    <string name="critical_channel_name">중요 알림</string>
+    <string name="critical_channel_desc">최상위 우선순위로 잠금 화면에서 전체 화면으로 표시되어 중요한 항목을 놓치지 않습니다</string>
     <string name="advance_channel_name">사전 알림</string>
     <string name="advance_channel_desc">날짜 알림의 사전 예고 알림</string>
+    <string name="weekly_channel_name">주간 리포트</string>
+    <string name="weekly_channel_desc">매주 일요일 이번 주 완료 통계 푸시</string>
     <string name="confirm_action">완료 확인</string>
     <string name="snooze_action">나중에 알림</string>
     <string name="no_reminders">알림이 없습니다</string>
@@ -377,4 +381,11 @@
     <string name="s_0333">🟢보통</string>
     <string name="s_0334">언어</string>
     <string name="s_0335">시스템 따르기</string>
+    <string name="s_0336">📊 이번 주 통계 리포트</string>
+    <string name="s_0337">완료 %1$d건 · 놓침 %2$d건</string>
+    <string name="s_0338">완료율 %1$s</string>
+    <string name="s_0339">연속 달성 %1$d일</string>
+    <string name="s_0340">없음</string>
+    <string name="s_0341">체크인 성공 🎉</string>
+    <string name="s_0342">체크인 성공, %1$d일 연속 🎉</string>
 </resources>

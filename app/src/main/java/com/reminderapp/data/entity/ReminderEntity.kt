@@ -48,6 +48,10 @@ data class ReminderEntity(
     // 确认完成后清空；仅 kind∈{cycle,rule} 的提醒会参与前移，生日/节假日日期提醒不参与。
     @ColumnInfo(name = "holiday_adjust_note") val holidayAdjustNote: String? = null,
 
+    // === 关键提醒（批次3 功能5）===
+    // 关键提醒走更高优先级渠道 + 全屏弹窗（setFullScreenIntent），确保重要事项不被漏看。
+    @ColumnInfo(name = "is_critical") val isCritical: Boolean = false,
+
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "is_active") val isActive: Boolean = true
 )

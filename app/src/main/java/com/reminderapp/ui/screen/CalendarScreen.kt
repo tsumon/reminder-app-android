@@ -95,7 +95,7 @@ fun CalendarScreen(
                     }
                 } else {
                     items(dateReminders, key = { it.id }) { r ->
-                        ReminderCard(r, StatusReminding, onDelete = {}) { onReminderClick(r.id) }
+                        ReminderCard(r, StatusReminding, onDelete = {}, onClick = { onReminderClick(r.id) })
                     }
                 }
             }

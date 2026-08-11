@@ -9,4 +9,7 @@
     <color name="status_reminding">#FFE74C3C</color>
     <color name="status_waiting">#FF3498DB</color>
     <color name="status_completed">#FF27AE60</color>
+    <!-- Launcher adaptive icon background (teal, matches the icon design's median teal).
+         Kept separate from app_primary (red brand color) so app branding is untouched. -->
+    <color name="ic_launcher_background">#41A7A3</color>
 </resources>

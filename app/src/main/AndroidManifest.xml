@@ -3,6 +3,13 @@
 
     <!-- 通知权限 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 批次3 功能5: 关键提醒全屏弹窗。
+         ⚠️ 修正（H2）：Android 14+(API 34) 起 USE_FULL_SCREEN_INTENT 默认仅授予
+         电话/闹钟类应用，普通应用需用户手动到设置开启；未授予时 setFullScreenIntent
+         / setBypassDnd 会静默降级为普通通知。首次开启关键提醒时引导授权（见 CreateReminderScreen） -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- I6: 关键提醒穿透勿扰（setBypassDnd）需要声明此权限，并在首次开启关键提醒时引导用户到设置授予 -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -28,6 +35,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.ReminderApp">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
