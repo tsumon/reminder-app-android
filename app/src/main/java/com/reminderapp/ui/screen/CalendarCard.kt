@@ -115,6 +115,9 @@ fun CalendarCard(
                 }
         ) {
             // === 头部：月份 + 切换 + 今天信息 ===
+            // v2.0.22: 是否正在浏览当月（副标题据此显示「今天」信息，避免跨月语义错位）
+            val isCurrentMonth = displayYear == todayCal.get(Calendar.YEAR) &&
+                displayMonth == todayCal.get(Calendar.MONTH)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
                     onClick = {
@@ -147,15 +150,19 @@ fun CalendarCard(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    // v2.0.22: 副标题只描述当前浏览月份——原实现始终显示「今天」的
+                    // 农历/星期/节假日，切到明年某月时标题与副标题语义错位
                     Text(
-                        text = zhf("农历%1\$s · %2\$s%3\$s", todayLunar, todayWeekday, todayStatusSuffix),
+                        text = if (isCurrentMonth) {
+                            zhf("今天 · 农历%1\$s · %2\$s%3\$s", todayLunar, todayWeekday, todayStatusSuffix)
+                        } else {
+                            ""
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 // 回到今天（非当月时显示，v1.8.7 UI 优化）
-                val isCurrentMonth = displayYear == todayCal.get(Calendar.YEAR) &&
-                    displayMonth == todayCal.get(Calendar.MONTH)
                 if (!isCurrentMonth) {
                     TextButton(onClick = {
                         displayYear = todayCal.get(Calendar.YEAR)

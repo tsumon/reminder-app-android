@@ -50,7 +50,10 @@ class WidgetActionReceiver : BroadcastReceiver() {
                 db.reminderDao().update(updated)
                 // v1.9.6 fix: 完成确认后取消已显示的通知
                 com.reminderapp.service.NotificationManager(appContext).cancelReminderNotifications(reminderId)
-                scheduler.schedule(updated)
+                // v2.0.22: 一次性提醒确认后归档，不重排（对齐 NotificationActionReceiver）
+                if (!(updated.kind == "cycle" && updated.cycle == "once")) {
+                    scheduler.schedule(updated)
+                }
                 // v1.9.6 fix: 漏 touchLocalChange → 本地新数据被远程旧数据覆盖
                 SyncStore.touchLocalChange()
                 // 刷新小组件（含下次提醒与倒计时）

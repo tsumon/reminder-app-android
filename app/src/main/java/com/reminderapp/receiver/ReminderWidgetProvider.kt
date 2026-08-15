@@ -150,9 +150,11 @@ class ReminderWidgetProvider : AppWidgetProvider() {
                 val reminders = AppDatabase.getInstance(context).reminderDao().getAllSync()
                 val now = System.currentTimeMillis()
 
-                // 未处理：notifying 状态或已到时间未确认
+                // 未处理：notifying/overdue 状态或已到时间未确认
+                // v2.0.22: overdue 纳入未处理数——原实现漏掉逾期，首页显示逾期但
+                // 小组件未处理数为 0，两个 UI 口径不一致
                 val unhandled = reminders.count {
-                    it.status == "notifying" ||
+                    it.status == "notifying" || it.status == "overdue" ||
                         (it.status in listOf("idle", "pending") && it.nextTriggerAt <= now)
                 }
 

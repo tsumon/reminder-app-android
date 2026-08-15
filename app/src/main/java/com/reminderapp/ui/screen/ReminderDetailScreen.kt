@@ -51,7 +51,50 @@ fun ReminderDetailScreen(
     val records by viewModel.records.collectAsState()
     val checkInFeedback by viewModel.checkInFeedback.collectAsState()
 
-    val currentReminder = reminder ?: return
+    // v2.0.22: 通知点击到已删除/不存在的提醒时不再白屏——
+    // 原实现 reminder == null 直接 return，页面既无标题栏也无返回按钮
+    if (reminder == null) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(zh("提醒详情")) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = zh("返回"))
+                        }
+                    }
+                )
+            }
+        ) { padding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(40.dp)
+                    )
+                    Text(
+                        zh("提醒不存在或已被删除"),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    TextButton(onClick = onBack) {
+                        Text(zh("返回首页"))
+                    }
+                }
+            }
+        }
+        return
+    }
+    val currentReminder = reminder
 
     val statusColor = when (currentReminder.status) {
         "notifying" -> StatusReminding

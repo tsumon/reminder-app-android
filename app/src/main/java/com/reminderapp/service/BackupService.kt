@@ -55,6 +55,12 @@ object BackupService {
             obj.put("nextTriggerAt", r.nextTriggerAt)
             obj.put("status", r.status)
             obj.put("isActive", r.isActive)
+            // v2.0.22: 补齐此前遗漏的调度/元数据字段 —— 旧版备份缺字段时导入端
+            // 用 optLong/optString 默认值兼容，不会破坏旧文件
+            obj.put("retryCount", r.retryCount)
+            obj.put("lastConfirmedAt", r.lastConfirmedAt ?: JSONObject.NULL)
+            obj.put("createdAt", r.createdAt)
+            obj.put("holidayAdjustNote", r.holidayAdjustNote ?: JSONObject.NULL)
             // H1: 关键提醒标记纳入备份/同步（缺省 false），覆盖 WebDAV/备份/局域网/分享卡片全部通道
             obj.put("is_critical", r.isCritical)
             arr.put(obj)
@@ -92,6 +98,11 @@ object BackupService {
                     nextTriggerAt = o.optLong("nextTriggerAt", System.currentTimeMillis()),
                     status = o.optString("status", "idle"),
                     isActive = o.optBoolean("isActive", true),
+                    // v2.0.22: 恢复补齐的调度/元数据字段（旧文件缺字段回落默认值）
+                    retryCount = o.optInt("retryCount", 0),
+                    lastConfirmedAt = if (o.isNull("lastConfirmedAt")) null else o.optLong("lastConfirmedAt", -1L).takeIf { it > 0L },
+                    createdAt = o.optLong("createdAt", System.currentTimeMillis()),
+                    holidayAdjustNote = if (o.isNull("holidayAdjustNote")) null else o.optString("holidayAdjustNote", "").ifEmpty { null },
                     // H1: 导入时写回关键标记（缺省 false，兼容旧备份文件缺字段）
                     isCritical = o.optBoolean("is_critical", false)
                 )

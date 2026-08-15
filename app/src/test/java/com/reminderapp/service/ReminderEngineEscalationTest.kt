@@ -89,4 +89,19 @@ class ReminderEngineEscalationTest {
         assertEquals("确认后回到 pending", "pending", confirmed.status)
         assertTrue("确认后推进到未来", confirmed.nextTriggerAt > now)
     }
+
+    @Test
+    fun `checkMissed 排除 overdue 与 confirmed`() {
+        val past = System.currentTimeMillis() - 1000L
+        val overdue = reminder(retryCount = 5, status = "overdue").copy(nextTriggerAt = past)
+        val confirmed = reminder(status = "confirmed").copy(nextTriggerAt = past)
+        val notifying = reminder(status = "notifying").copy(nextTriggerAt = past)
+
+        val missed = ReminderEngine.checkMissed(
+            listOf(overdue, confirmed, notifying),
+            System.currentTimeMillis()
+        )
+        assertEquals("只有非 overdue/confirmed 的到期提醒应被返回", 1, missed.size)
+        assertEquals("notifying", missed[0].status)
+    }
 }

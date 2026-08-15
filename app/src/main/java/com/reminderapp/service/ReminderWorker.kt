@@ -94,7 +94,12 @@ class ReminderWorker(
                 SyncStore.touchLocalChange()
                 com.reminderapp.receiver.ReminderWidgetProvider.refresh(applicationContext)
             } catch (e: Exception) {
-                // 通知已经发出，调度失败不影响本次提醒
+                // v2.0.22: 之前吞掉异常并返回 success —— Room 锁定/磁盘满等故障时
+                // 状态没推进、下一次也没排上，WorkManager 不会重试已成功的任务，
+                // 这条提醒可能永久「再也不响」。改为有限退避重试；通知已发出时
+                // 重试可能重复弹一条，但相比永久静默是可接受的（幂等性见 v1.9.6 TOCTOU 重读）。
+                android.util.Log.e("ReminderWorker", "提醒 ${reminderId} 推进状态/重排失败，将重试", e)
+                return Result.retry()
             }
         }
 

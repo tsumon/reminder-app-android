@@ -32,6 +32,12 @@ class NotificationActionReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val reminder = db.reminderDao().getById(reminderId) ?: return@launch
+                // v2.0.22: 提醒已被删除/停用（含软删）时，旧通知的确认/稍后不应再操作
+                // 已删除记录，只清掉残留通知
+                if (!reminder.isActive) {
+                    notificationMgr.cancelReminderNotifications(reminderId)
+                    return@launch
+                }
 
                 when (intent.action) {
                     NotificationManager.ACTION_CONFIRM -> {

@@ -293,11 +293,12 @@ class ReminderDetailViewModel(
         }
     }
 
-    /** 删除提醒（取消调度 + 删除记录 + 软删除） */
+    /** 删除提醒（取消调度 + 取消已显示通知 + 删除记录 + 软删除） */
     fun delete() {
         viewModelScope.launch {
             val r = _reminder.value ?: return@launch
             scheduler.cancel(r.id)
+            notificationMgr.cancelReminderNotifications(r.id)
             recordDao.deleteByReminderId(r.id)
             dao.softDelete(r.id)
             com.reminderapp.service.SyncStore.touchLocalChange()

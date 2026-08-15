@@ -869,10 +869,12 @@ fun ReminderCard(
             ),
         shape = RoundedCornerShape(Tokens.RadiusCell),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White.copy(alpha = 0.82f)
+            // v2.0.22: 深色模式下固定白色卡片突兀、层级错乱，改用主题 surface
+            //（浅色下仍是白色玻璃观感，深色下自动适配）
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.7f))
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
         Row(
             modifier = Modifier
@@ -948,7 +950,9 @@ fun ReminderCard(
                         }
                     }
                 }
-                if (reminder.note.isNotEmpty() && statusText.isEmpty()) {
+                // v2.0.22: 原条件 statusText.isEmpty() 永远为 false（所有状态都有文案），
+                // 备注在首页被完全隐藏，只能进详情看；去掉该条件，备注跟随状态胶囊展示
+                if (reminder.note.isNotEmpty()) {
                     Text(
                         text = reminder.note,
                         style = MaterialTheme.typography.bodySmall,
