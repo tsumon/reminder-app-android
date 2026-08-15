@@ -11,12 +11,31 @@ import androidx.compose.ui.unit.sp
  * 主色统一为 Material Design 3 紫色 #6750A4。
  */
 object Tokens {
+    // ── 品牌主色（v2.4.0: 可切换色板，默认青碧 Teal）──
+    var BrandPrimary = Color(0xFF159A9C)
+    var BrandPrimaryDark = Color(0xFF0E6E70)
+    var BrandPrimaryContainer = Color(0xFFB2EBE4)
+    var BrandGradientStart = Color(0xFF4DB6AC)
 
-    // ── 品牌主色（双端统一 #6750A4）──
-    val BrandPrimary = Color(0xFF159A9C)   // v2.3.0: 青碧 Teal（从 M3 紫换肤，双端统一）
-    val BrandGradientStart = Color(0xFF4DB6AC)   // v2.3.0: 薄荷亮青渐变起点   // v2.2.1: 品牌渐变起点（对齐 iOS brandGradientStart）
-    val BrandPrimaryDark = Color(0xFF0E6E70)   // 深色主题用
-    val BrandPrimaryContainer = Color(0xFFB2EBE4)
+    /** v2.4.0: 主题色板（primary / primaryDark / gradientStart / container） */
+    data class Palette(
+        val primary: Color, val dark: Color, val gradient: Color, val container: Color
+    )
+
+    val Palettes = listOf(
+        // 青碧（默认）
+        Palette(Color(0xFF159A9C), Color(0xFF0E6E70), Color(0xFF4DB6AC), Color(0xFFB2EBE4)),
+        // 活力蓝
+        Palette(Color(0xFF3B82F6), Color(0xFF1E5BC4), Color(0xFF7FB5FF), Color(0xFFC9E0FF)),
+        // 玫粉
+        Palette(Color(0xFFE0457B), Color(0xFFB02E5C), Color(0xFFF58FB0), Color(0xFFFCD3E1)),
+        // 暖橙
+        Palette(Color(0xFFF07B2F), Color(0xFFC05A16), Color(0xFFF7B27D), Color(0xFFFDE3CC)),
+        // 森林绿
+        Palette(Color(0xFF2E9E5B), Color(0xFF1D7A42), Color(0xFF74C99B), Color(0xFFD1F0DE)),
+        // 深空蓝紫
+        Palette(Color(0xFF6C5CE7), Color(0xFF4A3FB8), Color(0xFFA69CF5), Color(0xFFE1DDFC))
+    )
 
     // ── 状态色（与 iOS 一致）──
     val StatusReminding = Color(0xFFE74C3C)

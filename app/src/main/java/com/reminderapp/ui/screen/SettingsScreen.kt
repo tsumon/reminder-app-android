@@ -1,6 +1,9 @@
 package com.reminderapp.ui.screen
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -21,6 +24,8 @@ import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -148,6 +153,45 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                    HorizontalDivider()
+                    // v2.4.0: 主题色板（切换即全局换肤，Activity recreate 立即生效）
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(zh("主题色"), style = MaterialTheme.typography.bodyLarge)
+                        Spacer(modifier = Modifier.weight(1f))
+                        com.reminderapp.ui.theme.Tokens.Palettes.forEachIndexed { index, palette ->
+                            Box(
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .padding(3.dp)
+                                    .clip(CircleShape)
+                                    .background(palette.primary)
+                                    .border(
+                                        width = 2.dp,
+                                        color = if (com.reminderapp.ui.theme.ThemeStore.colorIndex(context) == index)
+                                            MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                                        shape = CircleShape
+                                    )
+                                    .clickableItem {
+                                        com.reminderapp.ui.theme.ThemeStore.setColorIndex(context, index)
+                                        (context as? android.app.Activity)?.recreate()
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (com.reminderapp.ui.theme.ThemeStore.colorIndex(context) == index) {
+                                    Icon(
+                                        Icons.Filled.Check, contentDescription = null,
+                                        tint = Color.White, modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
                     }
                     HorizontalDivider()
                     listOf(0 to zh("跟随系统"), 1 to zh("浅色"), 2 to zh("深色")).forEach { (mode, label) ->

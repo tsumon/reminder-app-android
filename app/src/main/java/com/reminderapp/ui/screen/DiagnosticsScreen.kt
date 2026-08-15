@@ -188,6 +188,32 @@ fun DiagnosticsScreen(
                 }
             }
 
+            // v2.4.0: 最近崩溃日志（TelemetryService crash.log 尾部，设备特定闪退自查用）
+            item {
+                val crashLog = runCatching {
+                    java.io.File(ReminderApp.instance.filesDir, "telemetry/crash.log")
+                        .takeIf { it.exists() }
+                        ?.readLines()?.takeLast(3) ?: emptyList()
+                }.getOrDefault(emptyList())
+                SettingsCard {
+                    Text(zh("最近崩溃"), style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (crashLog.isEmpty()) {
+                        Text(zh("无崩溃记录"), style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    crashLog.forEach { line ->
+                        Text(
+                            line.take(200),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Tokens.StatusOverdue,
+                            maxLines = 3
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                }
+            }
+
             item {
                 Text(
                     zhf("检查时间：%s", dateFormat.format(Date())),

@@ -17,4 +17,15 @@ object ThemeStore {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putInt(KEY_MODE, mode).apply()
     }
+
+    // v2.4.0: 主题色板索引（0=青碧默认）
+    private const val KEY_COLOR = "theme_color"
+
+    fun colorIndex(context: Context): Int =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_COLOR, 0)
+
+    fun setColorIndex(context: Context, index: Int) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putInt(KEY_COLOR, index).apply()
+    }
 }

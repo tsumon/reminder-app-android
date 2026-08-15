@@ -48,13 +48,20 @@ fun ReminderAppTheme(
     content: @Composable () -> Unit
 ) {
     // v2.1.1: 手动主题优先（0=跟随系统 1=浅色 2=深色；ThemeStore 与 iOS 对齐）
-    val manualMode = androidx.compose.ui.platform.LocalContext.current
-        .let { ThemeStore.mode(it) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val manualMode = context.let { ThemeStore.mode(it) }
     val effectiveDark = when (manualMode) {
         1 -> false
         2 -> true
         else -> darkTheme
     }
+
+    // v2.4.0: 应用所选主题色板（Tokens 品牌色动态切换，全局即时生效）
+    val palette = Tokens.Palettes.getOrElse(ThemeStore.colorIndex(context)) { Tokens.Palettes.first() }
+    Tokens.BrandPrimary = palette.primary
+    Tokens.BrandPrimaryDark = palette.dark
+    Tokens.BrandPrimaryContainer = palette.container
+    Tokens.BrandGradientStart = palette.gradient
 
     // v2.1.0: Material You 动态取色（Android 12+ 跟随壁纸主题；低版本回落品牌紫）
     val colorScheme = if (effectiveDark) {

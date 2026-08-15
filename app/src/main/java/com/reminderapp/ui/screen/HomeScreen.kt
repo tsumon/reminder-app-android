@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -150,12 +151,15 @@ fun HomeScreen(
     val database = com.reminderapp.data.database.AppDatabase.getInstance(androidx.compose.ui.platform.LocalContext.current)
     var todayDone by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) {
-        val cal = java.util.Calendar.getInstance()
-        cal.set(java.util.Calendar.HOUR_OF_DAY, 0); cal.set(java.util.Calendar.MINUTE, 0)
-        cal.set(java.util.Calendar.SECOND, 0); cal.set(java.util.Calendar.MILLISECOND, 0)
-        val start = cal.timeInMillis
-        todayDone = database.reminderRecordDao().getAll()
-            .count { it.action == com.reminderapp.data.entity.ReminderRecordEntity.ACTION_CONFIRMED && it.timestamp >= start }
+        // v2.4.0: 防御——统计失败不影响首页渲染
+        runCatching {
+            val cal = java.util.Calendar.getInstance()
+            cal.set(java.util.Calendar.HOUR_OF_DAY, 0); cal.set(java.util.Calendar.MINUTE, 0)
+            cal.set(java.util.Calendar.SECOND, 0); cal.set(java.util.Calendar.MILLISECOND, 0)
+            val start = cal.timeInMillis
+            todayDone = database.reminderRecordDao().getAll()
+                .count { it.action == com.reminderapp.data.entity.ReminderRecordEntity.ACTION_CONFIRMED && it.timestamp >= start }
+        }
     }
 
     // 长按删除确认框状态
@@ -379,6 +383,26 @@ fun HomeScreen(
                         .filter { it.isActive && it.status != "confirmed" && it.nextTriggerAt > System.currentTimeMillis() }
                         .minByOrNull { it.nextTriggerAt }
                 )
+            }
+
+            // v2.4.0: 今日安排时间线（今天要触发的提醒按时间排列，布局重设计核心）
+            val cal0 = java.util.Calendar.getInstance()
+            cal0.set(java.util.Calendar.HOUR_OF_DAY, 0); cal0.set(java.util.Calendar.MINUTE, 0)
+            cal0.set(java.util.Calendar.SECOND, 0); cal0.set(java.util.Calendar.MILLISECOND, 0)
+            val dayStart = cal0.timeInMillis
+            val dayEnd = dayStart + 86_400_000L
+            val todayReminders = allReminders
+                .filter { it.isActive && it.status != "confirmed" && it.nextTriggerAt in dayStart until dayEnd }
+                .sortedBy { it.nextTriggerAt }
+            if (todayReminders.isNotEmpty()) {
+                item { SectionHeader(zh("今日安排"), Tokens.BrandPrimary, count = todayReminders.size) }
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        todayReminders.forEachIndexed { index, r ->
+                            TodayTimelineRow(reminder = r, isLast = index == todayReminders.size - 1, onClick = { onReminderClick(r.id) })
+                        }
+                    }
+                }
             }
 
             // v1.9.8 UI 对齐设计图：日历卡移到「日历」Tab（CalendarScreen），首页只保留列表
@@ -921,7 +945,10 @@ fun OverviewCard(unhandledCount: Int, nextReminder: ReminderEntity?, todayDone: 
                             Canvas(modifier = Modifier.fillMaxSize()) {
                                 val stroke = 6.dp.toPx()
                                 val inset = stroke / 2
-                                val arcSize = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke)
+                                val arcSize = androidx.compose.ui.geometry.Size(
+                                    (size.width - stroke).coerceAtLeast(1f),
+                                    (size.height - stroke).coerceAtLeast(1f)
+                                )
                                 drawArc(
                                     color = Color.White.copy(alpha = 0.22f),
                                     startAngle = 0f, sweepAngle = 360f,
@@ -980,6 +1007,115 @@ private fun overviewLunar(lunar: com.reminderapp.service.LunarCalendar.LunarDate
     val month = if (lunar.isLeapMonth) "闰" + monthNames.getOrElse(lunar.month) { "" } else monthNames.getOrElse(lunar.month) { "" }
     val day = if (lunar.day in 1..30) dayNames[lunar.day] else "${lunar.day}日"
     return month + "月" + day
+}
+
+/** v2.4.0: 今日安排时间线行（左侧时间 + 竖线圆点 + 右侧卡片，对齐 iOS TodayTimelineView） */
+@Composable
+fun TodayTimelineRow(reminder: ReminderEntity, isLast: Boolean, onClick: () -> Unit) {
+    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+    val dateFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
+    ) {
+        // 左侧时间 + 时间线
+        Column(
+            horizontalAlignment = Alignment.End,
+            modifier = Modifier.width(46.dp)
+        ) {
+            Text(
+                timeFormat.format(Date(reminder.nextTriggerAt)),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = Tokens.BrandPrimary
+            )
+            if (!isLast) {
+                Box(
+                    modifier = Modifier
+                        .width(2.dp)
+                        .weight(1f)
+                        .padding(vertical = 2.dp)
+                        .background(Tokens.BrandPrimary.copy(alpha = 0.25f))
+                )
+            }
+        }
+        // 圆点
+        Box(
+            modifier = Modifier
+                .padding(top = 4.dp)
+                .size(9.dp)
+                .clip(CircleShape)
+                .background(Tokens.BrandPrimary)
+                .border(1.5.dp, Color.White.copy(alpha = 0.6f), CircleShape)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        // 右侧卡片
+        Card(
+            modifier = Modifier
+                .weight(1f)
+                .clickable(onClick = onClick),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // emoji 图标（渐变底）
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    Tokens.BrandPrimary.copy(alpha = 0.30f),
+                                    Tokens.BrandPrimary.copy(alpha = 0.10f)
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(reminderEmoji(reminder), fontSize = 16.sp)
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        reminder.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        if (reminder.status == "overdue") zh("已逾期") else zh("等待中"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (reminder.status == "overdue") Tokens.StatusOverdue else Tokens.StatusWaiting
+                    )
+                }
+                Text(
+                    zhf("%s 后", relativeMinutes(reminder.nextTriggerAt)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+/** 相对时间（分钟/小时） */
+private fun relativeMinutes(target: Long): String {
+    val minutes = ((target - System.currentTimeMillis()) / 60_000L).toInt()
+    return when {
+        minutes <= 0 -> zh("已到点")
+        minutes < 60 -> zhf("%s 分", minutes)
+        else -> zhf("%s 小时 %s 分", minutes / 60, minutes % 60)
+    }
 }
 
 /** 规则提醒的显示文本，如「每季度第2周周二」 */
