@@ -113,4 +113,7 @@ dependencies {
     // 单元测试：JUnit + ICU4J（历法回归测试用，android.icu 与 com.ibm.icu 同源）
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.ibm.icu:icu4j:75.1")
+    // mockable android.jar 里 org.json 全是返回默认值的 stub（JSONObject.toString 返回 null），
+    // 测试类路径上放真实实现，覆盖 stub 后备份/同步协议测试才能跑
+    testImplementation("org.json:json:20240303")
 }

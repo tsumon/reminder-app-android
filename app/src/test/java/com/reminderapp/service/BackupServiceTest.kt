@@ -44,7 +44,7 @@ class BackupServiceTest {
             kind = "cycle", cycle = "daily", status = "notifying", retryCount = 2,
             isCritical = true
         )
-        val json = BackupService.exportToJson(listOf(r))
+        val json = BackupService.exportToJson(listOf(r), dataVersion = 0)
         val parsed = BackupService.importFromJson(json)
         assertEquals(1, parsed?.size)
         val back = parsed!![0]

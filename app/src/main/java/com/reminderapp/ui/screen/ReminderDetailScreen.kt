@@ -94,7 +94,7 @@ fun ReminderDetailScreen(
         }
         return
     }
-    val currentReminder = reminder
+    val currentReminder = reminder!!
 
     val statusColor = when (currentReminder.status) {
         "notifying" -> StatusReminding

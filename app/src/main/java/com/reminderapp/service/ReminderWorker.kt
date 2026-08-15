@@ -66,6 +66,7 @@ class ReminderWorker(
 
         // 周期 / 日期 / 规则提醒：到点后递增重试（对齐 iOS escalateRetry），
         // 未确认不推进周期 —— 1h → 4h → 12h → 24h → 24h → overdue
+        var retryNeeded = false
         runBlocking(Dispatchers.IO) {
             try {
                 // v1.9.6 fix TOCTOU: 发通知后用户可能已点「确认/稍后」（写库+重排），
@@ -99,10 +100,10 @@ class ReminderWorker(
                 // 这条提醒可能永久「再也不响」。改为有限退避重试；通知已发出时
                 // 重试可能重复弹一条，但相比永久静默是可接受的（幂等性见 v1.9.6 TOCTOU 重读）。
                 android.util.Log.e("ReminderWorker", "提醒 ${reminderId} 推进状态/重排失败，将重试", e)
-                return Result.retry()
+                retryNeeded = true
             }
         }
 
-        return Result.success()
+        return if (retryNeeded) Result.retry() else Result.success()
     }
 }

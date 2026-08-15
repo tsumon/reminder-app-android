@@ -25,11 +25,11 @@ object BackupService {
     private const val BACKUP_VERSION = 1
 
     /** 将提醒列表导出为 JSON 字符串（dataVersion 取当前本地单调版本，判新主依据） */
-    fun exportToJson(reminders: List<ReminderEntity>): String {
+    fun exportToJson(reminders: List<ReminderEntity>, dataVersion: Long = SyncStore.localVersion): String {
         val root = JSONObject()
         root.put("version", BACKUP_VERSION)
         root.put("exportedAt", System.currentTimeMillis())
-        root.put("dataVersion", SyncStore.localVersion)
+        root.put("dataVersion", dataVersion)
 
         val arr = JSONArray()
         reminders.forEach { r ->
@@ -66,7 +66,7 @@ object BackupService {
             arr.put(obj)
         }
         root.put("reminders", arr)
-        return root.toString(2)
+        return root.toString(2)!!
     }
 
     /** 从 JSON 字符串解析提醒列表（失败返回 null） */
