@@ -232,16 +232,31 @@ class ReminderDetailViewModel(
         }
     }
 
-    fun snooze() {
+    fun snooze(minutes: Long = 15) {
         viewModelScope.launch {
             val r = _reminder.value ?: return@launch
-            val updated = ReminderEngine.snooze(r)
+            val updated = ReminderEngine.snooze(r, minutes)
             dao.update(updated)
             recordDao.insert(ReminderRecordEntity(reminderId = r.id, action = ReminderRecordEntity.ACTION_SNOOZED))
             scheduler.schedule(updated)
             notificationMgr.cancelReminderNotifications(r.id)
             _reminder.value = updated
             // v2.0.22: 稍后同样参与同步版本与小组件刷新（对齐通知栏/小组件路径）
+            com.reminderapp.service.SyncStore.touchLocalChange()
+            com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+        }
+    }
+
+    /** v2.1.0: 稍后到明天提醒时刻 */
+    fun snoozeTomorrow() {
+        viewModelScope.launch {
+            val r = _reminder.value ?: return@launch
+            val updated = ReminderEngine.snoozeTomorrow(r)
+            dao.update(updated)
+            recordDao.insert(ReminderRecordEntity(reminderId = r.id, action = ReminderRecordEntity.ACTION_SNOOZED))
+            scheduler.schedule(updated)
+            notificationMgr.cancelReminderNotifications(r.id)
+            _reminder.value = updated
             com.reminderapp.service.SyncStore.touchLocalChange()
             com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
         }

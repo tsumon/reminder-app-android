@@ -364,7 +364,7 @@ private fun DayCell(
         // 农历（初二~三十 简化显示）
         Text(
             text = lunarText,
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = Tokens.FontTiny),
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             maxLines = 1
         )

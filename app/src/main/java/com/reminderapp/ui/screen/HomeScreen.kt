@@ -16,18 +16,29 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Cake
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Celebration
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TrackChanges
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
@@ -271,10 +282,11 @@ fun HomeScreen(
             )
         },
         floatingActionButton = {
+            // v2.1.0: 动态颜色下用 primaryContainer 保持主题一致（固定 Primary 会与壁纸色割裂）
             FloatingActionButton(
                 onClick = onCreateReminder,
-                containerColor = Primary,
-                contentColor = Color.White
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
             ) {
                 Icon(Icons.Default.Add, contentDescription = zh("新建提醒"))
             }
@@ -787,22 +799,22 @@ fun ruleLabel(reminder: ReminderEntity): String {
     return zhf("%1\$s第%2\$s周%3\$s", periodLabel, reminder.ruleWeek ?: 1, weekday)
 }
 
-/** 提醒类型 → 展示用 emoji（设计图风格彩色图标容器） */
-fun reminderEmoji(reminder: ReminderEntity): String = when {
-    reminder.kind == "date" && reminder.dateType == "holiday" -> "🎉"
-    reminder.kind == "date" && reminder.dateType == "lunar_birthday" -> "🌙"
-    reminder.kind == "date" && reminder.dateType == "solar_birthday" -> "🎂"
-    reminder.kind == "rule" -> "📅"
+/** 提醒类型 → 展示用图标（v2.1.0: Material Icons 替代 emoji——深浅色一致、与系统风格统一，对齐 iOS typeSymbol） */
+fun reminderIcon(reminder: ReminderEntity): ImageVector = when {
+    reminder.kind == "date" && reminder.dateType == "holiday" -> Icons.Filled.Celebration
+    reminder.kind == "date" && reminder.dateType == "lunar_birthday" -> Icons.Filled.Bedtime
+    reminder.kind == "date" && reminder.dateType == "solar_birthday" -> Icons.Filled.Cake
+    reminder.kind == "rule" -> Icons.Filled.CalendarMonth
     else -> when (reminder.cycle) {
-        "once" -> "⏰"
-        "daily" -> "🔁"
-        "weekly" -> "📆"
-        "biweekly" -> "📆"
-        "monthly" -> "🗓"
-        "quarterly" -> "📊"
-        "yearly" -> "🎯"
-        "custom" -> "⏳"
-        else -> "💡"
+        "once" -> Icons.Filled.Alarm
+        "daily" -> Icons.Filled.Repeat
+        "weekly" -> Icons.Filled.DateRange
+        "biweekly" -> Icons.Filled.DateRange
+        "monthly" -> Icons.Filled.Event
+        "quarterly" -> Icons.Filled.BarChart
+        "yearly" -> Icons.Filled.TrackChanges
+        "custom" -> Icons.Filled.Timer
+        else -> Icons.Filled.Notifications
     }
 }
 
@@ -882,7 +894,7 @@ fun ReminderCard(
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 彩色 emoji 图标容器（设计图：44dp 圆角方块 + 类型色浅底）
+            // 彩色图标容器（设计图：44dp 圆角方块 + 类型色浅底；v2.1.0 Material 图标替代 emoji）
             Box(
                 modifier = Modifier
                     .size(46.dp)
@@ -890,7 +902,12 @@ fun ReminderCard(
                     .background(reminderKindColor(reminder).copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(reminderEmoji(reminder), fontSize = 22.sp)
+                Icon(
+                    imageVector = reminderIcon(reminder),
+                    contentDescription = zh("提醒类型"),
+                    tint = reminderKindColor(reminder),
+                    modifier = Modifier.size(22.dp)
+                )
             }
             Spacer(modifier = Modifier.width(13.dp))
             Column(modifier = Modifier.weight(1f)) {

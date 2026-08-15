@@ -1,6 +1,7 @@
 package com.reminderapp.ui.theme
 
 import android.app.Activity
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -46,7 +47,16 @@ fun ReminderAppTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    // v2.1.0: Material You 动态取色（Android 12+ 跟随壁纸主题；低版本回落品牌紫）
+    val colorScheme = if (darkTheme) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            dynamicDarkColorScheme(androidx.compose.ui.platform.LocalContext.current)
+        } else DarkColorScheme
+    } else {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            dynamicLightColorScheme(androidx.compose.ui.platform.LocalContext.current)
+        } else LightColorScheme
+    }
 
     val view = LocalView.current
     if (!view.isInEditMode) {

@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import com.reminderapp.service.AISettings
 import com.reminderapp.i18n.zh
+import com.reminderapp.ui.theme.Tokens
 
 data class NoApiProvider(val id: String, val name: String, val apiKeyUrl: String, val freeInfo: String, val apiEndpoint: String, val apiModel: String)
 
@@ -142,7 +143,7 @@ fun AISettingsScreen(
             HorizontalDivider()
 
             // ══════ 💰 免费获取 API Key ══════
-            Text(zh("💰 免费获取 API Key"), style = MaterialTheme.typography.titleSmall, color = Color(0xFF4CAF50))
+            Text(zh("💰 免费获取 API Key"), style = MaterialTheme.typography.titleSmall, color = Tokens.StatusCompleted)
 
             noApiProviders.forEach { p ->
                 Card(
@@ -153,9 +154,9 @@ fun AISettingsScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(p.name, fontWeight = FontWeight.SemiBold)
                             Spacer(modifier = Modifier.weight(1f))
-                            Surface(color = Color(0xFF4CAF50).copy(alpha = 0.15f), shape = MaterialTheme.shapes.small) {
+                            Surface(color = Tokens.StatusCompleted.copy(alpha = 0.15f), shape = MaterialTheme.shapes.small) {
                                 Text(zh("免费额度"), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    style = MaterialTheme.typography.labelSmall, color = Color(0xFF4CAF50))
+                                    style = MaterialTheme.typography.labelSmall, color = Tokens.StatusCompleted)
                             }
                         }
                         Text(p.freeInfo, style = MaterialTheme.typography.bodySmall,

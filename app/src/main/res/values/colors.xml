@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="app_primary">#FF6B6B</color>
+    <color name="app_primary">#FF6750A4</color>
     <color name="app_on_primary">#FFFFFFFF</color>
     <color name="app_secondary">#FFA07A</color>
     <color name="app_background">#FFF8F8F8</color>
+    <!-- v2.1.0: 深色窗口背景（基础值=浅色兜底，values-night 覆盖） -->
+    <color name="app_background_dark">#FFF8F8F8</color>
     <color name="app_surface">#FFFFFFFF</color>
     <color name="app_on_surface">#FF1A1A1A</color>
     <color name="status_reminding">#FFE74C3C</color>

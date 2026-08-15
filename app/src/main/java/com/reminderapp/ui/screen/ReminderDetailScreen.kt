@@ -132,6 +132,10 @@ fun ReminderDetailScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     // H2: 关键提醒全屏权限引导对话框（Android 14+ 未授予时弹出）
     var showFullScreenPermissionDialog by remember { mutableStateOf(false) }
+    // v2.1.0: 统一稍后选项
+    var snoozeMenuExpanded by remember { mutableStateOf(false) }
+    var showCustomSnoozeDialog by remember { mutableStateOf(false) }
+    var customSnoozeMinutes by remember { mutableStateOf("15") }
     var appeared by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { appeared = true }
 
@@ -262,14 +266,51 @@ fun ReminderDetailScreen(
                     Text(zh("确认完成"))
                 }
 
-                OutlinedButton(
-                    onClick = { viewModel.snooze() },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Secondary)
-                ) {
-                    Icon(Icons.Default.Snooze, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(zh("稍后提醒"))
+                // v2.1.0: 统一稍后选项（15 分钟 / 1 小时 / 明天 / 自定义分钟）
+                Box(modifier = Modifier.weight(1f)) {
+                    OutlinedButton(
+                        onClick = { snoozeMenuExpanded = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Secondary)
+                    ) {
+                        Icon(Icons.Default.Snooze, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(zh("稍后提醒"))
+                    }
+                    DropdownMenu(
+                        expanded = snoozeMenuExpanded,
+                        onDismissRequest = { snoozeMenuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(zh("15 分钟")) },
+                            onClick = {
+                                snoozeMenuExpanded = false
+                                viewModel.snooze(minutes = 15)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(zh("1 小时")) },
+                            onClick = {
+                                snoozeMenuExpanded = false
+                                viewModel.snooze(minutes = 60)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(zh("明天")) },
+                            onClick = {
+                                snoozeMenuExpanded = false
+                                viewModel.snoozeTomorrow()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(zh("自定义…")) },
+                            onClick = {
+                                snoozeMenuExpanded = false
+                                customSnoozeMinutes = "15"
+                                showCustomSnoozeDialog = true
+                            }
+                        )
+                    }
                 }
             }
 
@@ -458,6 +499,18 @@ fun ReminderDetailScreen(
         FullScreenPermissionDialog(onDismiss = { showFullScreenPermissionDialog = false })
     }
 
+    // v2.1.0: 自定义稍后分钟数
+    if (showCustomSnoozeDialog) {
+        CustomSnoozeDialog(
+            initialMinutes = customSnoozeMinutes,
+            onConfirm = { minutes ->
+                showCustomSnoozeDialog = false
+                viewModel.snooze(minutes = minutes.toLong())
+            },
+            onDismiss = { showCustomSnoozeDialog = false }
+        )
+    }
+
     // 批次2 功能2: 打卡成功正向反馈卡片（顶部浮层，自动消失）
     Box(modifier = Modifier.fillMaxSize()) {
         com.reminderapp.ui.component.CheckInFeedbackCard(
@@ -500,6 +553,43 @@ private fun DeleteConfirmDialog(
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text(zh("删除"), color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(zh("取消"))
+            }
+        }
+    )
+}
+
+// v2.1.0: 自定义稍后分钟数对话框
+@Composable
+private fun CustomSnoozeDialog(
+    initialMinutes: String,
+    onConfirm: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var minutes by remember { mutableStateOf(initialMinutes) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(zh("自定义稍后")) },
+        text = {
+            OutlinedTextField(
+                value = minutes,
+                onValueChange = { minutes = it.filter { c -> c.isDigit() }.take(4) },
+                label = { Text(zh("分钟数")) },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                ),
+                singleLine = true
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(minutes.toIntOrNull()?.coerceAtLeast(1) ?: 15) }
+            ) {
+                Text(zh("确定"))
             }
         },
         dismissButton = {

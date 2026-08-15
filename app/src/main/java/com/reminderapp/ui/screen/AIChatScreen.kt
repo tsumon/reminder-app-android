@@ -349,9 +349,11 @@ private fun ChatBubble(msg: ChatMessage) {
                     )
                 )
                 .background(
-                    // if 两个分支必须同为 Brush，否则类型推断为 Any 无法匹配 background 重载
+                    // v2.1.0: AI 气泡深色模式修复——原来硬编码白底 + onSurface 文字，
+                    // 深色下白底浅字对比度崩塌。改为 surface 语义色（深浅自适应），
+                    // 用户气泡沿用品牌紫渐变（进 Tokens 系）
                     if (isUser) Brush.linearGradient(listOf(Color(0xFF7C66C2), Color(0xFF6750A4)))
-                    else Brush.linearGradient(listOf(Color.White, Color.White))
+                    else Brush.linearGradient(listOf(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.surfaceVariant))
                 )
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {

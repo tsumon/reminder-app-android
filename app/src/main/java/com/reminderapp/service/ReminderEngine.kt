@@ -297,13 +297,33 @@ object ReminderEngine {
     }
 
     /**
-     * 稍后提醒 → 15 分钟后重推（v1.9.7 对齐 iOS：不动 retryCount，
-     * 避免用户反复点稍后导致 escalate 间隔被跳过）
+     * 稍后提醒 → N 分钟后重推（v1.9.7 对齐 iOS：不动 retryCount，
+     * 避免用户反复点稍后导致 escalate 间隔被跳过；v2.1.0 支持任意分钟数）
      */
-    fun snooze(reminder: ReminderEntity): ReminderEntity {
+    fun snooze(reminder: ReminderEntity, minutes: Long = 15): ReminderEntity {
         return reminder.copy(
             status = ReminderStatus.NOTIFYING.name.lowercase(),
-            nextTriggerAt = System.currentTimeMillis() + 900_000L, // 15 分钟
+            nextTriggerAt = System.currentTimeMillis() + minutes * 60_000L,
+            retryCount = reminder.retryCount
+        )
+    }
+
+    /** 稍后到明天提醒时刻（reminderHour:reminderMinute；已过则顺延一天） */
+    fun snoozeTomorrow(reminder: ReminderEntity): ReminderEntity {
+        val cal = Calendar.getInstance()
+        val now = System.currentTimeMillis()
+        cal.set(Calendar.HOUR_OF_DAY, reminder.reminderHour)
+        cal.set(Calendar.MINUTE, reminder.reminderMinute)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        var t = cal.timeInMillis
+        if (t <= now) {
+            cal.add(Calendar.DAY_OF_YEAR, 1)
+            t = cal.timeInMillis
+        }
+        return reminder.copy(
+            status = ReminderStatus.NOTIFYING.name.lowercase(),
+            nextTriggerAt = t,
             retryCount = reminder.retryCount
         )
     }

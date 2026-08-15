@@ -78,7 +78,7 @@ fun StatsScreen(
                     StatMiniCard(
                         title = zh("连续天数"),
                         value = summary.currentStreak.toString(),
-                        color = Color(0xFFFF9800),
+                        color = Tokens.StatusSnoozed,
                         modifier = Modifier.weight(1f)
                     )
                     StatMiniCard(
@@ -98,7 +98,7 @@ fun StatsScreen(
                         title = zh("当前连续"),
                         value = summary.currentStreak,
                         icon = Icons.Filled.Check,
-                        color = Color(0xFFFF9800),
+                        color = Tokens.StatusSnoozed,
                         modifier = Modifier.weight(1f)
                     )
                     StreakCard(
@@ -352,7 +352,7 @@ private fun HeatmapCard(
                                                 .clip(RoundedCornerShape(6.dp))
                                                 .background(heatColor(heatLevel(count)))
                                         )
-                                        Text("$day", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("$day", fontSize = Tokens.FontMicro, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 } else {
                                     Spacer(modifier = Modifier.height(34.dp))

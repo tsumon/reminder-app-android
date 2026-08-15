@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- v2.1.0: 夜间主题（修复深色模式下启动瞬间闪白） -->
+    <style name="Theme.ReminderApp" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@color/app_background_dark</item>
+        <item name="android:navigationBarColor">@color/app_background_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
