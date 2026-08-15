@@ -1,15 +1,2 @@
-*.iml
-.gradle
-/local.properties
-/.idea
-.DS_Store
-/build
-/app/build
-/captures
-.externalNativeBuild
-.cxx
-local.properties
-
-# 本地构建验证用的临时签名文件，不要提交
-*.keystore
-*.jks
+app-release-*.apk
+ReminderApp-*.ipa
