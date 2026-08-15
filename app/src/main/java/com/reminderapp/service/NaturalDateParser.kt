@@ -118,10 +118,12 @@ object NaturalDateParser {
         if (wdReg != null) {
             val target = weekdayMap[wdReg.groupValues[1]] ?: 1
             val nextWeek = wdReg.value.startsWith("下")
+            val previousWeek = wdReg.value.startsWith("上")
             val curDow = dowFromCalendar(cal)
             var diff = (target - curDow + 7) % 7
             if (nextWeek) diff += 7
-            if (!nextWeek && diff == 0) diff = 7 // 本周已过的同一天 → 下周
+            if (previousWeek) diff -= 7
+            if (!nextWeek && !previousWeek && diff == 0) diff = 7 // 本周已过的同一天 → 下周
             cal.add(Calendar.DAY_OF_MONTH, diff)
             if (repeatMode == "once") repeatMode = "weekly"
         }

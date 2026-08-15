@@ -56,7 +56,7 @@ enum class DateReminderType(val label: String) {
     HOLIDAY(zh("节假日"))
 }
 
-enum class ReminderStatus { IDLE, PENDING, NOTIFYING, CONFIRMED }
+enum class ReminderStatus { IDLE, PENDING, NOTIFYING, SNOOZED, OVERDUE, CONFIRMED }
 
 data class ReminderRecord(
     val id: Long,

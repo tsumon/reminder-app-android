@@ -202,6 +202,21 @@ object ReminderEngine {
     /**
      * 计算某年某日期提醒的触发时间戳（要求大于 now）；年内已过的返回 null
      */
+    fun isValidSolarDate(year: Int, month: Int, day: Int): Boolean {
+        if (month !in 1..12) return false
+        val cal = Calendar.getInstance().apply {
+            clear()
+            isLenient = false
+            set(year, month - 1, day, 0, 0, 0)
+        }
+        return try {
+            cal.timeInMillis
+            true
+        } catch (_: IllegalArgumentException) {
+            false
+        }
+    }
+
     private fun computeDateForYear(reminder: ReminderEntity, year: Int, now: Long): Long? {
         val hour = reminder.reminderHour.coerceIn(0, 23)
         val minute = reminder.reminderMinute.coerceIn(0, 59)
@@ -209,7 +224,10 @@ object ReminderEngine {
 
         return when (reminder.dateType) {
             "solar_birthday" -> {
-                cal.set(year, (reminder.targetMonth ?: 1) - 1, reminder.targetDay ?: 1, hour, minute, 0)
+                val month = reminder.targetMonth ?: return null
+                val day = reminder.targetDay ?: return null
+                if (!isValidSolarDate(year, month, day)) return null
+                cal.set(year, month - 1, day, hour, minute, 0)
                 cal.set(Calendar.MILLISECOND, 0)
                 if (cal.timeInMillis > now) cal.timeInMillis else null
             }
@@ -312,7 +330,9 @@ object ReminderEngine {
      */
     fun checkMissed(reminders: List<ReminderEntity>, now: Long): List<ReminderEntity> {
         return reminders.filter { reminder ->
-            reminder.nextTriggerAt <= now && reminder.status != ReminderStatus.CONFIRMED.name.lowercase()
+            reminder.nextTriggerAt <= now &&
+                reminder.status != ReminderStatus.CONFIRMED.name.lowercase() &&
+                reminder.status != "overdue"
         }
     }
 
