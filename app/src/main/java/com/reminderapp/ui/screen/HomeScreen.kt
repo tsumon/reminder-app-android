@@ -787,23 +787,31 @@ fun SwipeableReminderCard(
 /** 首页概览卡片：待处理数量 + 最近一次提醒（v1.8.7 改品牌渐变卡，滴答清单风格） */
 @Composable
 fun OverviewCard(unhandledCount: Int, nextReminder: ReminderEntity?) {
+    // v2.2.1 设计语言：日期大标题 + 农历徽章 + 待办强调 + 光斑装饰（对齐 iOS OverviewCard）
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(Tokens.RadiusCard),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
-        // 液态玻璃：品牌渐变 + 顶部高光
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(Tokens.RadiusCard))
                 .background(
                     Brush.linearGradient(
-                        colors = listOf(Primary, Tokens.BrandPrimaryDark)
+                        colors = listOf(Tokens.BrandGradientStart, Primary, Tokens.BrandPrimaryDark)
                     )
                 )
         ) {
+            // 装饰光斑（右上角柔光圆）
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(130.dp)
+                    .offset(x = 45.dp, y = (-55).dp)
+                    .background(Color.White.copy(alpha = 0.14f), CircleShape)
+            )
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -814,49 +822,111 @@ fun OverviewCard(unhandledCount: Int, nextReminder: ReminderEntity?) {
                     )
                     .padding(18.dp)
             ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column {
+                    // 日期大标题 + 农历徽章
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Notifications,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            zhf("待处理 %s 项", unhandledCount),
-                            style = MaterialTheme.typography.titleMedium,
+                            overviewDateTitle(),
+                            style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            overviewWeekday(),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White.copy(alpha = 0.85f)
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        com.reminderapp.service.LunarCalendar.solarToLunar(System.currentTimeMillis())
+                            ?.let { lunar ->
+                                Row(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(Color.White.copy(alpha = 0.18f))
+                                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.DateRange, contentDescription = null,
+                                        tint = Color.White, modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        overviewLunar(lunar),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White
+                                    )
+                                }
+                            }
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    val nextText = nextReminder?.let {
-                        val f = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
-                        "${it.title} · ${f.format(Date(it.nextTriggerAt))}"
-                    } ?: zh("暂无即将到来的提醒")
-                    Text(
-                        nextText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.9f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.25f))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    // 待处理 + 下次提醒
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Notifications,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    zhf("待处理 %s 项", unhandledCount),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            val nextText = nextReminder?.let {
+                                val f = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+                                "${it.title} · ${f.format(Date(it.nextTriggerAt))}"
+                            } ?: zh("暂无即将到来的提醒")
+                            Text(
+                                nextText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.9f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Text(
+                            text = "$unhandledCount",
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White.copy(alpha = 0.9f)
+                        )
+                    }
                 }
-                Text(
-                    text = "$unhandledCount",
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.9f)
-                )
-            }
             }
         }
     }
+}
+
+/** 今天日期标题（如「8月16日」） */
+private fun overviewDateTitle(): String =
+    SimpleDateFormat("M月d日", Locale.getDefault()).format(Date())
+
+/** 今天周几（如「周六」） */
+private fun overviewWeekday(): String =
+    SimpleDateFormat("EEEE", Locale.getDefault()).format(Date())
+
+/** 今天农历（如「六月廿三」） */
+private fun overviewLunar(lunar: com.reminderapp.service.LunarCalendar.LunarDate): String {
+    val monthNames = arrayOf("", "正", "二", "三", "四", "五", "六", "七", "八", "九", "十", "冬", "腊")
+    val dayNames = arrayOf("", "初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",
+        "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
+        "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十")
+    val month = if (lunar.isLeapMonth) "闰" + monthNames.getOrElse(lunar.month) { "" } else monthNames.getOrElse(lunar.month) { "" }
+    val day = if (lunar.day in 1..30) dayNames[lunar.day] else "${lunar.day}日"
+    return month + "月" + day
 }
 
 /** 规则提醒的显示文本，如「每季度第2周周二」 */
@@ -871,24 +941,25 @@ fun ruleLabel(reminder: ReminderEntity): String {
     return zhf("%1\$s第%2\$s周%3\$s", periodLabel, reminder.ruleWeek ?: 1, weekday)
 }
 
-/** 提醒类型 → 展示用图标（v2.1.0: Material Icons 替代 emoji——深浅色一致、与系统风格统一，对齐 iOS typeSymbol） */
-fun reminderIcon(reminder: ReminderEntity): ImageVector = when {
-    reminder.kind == "date" && reminder.dateType == "holiday" -> Icons.Filled.Celebration
-    reminder.kind == "date" && reminder.dateType == "lunar_birthday" -> Icons.Filled.Bedtime
-    reminder.kind == "date" && reminder.dateType == "solar_birthday" -> Icons.Filled.Cake
-    reminder.kind == "rule" -> Icons.Filled.CalendarMonth
+/** 提醒类型 → 展示用 emoji（v2.2.1: 恢复——Material 线条图标视觉存在感弱，emoji 更醒目） */
+fun reminderEmoji(reminder: ReminderEntity): String = when {
+    reminder.kind == "date" && reminder.dateType == "holiday" -> "🎉"
+    reminder.kind == "date" && reminder.dateType == "lunar_birthday" -> "🌙"
+    reminder.kind == "date" && reminder.dateType == "solar_birthday" -> "🎂"
+    reminder.kind == "rule" -> "📅"
     else -> when (reminder.cycle) {
-        "once" -> Icons.Filled.Alarm
-        "daily" -> Icons.Filled.Repeat
-        "weekly" -> Icons.Filled.DateRange
-        "biweekly" -> Icons.Filled.DateRange
-        "monthly" -> Icons.Filled.Event
-        "quarterly" -> Icons.Filled.BarChart
-        "yearly" -> Icons.Filled.TrackChanges
-        "custom" -> Icons.Filled.Timer
-        else -> Icons.Filled.Notifications
+        "once" -> "⏰"
+        "daily" -> "🔁"
+        "weekly" -> "📆"
+        "biweekly" -> "📆"
+        "monthly" -> "🗓"
+        "quarterly" -> "📊"
+        "yearly" -> "🎯"
+        "custom" -> "⏳"
+        else -> "💡"
     }
 }
+
 
 /** 提醒类型 → 图标容器底色（与 iOS kindBadgeColor 对应） */
 fun reminderKindColor(reminder: ReminderEntity): Color = when {
@@ -980,19 +1051,24 @@ fun ReminderCard(
                 )
                 Spacer(modifier = Modifier.width(10.dp))
             }
-            // 彩色图标容器（设计图：44dp 圆角方块 + 类型色浅底；v2.1.0 Material 图标替代 emoji）
+            // v2.2.1: 彩色渐变底图标容器（同色系由深到浅），emoji 更有层次
             Box(
                 modifier = Modifier
                     .size(46.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(reminderKindColor(reminder).copy(alpha = 0.15f)),
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                reminderKindColor(reminder).copy(alpha = 0.32f),
+                                reminderKindColor(reminder).copy(alpha = 0.12f)
+                            )
+                        )
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = reminderIcon(reminder),
-                    contentDescription = zh("提醒类型"),
-                    tint = reminderKindColor(reminder),
-                    modifier = Modifier.size(22.dp)
+                Text(
+                    text = reminderEmoji(reminder),
+                    fontSize = 22.sp
                 )
             }
             Spacer(modifier = Modifier.width(13.dp))

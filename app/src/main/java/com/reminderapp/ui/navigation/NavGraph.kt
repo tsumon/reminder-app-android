@@ -324,7 +324,8 @@ fun NavGraph(
                                     try {
                                         val apkUrl = info.apkUrl
                                         if (apkUrl != null) {
-                                            val apk = com.reminderapp.service.UpdateService.downloadApk(context, apkUrl)
+                                            // v2.2.1: 多候选 + 镜像兜底下载
+                                            val apk = com.reminderapp.service.UpdateService.downloadApk(context, info)
                                             com.reminderapp.service.UpdateService.install(context, apk)
                                         } else {
                                             com.reminderapp.service.UpdateService.openReleasePage(context, info.releaseUrl)

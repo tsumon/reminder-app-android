@@ -14,6 +14,7 @@ object Tokens {
 
     // ── 品牌主色（双端统一 #6750A4）──
     val BrandPrimary = Color(0xFF6750A4)
+    val BrandGradientStart = Color(0xFF7C66C2)   // v2.2.1: 品牌渐变起点（对齐 iOS brandGradientStart）
     val BrandPrimaryDark = Color(0xFF4F3B7A)   // 深色主题用
     val BrandPrimaryContainer = Color(0xFFEADDFF)
 

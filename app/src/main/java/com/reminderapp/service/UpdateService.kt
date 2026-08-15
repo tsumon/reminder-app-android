@@ -25,16 +25,28 @@ object UpdateService {
     private const val REPO = "tsumon/reminder-app-android"
     /// 检查源：releases.atom（HTML 域名走 CDN，无匿名 API 限流；api.github.com 常被限流 403）
     private const val ATOM = "https://github.com/$REPO/releases.atom"
-    /// 下载路径：latest/download 固定名（无需版本号/API，永远指向最新 Release 的该资产）
+    /// 下载路径候选1：latest/download 固定名（v2.2.1 起发布统一用固定资产名 app-release.apk）
     private const val APK_ASSET_URL = "https://github.com/$REPO/releases/latest/download/app-release.apk"
+    /// 下载路径候选2：带版本号精确 URL（兼容历史发布：app-release-2.2.0.apk 等）
+    private fun taggedAssetUrl(tag: String) =
+        "https://github.com/$REPO/releases/download/v$tag/app-release-$tag.apk"
+    /// 国内镜像前缀（GitHub 直连不可达时的兜底，按顺序尝试）
+    private val MIRROR_PREFIXES = listOf(
+        "https://ghfast.top/",
+        "https://gh-proxy.com/",
+        "https://ghproxy.net/"
+    )
     /// 兜底：api.github.com（可能限流，仅当 atom 不可用时尝试）
     private const val API = "https://api.github.com/repos/$REPO/releases/latest"
 
     data class UpdateInfo(
         val latestVersion: String,   // 去 v 前缀，如 "1.8.7"
         val apkUrl: String?,         // release 里第一个 .apk 资产
-        val releaseUrl: String
-    )
+        val releaseUrl: String,
+        val tag: String = ""         // v2.2.1: release tag（带版本资产 URL 用）
+    ) {
+        fun withTag(t: String) = copy(tag = t)
+    }
 
     private val client by lazy {
         OkHttpClient.Builder()
@@ -89,7 +101,7 @@ object UpdateService {
             latestVersion = tag.removePrefix("v"),
             apkUrl = APK_ASSET_URL,
             releaseUrl = link
-        )
+        ).withTag(tag.removePrefix("v"))
     }
 
     /** 兜底：api.github.com 解析（可能被限流 403） */
@@ -109,7 +121,7 @@ object UpdateService {
                     latestVersion = tag.removePrefix("v"),
                     apkUrl = APK_ASSET_URL,
                     releaseUrl = releaseUrl
-                )
+                ).withTag(tag.removePrefix("v"))
             }
         } catch (e: Exception) {
             Log.i("UpdateService", "API 检查失败: ${e.message}")
@@ -132,16 +144,37 @@ object UpdateService {
     /**
      * 下载 APK 到 cacheDir/update/ 并返回文件；失败抛异常
      */
-    suspend fun downloadApk(context: Context, url: String): File = withContext(Dispatchers.IO) {
+    /**
+     * 下载 APK（v2.2.1：多候选 URL + 国内镜像兜底）。
+     * 候选顺序：固定资产名 latest/download → 带版本号 tag URL → 各镜像前缀重试。
+     */
+    suspend fun downloadApk(context: Context, info: UpdateInfo): File = withContext(Dispatchers.IO) {
         val dir = File(context.cacheDir, "update").apply { mkdirs() }
         val file = File(dir, "reminder-update.apk")
-        val req = Request.Builder().url(url).build()
-        client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw IllegalStateException(zhf("下载失败 HTTP %s", resp.code))
-            val body = resp.body ?: throw IllegalStateException(zh("下载失败: 空响应"))
-            file.outputStream().use { out -> body.byteStream().copyTo(out) }
+        val candidates = buildList {
+            add(APK_ASSET_URL)
+            if (info.tag.isNotBlank()) add(taggedAssetUrl(info.tag))
+            MIRROR_PREFIXES.forEach { prefix ->
+                add(prefix + APK_ASSET_URL)
+                if (info.tag.isNotBlank()) add(prefix + taggedAssetUrl(info.tag))
+            }
         }
-        file
+        var lastError: Exception? = null
+        for (candidate in candidates.distinct()) {
+            try {
+                val req = Request.Builder().url(candidate).build()
+                client.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) throw IllegalStateException(zhf("下载失败 HTTP %s", resp.code))
+                    val body = resp.body ?: throw IllegalStateException(zh("下载失败: 空响应"))
+                    file.outputStream().use { out -> body.byteStream().copyTo(out) }
+                }
+                return@withContext file
+            } catch (e: Exception) {
+                lastError = e
+                Log.i("UpdateService", "下载候选失败 $candidate: ${e.message}")
+            }
+        }
+        throw lastError ?: IllegalStateException(zh("下载失败"))
     }
 
     /** 引导安装（FileProvider + ACTION_VIEW；Android 8+ 需用户允许未知来源） */

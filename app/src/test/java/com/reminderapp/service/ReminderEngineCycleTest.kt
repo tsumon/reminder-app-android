@@ -84,11 +84,12 @@ class ReminderEngineCycleTest {
 
     @Test
     fun `monthly 按日历月累加且月末对齐不漂移`() {
-        // 锚点 = 今天 09:00（monthly）→ 下次 = 下月同日同时（日历月累加，非固定 30 天）。
-        // 若今天是 31 号且下月不足 31 天（如 1/31 → 2/28），Calendar.add(MONTH,1) 与产品
-        // advanceByCalendarMonths 都钳到月末 → 断言下月同日或更晚且不超 32 天。
+        // 锚点 = 昨天 09:00（monthly）→ 下次 = 下月同日同时（日历月累加，非固定 30 天）。
+        // 锚点必须取「已过去的时刻」：凌晨 0~9 点跑测试时「今天 09:00」还在未来，
+        // 产品逻辑会直接返回锚点本身导致断言失败（v2.2.1 修复测试的日期敏感性）。
         val now = System.currentTimeMillis()
         val cal = Calendar.getInstance().apply { timeInMillis = now }
+        cal.add(Calendar.DAY_OF_YEAR, -1)
         cal.set(Calendar.HOUR_OF_DAY, 9); cal.set(Calendar.MINUTE, 0)
         cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
         val anchor = cal.timeInMillis

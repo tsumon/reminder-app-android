@@ -454,7 +454,8 @@ fun SettingsScreen(
                         val apkUrl = info.apkUrl
                         if (apkUrl != null) {
                             try {
-                                val apk = UpdateService.downloadApk(context, apkUrl)
+                                // v2.2.1: 多候选 + 镜像兜底下载（传整个 UpdateInfo 携带 tag）
+                                val apk = UpdateService.downloadApk(context, info)
                                 UpdateService.install(context, apk)
                             } catch (e: Exception) {
                                 android.widget.Toast.makeText(
