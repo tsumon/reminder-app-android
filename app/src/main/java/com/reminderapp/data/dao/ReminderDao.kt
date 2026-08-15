@@ -12,6 +12,10 @@ interface ReminderDao {
     @Query("SELECT * FROM reminders WHERE id = :id")
     suspend fun getById(id: Long): ReminderEntity?
 
+    /** 阶段2: 按跨端稳定 ID 查（WebDAV upsert / 导入匹配用） */
+    @Query("SELECT * FROM reminders WHERE sync_id = :syncId LIMIT 1")
+    suspend fun getBySyncId(syncId: String): ReminderEntity?
+
     @Query("SELECT * FROM reminders WHERE is_active = 1 AND next_trigger_at <= :now")
     suspend fun getDueReminders(now: Long): List<ReminderEntity>
 

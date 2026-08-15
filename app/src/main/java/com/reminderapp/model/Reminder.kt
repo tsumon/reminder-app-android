@@ -65,8 +65,9 @@ data class ReminderRecord(
     val timestamp: Long
 )
 
-// 节假日数据类
+// 节假日数据类（id 与 iOS HolidayService 对齐，跨端协议用稳定 ID 识别）
 data class Holiday(
+    val id: String,
     val name: String,
     val month: Int,
     val day: Int,

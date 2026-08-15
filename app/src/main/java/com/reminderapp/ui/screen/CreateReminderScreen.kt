@@ -186,6 +186,7 @@ fun CreateReminderScreen(
                                     targetMonth = targetMonth,
                                     targetDay = targetDay,
                                     holidayName = selectedHolidayName,
+                                    holidayId = com.reminderapp.service.HolidayService.allHolidays.find { it.name == selectedHolidayName }?.id,
                                     advanceDays = advanceDays,
                                     // P1 修复：date-mode 之前漏存用户选的钟点，
                                     // 实体默认 09:00；首次触发后 confirm/Worker 重算

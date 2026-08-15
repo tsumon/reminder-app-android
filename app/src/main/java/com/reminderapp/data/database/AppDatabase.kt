@@ -13,7 +13,7 @@ import com.reminderapp.data.entity.ReminderRecordEntity
 
 @Database(
     entities = [ReminderEntity::class, ReminderRecordEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -56,6 +56,26 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // 阶段2(v6): 跨端协议——sync_id（跨平台稳定 UUID）+ holiday_id（节假日稳定 ID）
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE reminders ADD COLUMN sync_id TEXT")
+                db.execSQL("ALTER TABLE reminders ADD COLUMN holiday_id TEXT")
+                // 存量行补 UUID v4（SQLite 无 uuid()，用 randomblob 拼；sync_id 不允许再为 NULL，
+                // 否则导出时该行无法被跨端识别，WebDAV 合并会重复插入）
+                db.execSQL(
+                    "UPDATE reminders SET sync_id = " +
+                        "lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-' || " +
+                        "'4' || substr(lower(hex(randomblob(2))), 2) || '-' || " +
+                        "substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || " +
+                        "lower(hex(randomblob(6)))" +
+                        " WHERE sync_id IS NULL"
+                )
+                // 部分唯一索引：NULL 不参与唯一性（旧数据已全量填充，防未来脏写）
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_reminders_sync_id ON reminders(sync_id) WHERE sync_id IS NOT NULL")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -66,7 +86,7 @@ abstract class AppDatabase : RoomDatabase() {
                     // v1.9.6 fix: 原来靠 fallbackToDestructiveMigration 兜底，
                     // 老用户(v1.1/v1.2/v1.5)升级会整库 DROP 重建 → 全部提醒清空。
                     // 补 Migration 后 schema 不匹配时明确报错，绝不静默清库。
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build()
                     .also { INSTANCE = it }
             }

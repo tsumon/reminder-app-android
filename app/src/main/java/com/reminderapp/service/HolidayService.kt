@@ -9,20 +9,23 @@ import com.reminderapp.model.Holiday
 object HolidayService {
 
     val allHolidays: List<Holiday> = listOf(
-        Holiday("元旦", 1, 1, false),
-        Holiday("春节", 1, 1, true),
-        Holiday("元宵节", 1, 15, true),
-        Holiday("清明节", 4, 5, false),
-        Holiday("端午节", 5, 5, true),
-        Holiday("七夕", 7, 7, true),
-        Holiday("中秋节", 8, 15, true),
-        Holiday("国庆节", 10, 1, false),
-        Holiday("重阳节", 9, 9, true),
-        Holiday("冬至", 12, 22, false),
-        Holiday("腊八节", 12, 8, true),
-        Holiday("小年", 12, 23, true),
-        Holiday("除夕", 12, 30, true)
+        Holiday("yuandan", "元旦", 1, 1, false),
+        Holiday("chunjie", "春节", 1, 1, true),
+        Holiday("yuanxiao", "元宵节", 1, 15, true),
+        Holiday("qingming", "清明节", 4, 5, false),
+        Holiday("duanwu", "端午节", 5, 5, true),
+        Holiday("qixi", "七夕", 7, 7, true),
+        Holiday("zhongqiu", "中秋节", 8, 15, true),
+        Holiday("guoqing", "国庆节", 10, 1, false),
+        Holiday("chongyang", "重阳节", 9, 9, true),
+        Holiday("dongzhi", "冬至", 12, 22, false),
+        Holiday("laba", "腊八节", 12, 8, true),
+        Holiday("xiaonian", "小年", 12, 23, true),
+        Holiday("chuxi", "除夕", 12, 30, true)
     )
+
+    /** 按稳定 ID 查节假日（协议字段 holidayId 用；找不到返回 null） */
+    fun findById(id: String): Holiday? = allHolidays.find { it.id == id }
 
     /**
      * 获取指定年份中节日的公历日期

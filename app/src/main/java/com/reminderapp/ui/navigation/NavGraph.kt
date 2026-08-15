@@ -189,20 +189,29 @@ fun NavGraph(
                         var imported = 0
                         var skipped = reminders.size - toImport.size
                         toImport.forEach { r ->
-                            // 强制 id=0 让 Room 重新自增：备份 JSON 保留了原 id，
-                            // 直接插入会与现有行（含软删行）主键冲突 → SQLiteConstraintException 崩溃
-                            var importedEntity = r.copy(id = 0)
-                            // I10: 导入时重算下次触发时间（对齐 WebDAV replaceLocal），
-                            //     避免备份里的过期 nextTriggerAt 导致立即触发或永不触发
-                            importedEntity = importedEntity.copy(nextTriggerAt = com.reminderapp.service.ReminderEngine.calculateNextTrigger(importedEntity))
-                            val newId = try {
-                                database.reminderDao().insert(importedEntity)
-                            } catch (e: Exception) {
-                                android.util.Log.e("NavGraph", "导入单条失败: ${e.message}")
-                                skipped++
-                                return@forEach
+                            // 阶段2: syncId 缺失补 UUID；id=0 让 Room 重新自增（备份 JSON 保留了原 id，
+                            // 直接插入会与现有行（含软删行）主键冲突 → SQLiteConstraintException 崩溃）
+                            val prepared = com.reminderapp.service.BackupService.ensureSyncId(r).copy(
+                                id = 0,
+                                // I10: 导入时重算下次触发时间（对齐 WebDAV 合并），
+                                //     避免备份里的过期 nextTriggerAt 导致立即触发或永不触发
+                                nextTriggerAt = com.reminderapp.service.ReminderEngine.calculateNextTrigger(r)
+                            )
+                            // 阶段2: 按 syncId 匹配——同一条提醒（用户编辑过、指纹已变）更新现有行，
+                            // 本地自增 id 不变，通知/小组件/操作记录引用不失效
+                            val existing = prepared.syncId?.let { database.reminderDao().getBySyncId(it) }
+                            val finalEntity = if (existing != null) {
+                                prepared.copy(id = existing.id).also { database.reminderDao().update(it) }
+                            } else {
+                                try {
+                                    prepared.copy(id = database.reminderDao().insert(prepared))
+                                } catch (e: Exception) {
+                                    android.util.Log.e("NavGraph", "导入单条失败: ${e.message}")
+                                    skipped++
+                                    return@forEach
+                                }
                             }
-                            scheduler.schedule(importedEntity.copy(id = newId))
+                            scheduler.schedule(finalEntity)
                             imported++
                         }
                         com.reminderapp.service.SyncStore.touchLocalChange()

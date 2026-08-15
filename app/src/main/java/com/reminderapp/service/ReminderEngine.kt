@@ -243,7 +243,8 @@ object ReminderEngine {
                 } else null
             }
             "holiday" -> {
-                val holiday = HolidayService.allHolidays.find { it.name == reminder.holidayName }
+                val holiday = reminder.holidayId?.let { id -> HolidayService.findById(id) }
+                ?: HolidayService.allHolidays.find { it.name == reminder.holidayName }
                 if (holiday != null) {
                     val d = HolidayService.getHolidaySolarDate(year, holiday)
                     if (d != null) {
@@ -421,7 +422,8 @@ object ReminderEngine {
                 } else false
             }
             "holiday" -> {
-                val holiday = HolidayService.allHolidays.find { it.name == reminder.holidayName }
+                val holiday = reminder.holidayId?.let { id -> HolidayService.findById(id) }
+                ?: HolidayService.allHolidays.find { it.name == reminder.holidayName }
                 if (holiday != null) {
                     val d = HolidayService.getHolidaySolarDate(year, holiday)
                     if (d != null) {

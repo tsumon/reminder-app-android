@@ -28,6 +28,8 @@ data class ReminderEntity(
     @ColumnInfo(name = "target_month") val targetMonth: Int? = null,
     @ColumnInfo(name = "target_day") val targetDay: Int? = null,
     @ColumnInfo(name = "holiday_name") val holidayName: String? = null,
+    // 阶段2: 跨端稳定节假日 ID（与 iOS Holiday.id 对齐，如 "guoqing"；协议字段 holidayId）
+    @ColumnInfo(name = "holiday_id") val holidayId: String? = null,
     @ColumnInfo(name = "advance_days") val advanceDays: Int = 3,
     @ColumnInfo(name = "reminder_hour") val reminderHour: Int = 9,
     @ColumnInfo(name = "reminder_minute") val reminderMinute: Int = 0,
@@ -37,6 +39,9 @@ data class ReminderEntity(
     @ColumnInfo(name = "note") val note: String = "",
     @ColumnInfo(name = "priority") val priority: String = "normal", // high / normal / low
     @ColumnInfo(name = "status") val status: String = "idle",
+    // 阶段2: 跨端稳定 ID（UUID）——通知/小组件/操作记录按本地自增 id 引用，
+    // 跨端同步靠 syncId 匹配，导入/合并时保留本地 id 使引用不失效
+    @ColumnInfo(name = "sync_id") val syncId: String? = java.util.UUID.randomUUID().toString(),
     @ColumnInfo(name = "first_trigger_at") val firstTriggerAt: Long,
     @ColumnInfo(name = "next_trigger_at") val nextTriggerAt: Long,
     @ColumnInfo(name = "last_confirmed_at") val lastConfirmedAt: Long? = null,

@@ -29,6 +29,9 @@ object WebDavSync {
     private const val REMOTE_FILE = "reminder_backup.json"
     private const val CONTENT_TYPE = "application/json; charset=utf-8"
 
+    /** 阶段2: 下载合并时随同步保留的状态（未知值回落 pending） */
+    private val KEPT_STATUS = setOf("confirmed", "overdue", "snoozed", "notifying")
+
     /** 批次3 功能4: 日历订阅用的 .ics 文件名（与备份 JSON 同目录） */
     const val REMOTE_ICS_FILE = "reminders.ics"
     private const val ICS_CONTENT_TYPE = "text/calendar; charset=utf-8"
@@ -108,7 +111,7 @@ object WebDavSync {
                     if (items == null) {
                         SyncResult.Error(zh("远程文件解析失败"))
                     } else {
-                        replaceLocal(db, items)
+                        mergeRemote(db, items)
                         SyncStore.lastLocalChange = remoteVersion
                         // v2.0.17: 下载后本地数据 = 远程数据 → 单调版本对齐远程
                         // （旧文件 dataVersion=0 时保持本地版本，兼容路径下次仍会上传）
@@ -286,37 +289,69 @@ object WebDavSync {
         }
     }
 
-    /** 用远程数据整体替换本地（事务内：软删全部 → 插入 → 调度；失败回滚不丢本地数据） */
-    private suspend fun replaceLocal(
+    /** 用远程数据合并本地（阶段2：按 syncId upsert，不再整库 delete/reinsert） */
+    private suspend fun mergeRemote(
         db: AppDatabase,
         items: List<com.reminderapp.data.entity.ReminderEntity>
     ) {
         val dao = db.reminderDao()
-        // v1.9.6 fix: 事务包裹——原来先全量软删再逐条插入，中途失败本地全丢
+        // 阶段2: 覆盖前自动存本地快照（可恢复；保留最近 5 份）
+        snapshotLocal(dao.getAllSync())
+
         db.withTransaction {
-            dao.getAllSync().forEach { dao.softDelete(it.id) }
+            val localItems = dao.getAllSync()
+            val localBySync = localItems.mapNotNull { it.syncId?.let { s -> s to it } }.toMap()
+            val localByFp = localItems.associateBy { BackupService.fingerprint(it) }
+            val upserted = mutableListOf<com.reminderapp.data.entity.ReminderEntity>()
 
-            // 重新计算下次触发时间，避免导入的陈旧时间戳导致「立即触发」或「永不触发」，
-            // 同时保留已完成状态。
-            val toInsert = items.map { entity ->
-                val next = ReminderEngine.calculateNextTrigger(entity)
-                // id=0 强制自增：远程 JSON 保留了上传时的原 id，软删行仍占用这些主键，
-                // 直接插入会 SQLiteConstraintException 导致整个同步失败
-                entity.copy(
-                    id = 0,
-                    nextTriggerAt = next,
-                    status = if (entity.status == "confirmed") "confirmed" else "pending",
-                    retryCount = 0
-                )
+            items.forEach { remote ->
+                // 匹配优先级：syncId（协议 v2）→ 指纹（旧协议文件无 syncId 时，识别上轮已导入的条目）
+                val match = remote.syncId?.let { localBySync[it] }
+                    ?: localByFp[BackupService.fingerprint(remote)]
+
+                if (match != null) {
+                    // 已存在：保留本地自增 id（通知/小组件/操作记录引用不失效）和本地 syncId
+                    val updated = remote.copy(
+                        id = match.id,
+                        syncId = match.syncId ?: remote.syncId,
+                        nextTriggerAt = ReminderEngine.calculateNextTrigger(remote),
+                        // 阶段2: 状态随同步保留（iOS 同样保留 overdue/snoozed/notifying；未知值回落 pending）
+                        status = if (remote.status in KEPT_STATUS) remote.status else "pending",
+                        retryCount = 0
+                    )
+                    dao.update(updated)
+                    upserted.add(updated)
+                } else {
+                    // 新条目：id=0 自增，syncId 缺失补 UUID
+                    val fresh = BackupService.ensureSyncId(remote).copy(
+                        id = 0,
+                        nextTriggerAt = ReminderEngine.calculateNextTrigger(remote),
+                        status = if (remote.status in KEPT_STATUS) remote.status else "pending",
+                        retryCount = 0
+                    )
+                    val newId = dao.insert(fresh)
+                    upserted.add(fresh.copy(id = newId))
+                }
             }
-            // ⚠️ 必须用 insert 返回的新 id 调度：直接传 id=0 的实体，
-            // 所有提醒的 uniqueName/tag 都是 "reminder_0" → 互相覆盖，只剩最后一条会响一次
-            val inserted = toInsert.map { it.copy(id = dao.insert(it)) }
 
-            // 关键：下载覆盖本地后必须重新调度，否则所有提醒不再响，直到重启。
-            ReminderScheduler(ReminderApp.instance).rescheduleAll(inserted)
+            // 本地有而远程没有的条目保留（无 tombstone，无法区分「远端已删」与「远端从未有过」，保守不删）
+            // 关键：合并后必须重新调度，否则提醒不再响，直到重启。
+            ReminderScheduler(ReminderApp.instance).rescheduleAll(upserted)
         }
         com.reminderapp.receiver.ReminderWidgetProvider.refresh(ReminderApp.instance)
+    }
+
+    /** 阶段2: 合并前把当前本地全量导出为 JSON 快照（可恢复；保留最近 5 份） */
+    private fun snapshotLocal(localItems: List<com.reminderapp.data.entity.ReminderEntity>) {
+        try {
+            val dir = java.io.File(ReminderApp.instance.filesDir, "webdav_snapshots").apply { mkdirs() }
+            val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+            java.io.File(dir, "before_$stamp.json").writeText(BackupService.exportToJson(localItems))
+            // 只保留最近 5 份
+            dir.listFiles()?.sortedByDescending { it.name }?.drop(5)?.forEach { it.delete() }
+        } catch (e: Exception) {
+            android.util.Log.w("WebDavSync", "本地快照写入失败（不影响同步）: ${e.message}")
+        }
     }
 
     private fun download(url: String): String? {

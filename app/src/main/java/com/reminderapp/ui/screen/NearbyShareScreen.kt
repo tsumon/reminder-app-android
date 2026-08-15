@@ -377,13 +377,21 @@ private fun receive(
                 skipped++
                 continue
             }
-            val newId = try {
-                database.reminderDao().insert(r.copy(id = 0))
-            } catch (e: Exception) {
-                skipped++
-                continue
+            // 阶段2: syncId 缺失补 UUID；按 syncId 匹配——同一条（编辑过、指纹已变）更新现有行，
+            // 本地自增 id 不变，通知/小组件/操作记录引用不失效
+            val prepared = BackupService.ensureSyncId(r).copy(id = 0)
+            val existing = prepared.syncId?.let { database.reminderDao().getBySyncId(it) }
+            val finalEntity = if (existing != null) {
+                prepared.copy(id = existing.id).also { database.reminderDao().update(it) }
+            } else {
+                try {
+                    prepared.copy(id = database.reminderDao().insert(prepared))
+                } catch (e: Exception) {
+                    skipped++
+                    continue
+                }
             }
-            scheduler.schedule(r.copy(id = newId))
+            scheduler.schedule(finalEntity)
             imported++
         }
         SyncStore.touchLocalChange()

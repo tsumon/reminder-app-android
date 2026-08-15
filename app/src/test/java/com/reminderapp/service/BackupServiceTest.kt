@@ -52,4 +52,89 @@ class BackupServiceTest {
         assertEquals(r.status, back.status)
         assertEquals(r.isCritical, back.isCritical)
     }
+
+    // ===== 阶段2: 跨端协议 golden fixture（与 iOS 共享同一份内容）=====
+
+    private fun fixture(name: String): String {
+        val stream = javaClass.getResourceAsStream("/fixtures/$name")
+            ?: throw AssertionError("fixture 缺失: /fixtures/$name")
+        return stream.bufferedReader().use { it.readText() }
+    }
+
+    @Test
+    fun `协议v2 fixture 完整解析`() {
+        val json = fixture("protocol_v2.json")
+        assertEquals(2, BackupService.schemaVersionOf(json))
+        assertEquals(42L, BackupService.dataVersionOf(json))
+
+        val items = BackupService.importFromJson(json)!!
+        assertEquals(4, items.size)
+
+        // syncId 跨端稳定 ID 原样保留
+        assertEquals("8f14e45f-ceea-4b5f-8d1a-9c3f2b7e5d01", items[0].syncId)
+
+        // 节假日提醒：holidayId 优先于 holidayName
+        val holiday = items[1]
+        assertEquals("zhongqiu", holiday.holidayId)
+        assertEquals("中秋节", holiday.holidayName)
+
+        // 关键提醒 camelCase
+        assertTrue(items[0].isCritical)
+        assertTrue(!items[1].isCritical)
+
+        // 派生/元数据字段
+        assertEquals(2, items[1].retryCount)
+        assertEquals("notifying", items[1].status)
+        assertEquals("confirmed", items[2].status)
+        assertEquals("overdue", items[3].status)
+        assertEquals(5, items[3].retryCount)
+        assertEquals("因中秋节放假，已前移至假期前最近工作日", items[1].holidayAdjustNote)
+        assertEquals(1_755_200_000_000L, items[2].lastConfirmedAt)
+    }
+
+    @Test
+    fun `协议v1 旧文件兼容解析`() {
+        val json = fixture("protocol_v1_legacy.json")
+        // 旧文件无 schemaVersion → 视为 1
+        assertEquals(1, BackupService.schemaVersionOf(json))
+        // 旧文件无 syncId → null，由调用方 ensureSyncId 补 UUID
+        val items = BackupService.importFromJson(json)!!
+        assertEquals(2, items.size)
+        assertTrue(items[0].syncId == null)
+
+        // is_critical snake_case 兜底
+        assertTrue(items[0].isCritical)
+        assertTrue(!items[1].isCritical)
+
+        // iOS 旧导出 holidayName 实际塞 ID → 读入 holidayName，holidayId 为 null（按名称反查逻辑兜底）
+        assertEquals("zhongqiu", items[1].holidayName)
+        assertTrue(items[1].holidayId == null)
+
+        // 缺字段回落默认值
+        assertEquals("daily", items[0].cycle)
+        assertEquals("pending", items[0].status)
+        assertEquals(0, items[0].retryCount)
+    }
+
+    @Test
+    fun `ensureSyncId 缺失时补 UUID 且保留已有值`() {
+        val withSync = reminder("吃药", 1_000L).copy(syncId = "11111111-2222-3333-4444-555555555555")
+        assertEquals("11111111-2222-3333-4444-555555555555", BackupService.ensureSyncId(withSync).syncId)
+
+        val withoutSync = reminder("遛狗", 2_000L).copy(syncId = null)
+        val fixed = BackupService.ensureSyncId(withoutSync)
+        assertTrue(fixed.syncId != null)
+        assertTrue(!fixed.syncId.isNullOrBlank())
+    }
+
+    @Test
+    fun `导出包含 schemaVersion 与 syncId`() {
+        val r = reminder("吃药", 1_000L).copy(syncId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+        val json = BackupService.exportToJson(listOf(r), dataVersion = 0)
+        assertTrue(json.contains("\"schemaVersion\": 2"))
+        assertTrue(json.contains("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"))
+        // 双写：新旧字段都在
+        assertTrue(json.contains("\"isCritical\": false"))
+        assertTrue(json.contains("\"is_critical\": false"))
+    }
 }
