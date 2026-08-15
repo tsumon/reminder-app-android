@@ -155,6 +155,33 @@ class HomeViewModel(
         }
     }
 
+    // MARK: - v2.1.1 批量管理
+
+    /** 批量确认完成（未完成的提醒逐条确认，一次同步版本） */
+    fun batchComplete(ids: Set<Long>) {
+        viewModelScope.launch {
+            ids.forEach { id ->
+                val r = dao.getById(id) ?: return@forEach
+                if (r.status != "confirmed") {
+                    confirmReminder(r)
+                }
+            }
+            com.reminderapp.service.SyncStore.touchLocalChange()
+            com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+        }
+    }
+
+    /** 批量删除（软删 + 清通知 + 清记录） */
+    fun batchDelete(ids: Set<Long>) {
+        viewModelScope.launch {
+            ids.forEach { id ->
+                deleteReminder(id)
+            }
+            com.reminderapp.service.SyncStore.touchLocalChange()
+            com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+        }
+    }
+
     data class GroupedReminders(
         val reminding: List<ReminderEntity> = emptyList(),
         val waiting: List<ReminderEntity> = emptyList(),
@@ -259,6 +286,16 @@ class ReminderDetailViewModel(
             _reminder.value = updated
             com.reminderapp.service.SyncStore.touchLocalChange()
             com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+        }
+    }
+
+    /** v2.1.1: 勿扰时段变更后重排通知（数据不变，仅按新窗口重排） */
+    fun rescheduleQuietHours() {
+        viewModelScope.launch {
+            val r = _reminder.value ?: return@launch
+            if (r.isActive && r.status != "confirmed" && r.status != "overdue") {
+                scheduler.schedule(r)
+            }
         }
     }
 

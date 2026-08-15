@@ -2,12 +2,15 @@ package com.reminderapp.ui.screen
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EventAvailable
@@ -47,6 +50,7 @@ fun ReminderDetailScreen(
     viewModel: ReminderDetailViewModel,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val reminder by viewModel.reminder.collectAsState()
     val records by viewModel.records.collectAsState()
     val checkInFeedback by viewModel.checkInFeedback.collectAsState()
@@ -136,8 +140,27 @@ fun ReminderDetailScreen(
     var snoozeMenuExpanded by remember { mutableStateOf(false) }
     var showCustomSnoozeDialog by remember { mutableStateOf(false) }
     var customSnoozeMinutes by remember { mutableStateOf("15") }
+    // v2.1.1: 勿扰时段
+    var quietHoursEnabled by remember { mutableStateOf(false) }
+    var quietStartMinute by remember { mutableStateOf(22 * 60) }
+    var quietEndMinute by remember { mutableStateOf(8 * 60) }
+    var showQuietStartPicker by remember { mutableStateOf(false) }
+    var showQuietEndPicker by remember { mutableStateOf(false) }
     var appeared by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { appeared = true }
+    LaunchedEffect(Unit) {
+        appeared = true
+        // v2.1.1: 从 QuietHoursStore 恢复勿扰时段
+        val r = viewModel.reminder.value
+        if (r != null) {
+            val start = com.reminderapp.service.QuietHoursStore.startMinute(context, r.id)
+            val end = com.reminderapp.service.QuietHoursStore.endMinute(context, r.id)
+            if (start != null && end != null) {
+                quietHoursEnabled = true
+                quietStartMinute = start
+                quietEndMinute = end
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -404,6 +427,69 @@ fun ReminderDetailScreen(
                             }
                         )
                     }
+                    // v2.1.1: 勿扰时段——每日静默窗口内到点的提醒顺延到窗口结束（对齐 iOS QuietHoursStore）
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { contentDescription = zh("勿扰时段开关") },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                zh("勿扰时段"),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                zh("该时段内到点的提醒顺延到时段结束"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = quietHoursEnabled,
+                            onCheckedChange = { enabled ->
+                                quietHoursEnabled = enabled
+                                if (enabled) {
+                                    com.reminderapp.service.QuietHoursStore.set(context, currentReminder.id, quietStartMinute, quietEndMinute)
+                                } else {
+                                    com.reminderapp.service.QuietHoursStore.set(context, currentReminder.id, null, null)
+                                }
+                                viewModel.rescheduleQuietHours()
+                            }
+                        )
+                    }
+                    if (quietHoursEnabled) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showQuietStartPicker = true },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(zh("开始"), style = MaterialTheme.typography.bodyMedium)
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(
+                                zhf("%02d:%02d", quietStartMinute / 60, quietStartMinute % 60),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showQuietEndPicker = true },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(zh("结束"), style = MaterialTheme.typography.bodyMedium)
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(
+                                zhf("%02d:%02d", quietEndMinute / 60, quietEndMinute % 60),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                     if (currentReminder.kind == "date") {
                         infoRow(zh("类型"), zh("日期提醒"))
                         val dateTypeLabel = when (currentReminder.dateType) {
@@ -438,6 +524,64 @@ fun ReminderDetailScreen(
                         infoRow(zh("重试次数"), zhf("%s 次", currentReminder.retryCount))
                     }
                 }
+            }
+
+            // v2.1.1: 未来触发预览（验证周期计算是否正确）
+            val futureDates = com.reminderapp.service.ReminderEngine.futureTriggers(currentReminder, count = 10)
+            if (futureDates.isNotEmpty()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.CalendarMonth, contentDescription = null,
+                                tint = Tokens.BrandPrimary, modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                zh("未来触发"),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(
+                                zhf("%s 次预览", futureDates.size),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        futureDates.forEachIndexed { index, ts ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "${index + 1}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White,
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(CircleShape)
+                                        .background(Tokens.BrandPrimary)
+                                        .wrapContentSize(Alignment.Center)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    dateFormat.format(Date(ts)),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
             }
 
             // 历史记录
@@ -508,6 +652,34 @@ fun ReminderDetailScreen(
                 viewModel.snooze(minutes = minutes.toLong())
             },
             onDismiss = { showCustomSnoozeDialog = false }
+        )
+    }
+
+    // v2.1.1: 勿扰时段起止时间选择
+    if (showQuietStartPicker) {
+        QuietTimePickerDialog(
+            initialMinute = quietStartMinute,
+            title = zh("勿扰开始"),
+            onConfirm = { minute ->
+                showQuietStartPicker = false
+                quietStartMinute = minute
+                com.reminderapp.service.QuietHoursStore.set(context, viewModel.reminder.value?.id ?: return@QuietTimePickerDialog, quietStartMinute, quietEndMinute)
+                viewModel.rescheduleQuietHours()
+            },
+            onDismiss = { showQuietStartPicker = false }
+        )
+    }
+    if (showQuietEndPicker) {
+        QuietTimePickerDialog(
+            initialMinute = quietEndMinute,
+            title = zh("勿扰结束"),
+            onConfirm = { minute ->
+                showQuietEndPicker = false
+                quietEndMinute = minute
+                com.reminderapp.service.QuietHoursStore.set(context, viewModel.reminder.value?.id ?: return@QuietTimePickerDialog, quietStartMinute, quietEndMinute)
+                viewModel.rescheduleQuietHours()
+            },
+            onDismiss = { showQuietEndPicker = false }
         )
     }
 
@@ -596,6 +768,53 @@ private fun CustomSnoozeDialog(
             TextButton(onClick = onDismiss) {
                 Text(zh("取消"))
             }
+        }
+    )
+}
+
+// v2.1.1: 勿扰时段时间选择对话框
+@Composable
+private fun QuietTimePickerDialog(
+    initialMinute: Int,
+    title: String,
+    onConfirm: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var hour by remember { mutableStateOf(initialMinute / 60) }
+    var minute by remember { mutableStateOf(initialMinute % 60) }
+    val timePicker = @Composable {
+        Row(
+            modifier = Modifier.padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = hour.toString(),
+                onValueChange = { hour = it.filter { c -> c.isDigit() }.take(2).toIntOrNull() ?: 0 },
+                modifier = Modifier.width(72.dp),
+                label = { Text(zh("时")) }
+            )
+            Text(zh(":"), style = MaterialTheme.typography.titleLarge)
+            OutlinedTextField(
+                value = minute.toString(),
+                onValueChange = { minute = it.filter { c -> c.isDigit() }.take(2).toIntOrNull() ?: 0 },
+                modifier = Modifier.width(72.dp),
+                label = { Text(zh("分")) }
+            )
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { timePicker() },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirm(((hour.coerceIn(0, 23)) * 60 + minute.coerceIn(0, 59)))
+                }
+            ) { Text(zh("确定")) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(zh("取消")) }
         }
     )
 }

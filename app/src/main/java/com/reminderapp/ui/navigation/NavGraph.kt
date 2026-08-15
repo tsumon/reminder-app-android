@@ -384,7 +384,8 @@ fun NavGraph(
             SettingsScreen(
                 onBack = { navController.popBackStack() },
                 onOpenSyncSettings = { navController.navigate("sync_settings") },
-                onOpenAISettings = { navController.navigate("ai_settings") }
+                onOpenAISettings = { navController.navigate("ai_settings") },
+                onOpenDiagnostics = { navController.navigate("diagnostics") }
             )
         }
 
@@ -392,6 +393,13 @@ fun NavGraph(
             SyncSettingsScreen(
                 onBack = { navController.popBackStack() },
                 onSyncResult = {}
+            )
+        }
+
+        composable("diagnostics") {
+            // v2.1.1: 提醒可靠性诊断页（权限/排期/数据规模）
+            com.reminderapp.ui.screen.DiagnosticsScreen(
+                onBack = { navController.popBackStack() }
             )
         }
 

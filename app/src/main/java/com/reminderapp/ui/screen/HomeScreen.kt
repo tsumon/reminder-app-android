@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Celebration
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Event
@@ -144,6 +146,9 @@ fun HomeScreen(
     // 长按删除确认框状态
     var pendingDelete by remember { mutableStateOf<ReminderEntity?>(null) }
     var menuExpanded by remember { mutableStateOf(false) }
+    // v2.1.1: 批量管理（长按进入多选，批量完成/删除）
+    var selectionMode by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     // 点击日历某天 → 查看当日任务
     var selectedDate by remember { mutableStateOf<Long?>(null) }
     // 智能清单
@@ -160,7 +165,13 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(zh("循环提醒器"), style = MaterialTheme.typography.headlineMedium) },
+                title = {
+                    if (selectionMode) {
+                        Text(zhf("已选 %s 项", selectedIds.size), style = MaterialTheme.typography.headlineMedium)
+                    } else {
+                        Text(zh("循环提醒器"), style = MaterialTheme.typography.headlineMedium)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onAIChat) {
                         Icon(
@@ -174,6 +185,33 @@ fun HomeScreen(
                     containerColor = MaterialTheme.colorScheme.background
                 ),
                 actions = {
+                    if (selectionMode) {
+                        // v2.1.1: 批量操作（全选/完成/删除/退出）
+                        TextButton(onClick = {
+                            val all = allReminders.map { it.id }.toSet()
+                            selectedIds = if (selectedIds.size == all.size) emptySet() else all
+                        }) { Text(zh("全选")) }
+                        TextButton(
+                            onClick = {
+                                viewModel.batchComplete(selectedIds)
+                                selectedIds = emptySet()
+                                selectionMode = false
+                            },
+                            enabled = selectedIds.isNotEmpty()
+                        ) { Text(zh("完成"), color = MaterialTheme.colorScheme.primary) }
+                        TextButton(
+                            onClick = {
+                                viewModel.batchDelete(selectedIds)
+                                selectedIds = emptySet()
+                                selectionMode = false
+                            },
+                            enabled = selectedIds.isNotEmpty()
+                        ) { Text(zh("删除"), color = MaterialTheme.colorScheme.error) }
+                        TextButton(onClick = {
+                            selectedIds = emptySet()
+                            selectionMode = false
+                        }) { Text(zh("取消")) }
+                    } else {
                     Box {
                         IconButton(onClick = { menuExpanded = true }) {
                             Icon(
@@ -185,6 +223,17 @@ fun HomeScreen(
                             expanded = menuExpanded,
                             onDismissRequest = { menuExpanded = false }
                         ) {
+                            // v2.1.1: 批量管理
+                            DropdownMenuItem(
+                                text = { Text(zh("批量管理")) },
+                                leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    selectionMode = true
+                                    selectedIds = emptySet()
+                                }
+                            )
+                            Divider()
                             DropdownMenuItem(
                                 text = { Text(zh("立即同步")) },
                                 leadingIcon = { Icon(Icons.Default.Sync, contentDescription = null) },
@@ -277,6 +326,7 @@ fun HomeScreen(
                                 }
                             )
                         }
+                    }
                     }
                 }
             )
@@ -379,7 +429,12 @@ fun HomeScreen(
                             onDelete = { pendingDelete = reminder },
                             onClick = { onReminderClick(reminder.id) },
                             modifier = Modifier.animateItemPlacement(),
-                            onMakeUp = { viewModel.confirmReminder(reminder, isMakeUp = true) }
+                            onMakeUp = { viewModel.confirmReminder(reminder, isMakeUp = true) },
+                            selectionMode = selectionMode,
+                            selected = reminder.id in selectedIds,
+                            onToggleSelect = {
+                                selectedIds = if (reminder.id in selectedIds) selectedIds - reminder.id else selectedIds + reminder.id
+                            }
                         )
                     }
                 }
@@ -394,7 +449,12 @@ fun HomeScreen(
                             onComplete = { viewModel.confirmReminder(reminder) },
                             onDelete = { pendingDelete = reminder },
                             onClick = { onReminderClick(reminder.id) },
-                            modifier = Modifier.animateItemPlacement()
+                            modifier = Modifier.animateItemPlacement(),
+                            selectionMode = selectionMode,
+                            selected = reminder.id in selectedIds,
+                            onToggleSelect = {
+                                selectedIds = if (reminder.id in selectedIds) selectedIds - reminder.id else selectedIds + reminder.id
+                            }
                         )
                     }
                 }
@@ -409,7 +469,12 @@ fun HomeScreen(
                             onComplete = { viewModel.reopenReminder(reminder) },
                             onDelete = { pendingDelete = reminder },
                             onClick = { onReminderClick(reminder.id) },
-                            modifier = Modifier.animateItemPlacement()
+                            modifier = Modifier.animateItemPlacement(),
+                            selectionMode = selectionMode,
+                            selected = reminder.id in selectedIds,
+                            onToggleSelect = {
+                                selectedIds = if (reminder.id in selectedIds) selectedIds - reminder.id else selectedIds + reminder.id
+                            }
                         )
                     }
                 }
@@ -639,7 +704,11 @@ fun SwipeableReminderCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     /** 批次3 功能2：逾期提醒的「补打今天」入口，传 null 则不显示 */
-    onMakeUp: (() -> Unit)? = null
+    onMakeUp: (() -> Unit)? = null,
+    /** v2.1.1: 批量管理透传 */
+    selectionMode: Boolean = false,
+    selected: Boolean = false,
+    onToggleSelect: (() -> Unit)? = null
 ) {
     val isDone = reminder.status == "confirmed"
     val density = LocalDensity.current
@@ -707,7 +776,10 @@ fun SwipeableReminderCard(
                     )
                 }
         ) {
-            ReminderCard(reminder, statusColor, onDelete = onDelete, onClick = onClick, onMakeUp = onMakeUp)
+            ReminderCard(
+                reminder, statusColor, onDelete = onDelete, onClick = onClick, onMakeUp = onMakeUp,
+                selectionMode = selectionMode, selected = selected, onToggleSelect = onToggleSelect
+            )
         }
     }
 }
@@ -835,7 +907,11 @@ fun ReminderCard(
     onDelete: () -> Unit,
     onClick: () -> Unit,
     /** 批次3 功能2：逾期提醒的「补打今天」入口，传 null 则不显示 */
-    onMakeUp: (() -> Unit)? = null
+    onMakeUp: (() -> Unit)? = null,
+    /** v2.1.1: 批量管理——选择模式标记/选择回调，非空时卡片进入多选态 */
+    selectionMode: Boolean = false,
+    selected: Boolean = false,
+    onToggleSelect: (() -> Unit)? = null
 ) {
     val dateFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
     val statusText = when (reminder.status) {
@@ -874,8 +950,8 @@ fun ReminderCard(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
-                onClick = onClick,
-                onLongClick = onDelete,
+                onClick = { if (selectionMode) onToggleSelect?.invoke() else onClick() },
+                onLongClick = { if (selectionMode) onToggleSelect?.invoke() else onDelete() },
                 onClickLabel = zh("打开详情"),
                 onLongClickLabel = zh("长按删除")
             ),
@@ -894,6 +970,16 @@ fun ReminderCard(
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // v2.1.1: 批量选择指示（选择模式下显示圆点/对勾）
+            if (selectionMode) {
+                Icon(
+                    imageVector = if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                    contentDescription = if (selected) zh("已选择") else zh("未选择"),
+                    tint = if (selected) Tokens.BrandPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+            }
             // 彩色图标容器（设计图：44dp 圆角方块 + 类型色浅底；v2.1.0 Material 图标替代 emoji）
             Box(
                 modifier = Modifier

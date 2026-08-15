@@ -47,8 +47,17 @@ fun ReminderAppTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
+    // v2.1.1: 手动主题优先（0=跟随系统 1=浅色 2=深色；ThemeStore 与 iOS 对齐）
+    val manualMode = androidx.compose.ui.platform.LocalContext.current
+        .let { ThemeStore.mode(it) }
+    val effectiveDark = when (manualMode) {
+        1 -> false
+        2 -> true
+        else -> darkTheme
+    }
+
     // v2.1.0: Material You 动态取色（Android 12+ 跟随壁纸主题；低版本回落品牌紫）
-    val colorScheme = if (darkTheme) {
+    val colorScheme = if (effectiveDark) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             dynamicDarkColorScheme(androidx.compose.ui.platform.LocalContext.current)
         } else DarkColorScheme
@@ -63,7 +72,7 @@ fun ReminderAppTheme(
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = colorScheme.background.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !effectiveDark
         }
     }
 

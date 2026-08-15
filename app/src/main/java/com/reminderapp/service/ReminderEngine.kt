@@ -31,15 +31,31 @@ object ReminderEngine {
     /**
      * 根据提醒配置计算下次触发时间
      */
-    fun calculateNextTrigger(reminder: ReminderEntity): Long {
-        val now = System.currentTimeMillis()
-
+    /** 计算下一次触发时间；from 缺省为当前时刻（v2.1.1: 未来预览传入 cursor 推进） */
+    fun calculateNextTrigger(reminder: ReminderEntity, from: Long = System.currentTimeMillis()): Long {
         return when (reminder.kind) {
-            "cycle" -> calculateCycleNextTrigger(reminder, now)
-            "date" -> calculateDateNextTrigger(reminder, now)
-            "rule" -> calculateRuleNextTrigger(reminder, now)
-            else -> now + 86400_000L
+            "cycle" -> calculateCycleNextTrigger(reminder, from)
+            "date" -> calculateDateNextTrigger(reminder, from)
+            "rule" -> calculateRuleNextTrigger(reminder, from)
+            else -> from + 86400_000L
         }
+    }
+
+    /** v2.1.1: 未来 N 次触发时间预览（详情页展示；once 只有一次；已停用/已完成/已逾期为空） */
+    fun futureTriggers(reminder: ReminderEntity, count: Int = 10): List<Long> {
+        if (!reminder.isActive || reminder.status == "confirmed" || reminder.status == "overdue") {
+            return emptyList()
+        }
+        if (reminder.cycle == "once") return listOf(reminder.nextTriggerAt)
+        val dates = mutableListOf<Long>()
+        var cursor = reminder.nextTriggerAt
+        for (i in 0 until count) {
+            dates.add(cursor)
+            val next = calculateNextTrigger(reminder, from = cursor)
+            if (next <= cursor) break // 防死循环
+            cursor = next
+        }
+        return dates
     }
 
     /**

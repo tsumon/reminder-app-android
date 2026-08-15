@@ -11,7 +11,9 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
@@ -39,7 +41,8 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenSyncSettings: () -> Unit,
-    onOpenAISettings: () -> Unit
+    onOpenAISettings: () -> Unit,
+    onOpenDiagnostics: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -119,6 +122,58 @@ fun SettingsScreen(
                 }
             }
 
+            // === 外观（v2.1.1：手动主题，自签环境常用；0=跟随系统 1=浅色 2=深色） ===
+            item {
+                var themeMode by remember { mutableStateOf(com.reminderapp.ui.theme.ThemeStore.mode(context)) }
+                SettingsCard {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.Palette, contentDescription = null,
+                            tint = Tokens.BrandPrimary, modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(zh("外观"), style = MaterialTheme.typography.bodyLarge)
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            when (themeMode) {
+                                1 -> zh("浅色")
+                                2 -> zh("深色")
+                                else -> zh("跟随系统")
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    HorizontalDivider()
+                    listOf(0 to zh("跟随系统"), 1 to zh("浅色"), 2 to zh("深色")).forEach { (mode, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickableItem {
+                                    com.reminderapp.ui.theme.ThemeStore.setMode(context, mode)
+                                    themeMode = mode
+                                }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(label, style = MaterialTheme.typography.bodyLarge)
+                            Spacer(modifier = Modifier.weight(1f))
+                            if (themeMode == mode) {
+                                Icon(
+                                    Icons.Filled.Check, contentDescription = null,
+                                    tint = Tokens.BrandPrimary, modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // === 同步 ===
             item {
                 SettingsCard {
@@ -162,6 +217,49 @@ fun SettingsScreen(
                         subtitle = zh("API 地址、模型与本地模式"),
                         onClick = onOpenAISettings
                     )
+                }
+            }
+
+            // === 维护（v2.1.1：提醒可靠性诊断 + 本地备份） ===
+            item {
+                SettingsCard {
+                    SettingRow(
+                        icon = Icons.Filled.Build,
+                        title = zh("提醒诊断"),
+                        subtitle = zh("通知权限 / 排期 / 数据规模检查"),
+                        onClick = onOpenDiagnostics
+                    )
+                    HorizontalDivider()
+                    // v2.1.1: 本地备份（自签无 iCloud 的兜底；写入「下载」目录，保留最近 5 份）
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickableItem {
+                                val name = com.reminderapp.service.LocalBackupService.backupNow(context)
+                                android.widget.Toast.makeText(
+                                    context,
+                                    if (name != null) zhf("已备份到下载目录：%s", name)
+                                    else zh("备份失败"),
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.FileUpload, contentDescription = null,
+                            tint = Tokens.BrandPrimary, modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(zh("立即备份"), style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                zh("备份到下载目录（保留最近 5 份）"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
 
@@ -404,7 +502,7 @@ private val changelog: List<Pair<String, List<String>>> = listOf(
 )
 
 @Composable
-private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
+internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),

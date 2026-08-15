@@ -57,6 +57,15 @@ class ReminderWorker(
             return Result.success()
         }
 
+        // v2.1.1: 勿扰时段——当前时刻在静默窗口内时不弹通知、不推进状态，
+        // 把任务顺延到窗口结束（对齐 iOS 排期顺延语义；不动 retryCount）
+        val now = System.currentTimeMillis()
+        val postponed = QuietHoursStore.adjust(applicationContext, reminder.id, now)
+        if (postponed > now) {
+            ReminderScheduler(applicationContext).schedule(reminder.copy(nextTriggerAt = postponed))
+            return Result.success()
+        }
+
         // 批次3 功能5: 关键提醒走最高优先级渠道 + 全屏弹窗
         if (reminder.isCritical) {
             notificationManager.sendCriticalReminderNotification(reminderId, title, body)
