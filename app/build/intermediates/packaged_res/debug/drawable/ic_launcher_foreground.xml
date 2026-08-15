@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!--
-    Adaptive icon foreground. Wraps the full-color teal design PNG
-    (ic_launcher_circle.png) as a bitmap drawable so the launcher and the
-    "new reminder" static shortcut (which both reference @drawable/ic_launcher_foreground)
-    pick up the unified icon without any source-file deletion.
--->
-<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
-    android:src="@drawable/ic_launcher_circle" />

@@ -1,4 +1,0 @@
-#Sun Aug 16 00:00:26 CST 2026
-base.0=/Users/mac/reminder-app-android/app/build/intermediates/dex/release/minifyReleaseWithR8/classes.dex
-renamed.0=classes.dex
-path.0=classes.dex

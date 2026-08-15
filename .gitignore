@@ -1,2 +1,8 @@
 app-release-*.apk
 ReminderApp-*.ipa
+/build/
+app/build/
+local.properties
+.idea/
+*.iml
+.DS_Store
