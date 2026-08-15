@@ -180,23 +180,38 @@ fun NavGraph(
                             ?: return@launch
                         val reminders = com.reminderapp.service.BackupService.importFromJson(json)
                             ?: return@launch
-                        reminders.forEach { r ->
+                        // v2.0.22: 文件导入与近场传输共用同一指纹去重，
+                        // 重复导入同一备份不再生成重复提醒（对齐 NearbyShareScreen.receive）
+                        val existingFp = database.reminderDao().getAllSync()
+                            .map { com.reminderapp.service.BackupService.fingerprint(it) }
+                            .toSet()
+                        val toImport = com.reminderapp.service.BackupService.dedupeByFingerprint(reminders, existingFp)
+                        var imported = 0
+                        var skipped = reminders.size - toImport.size
+                        toImport.forEach { r ->
                             // 强制 id=0 让 Room 重新自增：备份 JSON 保留了原 id，
                             // 直接插入会与现有行（含软删行）主键冲突 → SQLiteConstraintException 崩溃
-                            var imported = r.copy(id = 0)
+                            var importedEntity = r.copy(id = 0)
                             // I10: 导入时重算下次触发时间（对齐 WebDAV replaceLocal），
                             //     避免备份里的过期 nextTriggerAt 导致立即触发或永不触发
-                            imported = imported.copy(nextTriggerAt = com.reminderapp.service.ReminderEngine.calculateNextTrigger(imported))
+                            importedEntity = importedEntity.copy(nextTriggerAt = com.reminderapp.service.ReminderEngine.calculateNextTrigger(importedEntity))
                             val newId = try {
-                                database.reminderDao().insert(imported)
+                                database.reminderDao().insert(importedEntity)
                             } catch (e: Exception) {
                                 android.util.Log.e("NavGraph", "导入单条失败: ${e.message}")
+                                skipped++
                                 return@forEach
                             }
-                            scheduler.schedule(imported.copy(id = newId))
+                            scheduler.schedule(importedEntity.copy(id = newId))
+                            imported++
                         }
                         com.reminderapp.service.SyncStore.touchLocalChange()
                         com.reminderapp.receiver.ReminderWidgetProvider.refresh(context)
+                        android.widget.Toast.makeText(
+                            context,
+                            com.reminderapp.i18n.zhf("导入完成：新增 %1\$s 条，跳过重复或失败 %2\$s 条", imported, skipped),
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
             }

@@ -64,8 +64,7 @@ object BackupService {
     }
 
     /** 从 JSON 字符串解析提醒列表（失败返回 null） */
-    fun importFromJson(json: String): List<ReminderEntity>? {
-        return try {
+    fun importFromJson(json: String): List<ReminderEntity>? {        return try {
             val root = JSONObject(json)
             val arr = root.optJSONArray("reminders") ?: return emptyList()
             val list = mutableListOf<ReminderEntity>()
@@ -103,6 +102,19 @@ object BackupService {
             null
         }
     }
+
+    /** 导入指纹（与近场传输共用，防误判）：title|nextTriggerAt|kind|cycle|note */
+    fun fingerprint(r: ReminderEntity): String =
+        "${r.title}|${r.nextTriggerAt}|${r.kind}|${r.cycle}|${r.note ?: ""}"
+
+    /**
+     * 统一导入去重：按指纹过滤掉与现有提醒重复的条目。
+     * 文件导入与近场传输共用同一规则，避免「文件导入重复新增、近场传输跳过重复」的跨入口不一致。
+     */
+    fun dedupeByFingerprint(
+        entities: List<ReminderEntity>,
+        existingFingerprints: Set<String>
+    ): List<ReminderEntity> = entities.filter { fingerprint(it) !in existingFingerprints }
 
     /** 批次3 功能6: 单条提醒分享卡片 —— 复用备份信封格式导出单条 */
     fun exportSingle(reminder: ReminderEntity): String = exportToJson(listOf(reminder))

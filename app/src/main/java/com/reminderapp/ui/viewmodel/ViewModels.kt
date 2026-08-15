@@ -93,7 +93,11 @@ class HomeViewModel(
             recordDao.insert(ReminderRecordEntity(reminderId = reminder.id, action = ReminderRecordEntity.ACTION_CONFIRMED))
             // v1.9.6 fix: 确认后取消已显示的通知，避免通知栏残留
             com.reminderapp.service.NotificationManager(com.reminderapp.ReminderApp.instance).cancelReminderNotifications(reminder.id)
-            scheduler.schedule(updated)
+            // v2.0.22: 一次性提醒确认后归档，不重排（对齐 NotificationActionReceiver，
+            // 避免 delay=0 的 WorkManager 立即再弹一条「已完成」）
+            if (!(updated.kind == "cycle" && updated.cycle == "once")) {
+                scheduler.schedule(updated)
+            }
             com.reminderapp.service.SyncStore.touchLocalChange()
             com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
             // 批次2 功能2: 打卡成功 → 正向反馈卡片（含连续打卡天数）
@@ -144,6 +148,8 @@ class HomeViewModel(
             scheduler.cancel(id)
             recordDao.deleteByReminderId(id)
             dao.softDelete(id)
+            // v2.0.22: 删除时同时取消已显示的通知，避免旧通知操作已删除的提醒
+            com.reminderapp.service.NotificationManager(com.reminderapp.ReminderApp.instance).cancelReminderNotifications(id)
             com.reminderapp.service.SyncStore.touchLocalChange()
             com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
         }
@@ -199,7 +205,10 @@ class ReminderDetailViewModel(
             val updated = ReminderEngine.confirm(r)
             dao.update(updated)
             recordDao.insert(ReminderRecordEntity(reminderId = r.id, action = ReminderRecordEntity.ACTION_CONFIRMED))
-            scheduler.schedule(updated)
+            // v2.0.22: 一次性提醒确认后归档，不重排（对齐 NotificationActionReceiver）
+            if (!(updated.kind == "cycle" && updated.cycle == "once")) {
+                scheduler.schedule(updated)
+            }
             notificationMgr.cancelReminderNotifications(r.id)
             _reminder.value = updated
             com.reminderapp.service.SyncStore.touchLocalChange()
@@ -232,6 +241,9 @@ class ReminderDetailViewModel(
             scheduler.schedule(updated)
             notificationMgr.cancelReminderNotifications(r.id)
             _reminder.value = updated
+            // v2.0.22: 稍后同样参与同步版本与小组件刷新（对齐通知栏/小组件路径）
+            com.reminderapp.service.SyncStore.touchLocalChange()
+            com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
         }
     }
 
