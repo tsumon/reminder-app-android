@@ -146,6 +146,48 @@ fun DiagnosticsScreen(
                 }
             }
 
+            // v2.2.0: 最近 AI 调用（可观测性）
+            item {
+                val aiLogs = com.reminderapp.service.AILogStore.recent(context).take(5)
+                SettingsCard {
+                    Text(zh("最近 AI 调用"), style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (aiLogs.isEmpty()) {
+                        Text(zh("暂无 AI 调用记录"), style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    aiLogs.forEach { e ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                e.timeText(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                e.model,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                if (e.ok) {
+                                    zhf("%s 轮 · %sms%s", e.turns, e.durationMs,
+                                        if (e.provider == "fallback") " · " + zh("降级") else "")
+                                } else zh("失败"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (e.ok) MaterialTheme.colorScheme.onSurfaceVariant else Tokens.StatusOverdue
+                            )
+                        }
+                    }
+                }
+            }
+
             item {
                 Text(
                     zhf("检查时间：%s", dateFormat.format(Date())),

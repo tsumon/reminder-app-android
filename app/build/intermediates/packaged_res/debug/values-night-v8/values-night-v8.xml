@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="app_background_dark">#FF1A1A1A</color>
+    <style name="Theme.ReminderApp" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@color/app_background_dark</item>
+        <item name="android:navigationBarColor">@color/app_background_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

@@ -45,6 +45,13 @@ fun AISettingsScreen(
     var apiKey by remember { mutableStateOf(settings.apiKey) }
     var model by remember { mutableStateOf(settings.model) }
     var showKey by remember { mutableStateOf(false) }
+    // v2.2.0: 本地模型 + 备用配置
+    var isLocal by remember { mutableStateOf(settings.isLocal) }
+    var fallbackEnabled by remember { mutableStateOf(settings.fallbackEnabled) }
+    var fallbackEndpoint by remember { mutableStateOf(settings.fallbackEndpoint) }
+    var fallbackKey by remember { mutableStateOf(settings.fallbackApiKey) }
+    var fallbackModel by remember { mutableStateOf(settings.fallbackModel) }
+    var showFallbackKey by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -60,6 +67,12 @@ fun AISettingsScreen(
                         settings.apiEndpoint = endpoint.ifBlank { "https://api.openai.com/v1" }
                         settings.apiKey = apiKey
                         settings.model = model.ifBlank { "gpt-4o-mini" }
+                        // v2.2.0: 保存备用/本地配置
+                        settings.isLocal = isLocal
+                        settings.fallbackEnabled = fallbackEnabled
+                        settings.fallbackEndpoint = fallbackEndpoint
+                        settings.fallbackApiKey = fallbackKey
+                        settings.fallbackModel = fallbackModel
                         onBack()
                     }) {
                         Text(zh("保存"), fontWeight = FontWeight.Bold)
@@ -115,6 +128,82 @@ fun AISettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
+
+            // v2.2.0: 本地模型（Ollama）——无需 API Key
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(zh("本地模型"), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        zh("如 Ollama（http://localhost:11434/v1），无需 API Key"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = isLocal,
+                    onCheckedChange = { isLocal = it }
+                )
+            }
+
+            // v2.2.0: 备用模型（主配置失败自动降级）
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(zh("备用模型"), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        zh("主模型不可用时自动切换（如 DeepSeek）"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = fallbackEnabled,
+                    onCheckedChange = { fallbackEnabled = it }
+                )
+            }
+            if (fallbackEnabled) {
+                OutlinedTextField(
+                    value = fallbackEndpoint,
+                    onValueChange = { fallbackEndpoint = it },
+                    label = { Text(zh("备用接口地址")) },
+                    placeholder = { Text("https://api.deepseek.com/v1") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+                )
+                OutlinedTextField(
+                    value = fallbackKey,
+                    onValueChange = { fallbackKey = it },
+                    label = { Text(zh("备用 API Key")) },
+                    placeholder = { Text("sk-...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = if (showFallbackKey) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showFallbackKey = !showFallbackKey }) {
+                            Icon(
+                                if (showFallbackKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                contentDescription = if (showFallbackKey) zh("隐藏") else zh("显示")
+                            )
+                        }
+                    }
+                )
+                OutlinedTextField(
+                    value = fallbackModel,
+                    onValueChange = { fallbackModel = it },
+                    label = { Text(zh("备用模型名")) },
+                    placeholder = { Text("deepseek-chat") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            }
 
             Text(
                 zh("支持任意兼容 OpenAI 格式的 API（DeepSeek、通义千问、豆包、智谱等）"),

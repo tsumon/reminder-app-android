@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.reminderapp.service.ReminderEngineEscalationTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-08-15T15:59:53" hostname="MacBook-Pro.local" time="0.002">
+  <properties/>
+  <testcase name="confirm 重置 retryCount 并推进周期" classname="com.reminderapp.service.ReminderEngineEscalationTest" time="0.001"/>
+  <testcase name="escalate 序列 1h-4h-12h-24h-24h 然后 overdue" classname="com.reminderapp.service.ReminderEngineEscalationTest" time="0.001"/>
+  <testcase name="checkMissed 排除 overdue 与 confirmed" classname="com.reminderapp.service.ReminderEngineEscalationTest" time="0.0"/>
+  <testcase name="escalate 从 4 直接到封顶也标 overdue" classname="com.reminderapp.service.ReminderEngineEscalationTest" time="0.0"/>
+  <testcase name="escalate 后 overdue 不再增长且保持 overdue" classname="com.reminderapp.service.ReminderEngineEscalationTest" time="0.0"/>
+  <testcase name="snooze 只推迟 15 分钟且不动 retryCount" classname="com.reminderapp.service.ReminderEngineEscalationTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

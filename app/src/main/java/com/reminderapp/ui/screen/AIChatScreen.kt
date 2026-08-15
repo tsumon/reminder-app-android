@@ -35,17 +35,26 @@ import kotlinx.coroutines.withTimeout
 import java.util.*
 import com.reminderapp.i18n.zh
 import com.reminderapp.i18n.zhf
+import com.reminderapp.ui.theme.Tokens
 
 // 批量导入预览状态（import_tasks 工具解析后挂起，等用户在弹窗确认后再批量写入）
 private val pendingImportState = mutableStateOf<List<ReminderEntity>?>(null)
 
 // ---- Message Model ----
 
+/** v2.2.0: AI 工具调用步骤（Agent 可视化：执行中 → 完成/失败） */
+data class ToolStep(
+    val name: String,
+    val status: String,   // running / done / error
+    val summary: String? = null
+)
+
 data class ChatMessage(
     val id: String = UUID.randomUUID().toString(),
     val role: Role,
     val content: String,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val toolSteps: List<ToolStep> = emptyList()
 ) {
     enum class Role { USER, ASSISTANT, SYSTEM }
 }
@@ -357,6 +366,50 @@ private fun ChatBubble(msg: ChatMessage) {
                 )
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
+            // v2.2.0: Agent 工具步骤可视化（执行中 → 完成/失败）
+            if (msg.toolSteps.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    msg.toolSteps.forEach { step ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            when (step.status) {
+                                "running" -> CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                "error" -> Icon(
+                                    Icons.Default.Warning, contentDescription = null,
+                                    tint = Tokens.StatusOverdue, modifier = Modifier.size(14.dp)
+                                )
+                                else -> Icon(
+                                    Icons.Default.CheckCircle, contentDescription = null,
+                                    tint = Tokens.StatusCompleted, modifier = Modifier.size(14.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = step.name,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            if (step.status == "running") {
+                                Text(
+                                    zh("执行中…"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+            }
             Text(
                 text = msg.content,
                 color = if (isUser) Color.White else MaterialTheme.colorScheme.onSurface
@@ -365,7 +418,7 @@ private fun ChatBubble(msg: ChatMessage) {
     }
 }
 
-// ---- AI Loop ----
+// ---- AI Loop（v2.2.0：Agent 多步循环 + 流式输出 + 备用降级 + 调用日志） ----
 
 private suspend fun sendToAI(
     userText: String,
@@ -383,30 +436,67 @@ private suspend fun sendToAI(
     // onMessages 语义为「追加」——原实现整体替换导致多轮历史清空
     var msgs = mutableListOf<ChatMessage>()
     var loading = true
+    val startedAt = System.currentTimeMillis()
 
     val conversation = mutableListOf<Map<String, Any?>>(
         mapOf("role" to "system", "content" to AITools.systemPrompt)
     )
     // v1.9.6 fix: 携带完整历史（截断最近 20 条）——否则「确认喝水」「再提醒一次」
     // 这类依赖上下文的指令永远失联（原实现只发 system+当前 user）
-    // 注意：当前 user 消息已由调用方上屏并包含在 history 里，这里不要再追加，
-    // 否则同一指令会发给模型两次（文本路径曾因此重复）
     history.takeLast(20).forEach { msg ->
         conversation.add(mapOf("role" to msg.role.name.lowercase(), "content" to msg.content))
     }
 
     var maxTurns = 5
+    var usedFallback = false
+    var finalUsage: AIService.Usage? = null
+
+    // v2.2.0: 工具步骤可视化——当前 assistant 消息携带执行中的步骤列表
+    fun pushStep(steps: List<ToolStep>) {
+        msgs = mutableListOf(ChatMessage(
+            role = ChatMessage.Role.ASSISTANT,
+            content = "",
+            toolSteps = steps
+        ))
+        onMessages(msgs)
+    }
 
     while (maxTurns > 0) {
         maxTurns--
         try {
+            // v2.2.0: 流式只在后续轮次启用（首轮大概率是工具调用，保持非流式；
+            // 工具调用后的最终文本轮次流式输出——工程取舍，可面试展开）
+            val streamEnabled = maxTurns < 4
             val reply = withTimeout(30_000) {
-                aiService.chat(settings.model, conversation, settings.apiEndpoint, settings.apiKey)
+                aiService.chatWithFallback(settings, conversation, onStream = if (streamEnabled) { delta ->
+                    // 流式增量：更新最后一条 assistant 气泡
+                    val last = msgs.lastOrNull()
+                    if (last != null && last.role == ChatMessage.Role.ASSISTANT) {
+                        msgs = mutableListOf(last.copy(content = last.content + delta))
+                    } else {
+                        msgs.add(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = delta))
+                    }
+                    onMessages(msgs)
+                } else null)
             }
+            usedFallback = reply.usedFallback
+            finalUsage = reply.usage
 
-            if (!reply.tool_calls.isNullOrEmpty()) {
-                for (tc in reply.tool_calls) {
+            if (!reply.toolCalls.isNullOrEmpty()) {
+                // Agent 步骤：逐个工具执行，UI 实时显示状态
+                val steps = mutableListOf<ToolStep>()
+                for (tc in reply.toolCalls) {
+                    steps.add(ToolStep(name = tc.function.name, status = "running"))
+                    pushStep(steps.toList())
                     val result = executeTool(tc.function.name, tc.function.arguments, database, scheduler, notificationMgr, gson)
+                    // 仅「解析失败/未知工具」视为 error（业务失败如「未找到」是合法 tool result，模型会自行处理）
+                    val isError = result == zh("参数解析失败") || result.startsWith(zh("未知工具"))
+                    steps[steps.size - 1] = ToolStep(
+                        name = tc.function.name,
+                        status = if (isError) "error" else "done",
+                        summary = result.take(80)
+                    )
+                    pushStep(steps.toList())
                     conversation.add(mapOf(
                         "role" to "assistant",
                         "tool_calls" to listOf(mapOf(
@@ -416,19 +506,44 @@ private suspend fun sendToAI(
                     ))
                     conversation.add(mapOf("role" to "tool", "content" to result, "tool_call_id" to tc.id))
                 }
+                // 步骤结束：清掉临时步骤气泡，下一轮由最终回复接管
+                msgs = mutableListOf()
                 continue
             }
 
-            val content = reply.content ?: zh("好的，已处理。")
+            var content = reply.content ?: zh("好的，已处理。")
+            // v2.2.0: finish_reason 判断——length 表示输出被截断
+            if (reply.finishReason == "length") {
+                content += "\n\n（响应长度受限，已截断）"
+            }
             msgs.add(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = content))
             onLoading(false)
             onMessages(msgs)
+
+            // v2.2.0: AI 调用日志（诊断页可观测）
+            com.reminderapp.service.AILogStore.add(ReminderApp.instance, com.reminderapp.service.AILogStore.Entry(
+                model = if (usedFallback) settings.fallbackModel else settings.model,
+                provider = if (usedFallback) "fallback" else "primary",
+                turns = 5 - maxTurns,
+                promptTokens = finalUsage?.prompt_tokens,
+                completionTokens = finalUsage?.completion_tokens,
+                durationMs = System.currentTimeMillis() - startedAt,
+                ok = true
+            ))
             return
 
         } catch (e: Exception) {
             msgs.add(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = "❌ ${e.message}"))
             onLoading(false)
             onMessages(msgs)
+            com.reminderapp.service.AILogStore.add(ReminderApp.instance, com.reminderapp.service.AILogStore.Entry(
+                model = if (usedFallback) settings.fallbackModel else settings.model,
+                provider = if (usedFallback) "fallback" else "primary",
+                turns = 5 - maxTurns,
+                durationMs = System.currentTimeMillis() - startedAt,
+                ok = false,
+                error = e.message
+            ))
             return
         }
     }
@@ -444,9 +559,12 @@ private suspend fun executeTool(
     name: String, argsJson: String, database: AppDatabase,
     scheduler: ReminderScheduler, notificationMgr: NotificationManager, gson: Gson
 ): String {
+    // v2.2.0: 参数解析失败不再静默降级为空 map——返回明确错误文本回喂模型自纠正
     val args: Map<String, Any?> = try {
         gson.fromJson(argsJson, object : TypeToken<Map<String, Any?>>() {}.type)
-    } catch (e: Exception) { emptyMap() }
+    } catch (e: Exception) {
+        return zh("参数解析失败：工具参数不是合法 JSON，请检查后重试。")
+    }
 
     return when (name) {
         "create_reminder" -> handleCreate(args, database, scheduler, notificationMgr)

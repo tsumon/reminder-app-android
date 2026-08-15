@@ -1,0 +1,68 @@
+{
+    "logs": [
+        {
+            "outputFile": "/Users/mac/.gradle/daemon/8.5/com.reminderapp-mergeDebugResources-66:/values-night-v8/values-night-v8.xml",
+            "map": [
+                {
+                    "source": "/Users/mac/.gradle/caches/transforms-3/9f16a5d07fd37a1565c70c2718343bc3/transformed/appcompat-1.1.0/res/values-night-v8/values-night-v8.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,125,209,293,389,491,593,687",
+                        "endColumns": "69,83,83,95,101,101,93,88",
+                        "endOffsets": "120,204,288,384,486,588,682,771"
+                    }
+                }
+            ]
+        },
+        {
+            "outputFile": "com.reminderapp-mergeDebugResources-66:/values-night-v8/values-night-v8.xml",
+            "map": [
+                {
+                    "source": "/Users/mac/reminder-app-android/app/src/main/res/values-night/themes.xml",
+                    "from": {
+                        "startLines": "3",
+                        "startColumns": "4",
+                        "startOffsets": "96",
+                        "endLines": "7",
+                        "endColumns": "12",
+                        "endOffsets": "408"
+                    },
+                    "to": {
+                        "startLines": "10",
+                        "startColumns": "4",
+                        "startOffsets": "743",
+                        "endLines": "14",
+                        "endColumns": "12",
+                        "endOffsets": "1055"
+                    }
+                },
+                {
+                    "source": "/Users/mac/reminder-app-android/app/src/main/res/values-night/colors.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "55",
+                        "endOffsets": "106"
+                    }
+                },
+                {
+                    "source": "/Users/mac/.gradle/caches/transforms-3/9f16a5d07fd37a1565c70c2718343bc3/transformed/appcompat-1.1.0/res/values-night-v8/values-night-v8.xml",
+                    "from": {
+                        "startLines": "-1,-1,-1,-1,-1,-1,-1,-1",
+                        "startColumns": "-1,-1,-1,-1,-1,-1,-1,-1",
+                        "startOffsets": "-1,-1,-1,-1,-1,-1,-1,-1"
+                    },
+                    "to": {
+                        "startLines": "3,4,5,6,7,8,9,15",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "111,181,265,349,445,547,649,1060",
+                        "endColumns": "69,83,83,95,101,101,93,88",
+                        "endOffsets": "176,260,344,440,542,644,738,1144"
+                    }
+                }
+            ]
+        }
+    ]
+}
