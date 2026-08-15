@@ -5,7 +5,7 @@ import androidx.compose.ui.graphics.Color
 // 主色调 — v1.8.7 任务⑤ 统一为 M3 紫 #6750A4（与 iOS ThemeTokens.BrandPrimary 一致）
 // 令牌统一见 Tokens.kt；此处保留旧名供既有代码引用
 val Primary = Tokens.BrandPrimary
-val PrimaryVariant = Color(0xFF59488F)
+val PrimaryVariant = Color(0xFF0E6E70)
 val Secondary = Color(0xFFFFA07A)
 
 // 状态颜色（令牌化）

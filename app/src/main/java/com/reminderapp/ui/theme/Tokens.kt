@@ -13,10 +13,10 @@ import androidx.compose.ui.unit.sp
 object Tokens {
 
     // ── 品牌主色（双端统一 #6750A4）──
-    val BrandPrimary = Color(0xFF6750A4)
-    val BrandGradientStart = Color(0xFF7C66C2)   // v2.2.1: 品牌渐变起点（对齐 iOS brandGradientStart）
-    val BrandPrimaryDark = Color(0xFF4F3B7A)   // 深色主题用
-    val BrandPrimaryContainer = Color(0xFFEADDFF)
+    val BrandPrimary = Color(0xFF159A9C)   // v2.3.0: 青碧 Teal（从 M3 紫换肤，双端统一）
+    val BrandGradientStart = Color(0xFF4DB6AC)   // v2.3.0: 薄荷亮青渐变起点   // v2.2.1: 品牌渐变起点（对齐 iOS brandGradientStart）
+    val BrandPrimaryDark = Color(0xFF0E6E70)   // 深色主题用
+    val BrandPrimaryContainer = Color(0xFFB2EBE4)
 
     // ── 状态色（与 iOS 一致）──
     val StatusReminding = Color(0xFFE74C3C)

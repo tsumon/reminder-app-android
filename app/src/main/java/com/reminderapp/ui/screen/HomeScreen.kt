@@ -3,6 +3,7 @@ package com.reminderapp.ui.screen
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
@@ -40,6 +41,8 @@ import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.TrackChanges
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -141,6 +144,18 @@ fun HomeScreen(
     LaunchedEffect(Unit) {
         viewModel.ensureSchedules()
         viewModel.checkMissed()
+    }
+
+    // v2.3.0: 今日完成数（hero 完成率环）
+    val database = com.reminderapp.data.database.AppDatabase.getInstance(androidx.compose.ui.platform.LocalContext.current)
+    var todayDone by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        val cal = java.util.Calendar.getInstance()
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0); cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0); cal.set(java.util.Calendar.MILLISECOND, 0)
+        val start = cal.timeInMillis
+        todayDone = database.reminderRecordDao().getAll()
+            .count { it.action == com.reminderapp.data.entity.ReminderRecordEntity.ACTION_CONFIRMED && it.timestamp >= start }
     }
 
     // 长按删除确认框状态
@@ -357,6 +372,7 @@ fun HomeScreen(
             item {
                 OverviewCard(
                     unhandledCount = allReminders.count { it.isActive && it.status != "confirmed" },
+                    todayDone = todayDone,
                     // v1.9.6 fix: 过滤已确认/已过期——is_active=1 包含 confirmed 的 once 提醒
                     // （nextTriggerAt 是过去值），会被误选成「下一条提醒」显示历史时间
                     nextReminder = allReminders
@@ -786,7 +802,7 @@ fun SwipeableReminderCard(
 
 /** 首页概览卡片：待处理数量 + 最近一次提醒（v1.8.7 改品牌渐变卡，滴答清单风格） */
 @Composable
-fun OverviewCard(unhandledCount: Int, nextReminder: ReminderEntity?) {
+fun OverviewCard(unhandledCount: Int, nextReminder: ReminderEntity?, todayDone: Int = 0) {
     // v2.2.1 设计语言：日期大标题 + 农历徽章 + 待办强调 + 光斑装饰（对齐 iOS OverviewCard）
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -897,12 +913,49 @@ fun OverviewCard(unhandledCount: Int, nextReminder: ReminderEntity?) {
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
-                        Text(
-                            text = "$unhandledCount",
-                            style = MaterialTheme.typography.displaySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White.copy(alpha = 0.9f)
-                        )
+                        // v2.3.0: 今日完成率环（感知强的核心视觉，对齐 iOS）
+                        Box(
+                            modifier = Modifier.size(62.dp).padding(end = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Canvas(modifier = Modifier.fillMaxSize()) {
+                                val stroke = 6.dp.toPx()
+                                val inset = stroke / 2
+                                val arcSize = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke)
+                                drawArc(
+                                    color = Color.White.copy(alpha = 0.22f),
+                                    startAngle = 0f, sweepAngle = 360f,
+                                    useCenter = false,
+                                    topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
+                                    size = arcSize,
+                                    style = Stroke(width = stroke)
+                                )
+                                val total = todayDone + unhandledCount
+                                val progress = if (total > 0) todayDone.toFloat() / total else 0f
+                                drawArc(
+                                    color = Color.White,
+                                    startAngle = -90f,
+                                    sweepAngle = 360f * progress.coerceIn(0.02f, 1f),
+                                    useCenter = false,
+                                    topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
+                                    size = arcSize,
+                                    style = Stroke(width = stroke, cap = StrokeCap.Round)
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "${if (todayDone + unhandledCount > 0) (todayDone * 100 / (todayDone + unhandledCount)) else 0}%",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                Text(
+                                    zh("今日完成"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.85f)
+                                )
+                            }
+                        }
                     }
                 }
             }
