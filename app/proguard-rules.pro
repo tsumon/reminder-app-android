@@ -29,3 +29,9 @@
 # 保留 Service 层对外接口符号（AIService / 工具调用反射用到的类名）
 -keep class com.reminderapp.service.AIService { *; }
 -keep class com.reminderapp.service.AITools { *; }
+
+# v2.4.3: AI 对话历史 Gson 反射模型（字段名混淆后 JSON 键会变，跨版本读不回）
+-keep class com.reminderapp.ui.screen.ChatMessage { *; }
+-keep class com.reminderapp.ui.screen.ChatMessage$* { *; }
+-keep class com.reminderapp.ui.screen.ChatHistoryStore { *; }
+-keep class com.reminderapp.ui.screen.ToolStep { *; }

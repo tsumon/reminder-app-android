@@ -79,7 +79,19 @@ object ChatHistoryStore {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null)
             ?: return emptyList()
         return try {
-            gson.fromJson(raw, object : TypeToken<List<ChatMessage>>() {}.type) ?: emptyList()
+            val list: List<ChatMessage> = gson.fromJson(raw, object : TypeToken<List<ChatMessage>>() {}.type)
+                ?: return emptyList()
+            // v2.4.3: Gson 用 Unsafe 绕过构造器默认值——JSON 缺字段时为 null：
+            // toolSteps null → ChatBubble NPE 闪退（模拟器注入数据实测复现）；
+            // role null → 发送携带历史时 msg.role.name NPE；
+            // id null/重复 → LazyColumn key 崩溃。逐条修复 + 去重。
+            list.filter { it.role != null && !it.content.isNullOrBlank() }
+                .map { it.copy(
+                    id = it.id ?: UUID.randomUUID().toString(),
+                    content = it.content ?: "",
+                    toolSteps = it.toolSteps ?: emptyList()
+                ) }
+                .distinctBy { it.id }
         } catch (e: Exception) { emptyList() }
     }
 
@@ -112,6 +124,18 @@ fun AIChatScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var isListening by remember { mutableStateOf(false) }
+    // v2.4.2→2.4.3: 持久化改为「更新即保存」（直接调用，不再依赖 effect 时序）
+    // 流式增量/步骤气泡用 upsert（按 id 替换），避免追加语义造成的重复气泡
+    fun upsertMessage(m: ChatMessage) {
+        val idx = messages.indexOfFirst { it.id == m.id }
+        messages = if (idx >= 0) messages.toMutableList().also { it[idx] = m } else messages + m
+        ChatHistoryStore.save(context, messages)
+    }
+
+    fun appendMessages(newMsgs: List<ChatMessage>) {
+        messages = messages + newMsgs
+        ChatHistoryStore.save(context, messages)
+    }
     fun startListening() {
         if (isListening) return
         isListening = true
@@ -126,7 +150,8 @@ fun AIChatScreen(
                             sendToAI(
                                 text, settings, aiService, database, scheduler, notificationMgr, gson,
                                 history = messages,
-                                onMessages = { newMsgs -> messages = messages + newMsgs },
+                                onMessages = ::appendMessages,
+                                onUpsert = ::upsertMessage,
                                 onLoading = { isLoading = it }
                             )
                         }
@@ -150,14 +175,13 @@ fun AIChatScreen(
 
 
     val listState = rememberLazyListState()
-    // v2.4.2: 消息变化即持久化（防退出丢失）
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) ChatHistoryStore.save(context, messages)
-    }
+
 
     // 欢迎消息
     LaunchedEffect(Unit) {
-        if (!settings.isConfigured) {
+        // v2.4.3 fix: 加 messages.isEmpty() 守卫——原实现无条件用欢迎语整体替换，
+        // 重装/清掉 API Key 后进入会直接抹掉已恢复的历史记录
+        if (!settings.isConfigured && messages.isEmpty()) {
             val guide = zh("👋 你好！请先在设置中配置 API Key（支持 DeepSeek / 通义千问 / 豆包等，均有免费额度）。\n\n我能帮你：\n• 创建提醒「每天提醒我喝水」\n• 查看列表「有什么提醒」\n• 确认完成「确认喝水」\n• 修改提醒「把交房租改成每月5号」\n• 推迟/删除提醒")
             messages = listOf(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = guide))
         }
@@ -290,7 +314,8 @@ fun AIChatScreen(
                                         sendToAI(
                                             userMsg, settings, aiService, database, scheduler, notificationMgr, gson,
                                             history = messages,
-                                            onMessages = { newMsgs -> messages = messages + newMsgs },
+                                            onMessages = ::appendMessages,
+                                            onUpsert = ::upsertMessage,
                                             onLoading = { isLoading = it }
                                         )
                                     }
@@ -442,9 +467,9 @@ private fun ChatBubble(msg: ChatMessage) {
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
             // v2.2.0: Agent 工具步骤可视化（执行中 → 完成/失败）
-            if (msg.toolSteps.isNotEmpty()) {
+            if (!msg.toolSteps.isNullOrEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    msg.toolSteps.forEach { step ->
+                    msg.toolSteps.orEmpty().forEach { step ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -495,6 +520,11 @@ private fun ChatBubble(msg: ChatMessage) {
 
 // ---- AI Loop（v2.2.0：Agent 多步循环 + 流式输出 + 备用降级 + 调用日志） ----
 
+/** v2.4.3: 流式累积气泡的固定 id（upsert 按 id 替换，避免重复追加） */
+private const val STREAM_BUBBLE_ID = "stream-current-bubble"
+/** v2.4.3: 工具步骤气泡的固定 id */
+private const val STEP_BUBBLE_ID = "tool-steps-bubble"
+
 private suspend fun sendToAI(
     userText: String,
     settings: AISettings,
@@ -505,6 +535,7 @@ private suspend fun sendToAI(
     gson: Gson,
     history: List<ChatMessage> = emptyList(),
     onMessages: (List<ChatMessage>) -> Unit,
+    onUpsert: (ChatMessage) -> Unit = {},
     onLoading: (Boolean) -> Unit = {}
 ) {
     // v1.9.6 fix: msgs 只放本轮 assistant 回复（user 消息由调用方上屏），
@@ -525,15 +556,17 @@ private suspend fun sendToAI(
     var maxTurns = 5
     var usedFallback = false
     var finalUsage: AIService.Usage? = null
+    // v2.4.3: 流式累积气泡（固定 id，upsert 语义）
+    var streamBubble: ChatMessage? = null
 
-    // v2.2.0: 工具步骤可视化——当前 assistant 消息携带执行中的步骤列表
+    // v2.2.0→2.4.3: 工具步骤可视化（upsert 固定 id，按 id 替换避免重复）
     fun pushStep(steps: List<ToolStep>) {
-        msgs = mutableListOf(ChatMessage(
+        onUpsert(ChatMessage(
+            id = STEP_BUBBLE_ID,
             role = ChatMessage.Role.ASSISTANT,
             content = "",
             toolSteps = steps
         ))
-        onMessages(msgs)
     }
 
     while (maxTurns > 0) {
@@ -544,15 +577,12 @@ private suspend fun sendToAI(
             val streamEnabled = maxTurns < 4
             val reply = withTimeout(30_000) {
                 aiService.chatWithFallback(settings, conversation, onStream = if (streamEnabled) { delta ->
-                    // 流式增量：更新最后一条 assistant 气泡
-                    val last = msgs.lastOrNull()
-                    if (last != null && last.role == ChatMessage.Role.ASSISTANT) {
-                        msgs = mutableListOf(last.copy(content = last.content + delta))
-                    } else {
-                        msgs.add(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = delta))
-                    }
-                    onMessages(msgs)
-                } else null)
+                        // v2.4.3: 流式增量改 upsert（固定 id，按 id 替换）——
+                        // 原「追加」语义每个 delta 都会新增一条重复气泡
+                        streamBubble = streamBubble?.copy(content = streamBubble!!.content + delta)
+                            ?: ChatMessage(id = STREAM_BUBBLE_ID, role = ChatMessage.Role.ASSISTANT, content = delta)
+                        onUpsert(streamBubble!!)
+                    } else null)
             }
             usedFallback = reply.usedFallback
             finalUsage = reply.usage
@@ -591,9 +621,15 @@ private suspend fun sendToAI(
             if (reply.finishReason == "length") {
                 content += "\n\n（响应长度受限，已截断）"
             }
-            msgs.add(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = content))
+            // v2.4.3: 流式轮次已 upsert 过气泡 → 用最终完整内容收尾（同 id 替换）；
+            // 非流式轮次 → 正常追加
+            if (streamBubble != null) {
+                onUpsert(ChatMessage(id = STREAM_BUBBLE_ID, role = ChatMessage.Role.ASSISTANT, content = content))
+            } else {
+                msgs.add(ChatMessage(role = ChatMessage.Role.ASSISTANT, content = content))
+                onMessages(msgs)
+            }
             onLoading(false)
-            onMessages(msgs)
 
             // v2.2.0: AI 调用日志（诊断页可观测）
             com.reminderapp.service.AILogStore.add(ReminderApp.instance, com.reminderapp.service.AILogStore.Entry(
