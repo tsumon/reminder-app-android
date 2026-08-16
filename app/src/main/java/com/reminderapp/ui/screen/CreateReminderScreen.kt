@@ -236,7 +236,8 @@ fun CreateReminderScreen(
                                     note = note.trim(),
                                     firstTriggerAt = firstTrigger,
                                     nextTriggerAt = firstTrigger,
-                                    isCritical = isCritical
+                                    isCritical = isCritical,
+                                    weeklyWeekday = if (selectedCycle == Cycle.WEEKLY) weeklyWeekday.takeIf { it in 1..7 } else null
                                 )
                             }
 

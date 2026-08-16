@@ -42,6 +42,9 @@ data class ReminderEntity(
     // 阶段2: 跨端稳定 ID（UUID）——通知/小组件/操作记录按本地自增 id 引用，
     // 跨端同步靠 syncId 匹配，导入/合并时保留本地 id 使引用不失效
     @ColumnInfo(name = "sync_id") val syncId: String? = java.util.UUID.randomUUID().toString(),
+    // v2.4.2: 每周提醒的意图星期（1=周一..7=周日；null=未指定）——
+    // AI weekday 参数/手动「星期几」选择存这里，启动时用它检测锚点错位并提示修正
+    @ColumnInfo(name = "weekly_weekday") val weeklyWeekday: Int? = null,
     @ColumnInfo(name = "first_trigger_at") val firstTriggerAt: Long,
     @ColumnInfo(name = "next_trigger_at") val nextTriggerAt: Long,
     @ColumnInfo(name = "last_confirmed_at") val lastConfirmedAt: Long? = null,

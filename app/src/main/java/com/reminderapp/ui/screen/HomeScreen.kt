@@ -162,6 +162,18 @@ fun HomeScreen(
         }
     }
 
+    // v2.4.2: 锚点星期修正——weekly 意图星期与实际锚点不符的提醒
+    var anchorMismatches by remember { mutableStateOf<List<ReminderEntity>>(emptyList()) }
+    LaunchedEffect(allReminders.size) {
+        anchorMismatches = allReminders.filter { r ->
+            r.weeklyWeekday in 1..7 && r.isActive && r.status != "confirmed" && run {
+                val cal = java.util.Calendar.getInstance().apply { timeInMillis = r.firstTriggerAt }
+                val anchorDow = ((cal.get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7) + 1
+                anchorDow != r.weeklyWeekday
+            }
+        }
+    }
+
     // 长按删除确认框状态
     var pendingDelete by remember { mutableStateOf<ReminderEntity?>(null) }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -520,6 +532,40 @@ fun HomeScreen(
                 }
             }
         }
+    }
+
+    // v2.4.2: 锚点星期修正对话框
+    if (anchorMismatches.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { anchorMismatches = emptyList() },
+            title = { Text(zh("提醒日错位")) },
+            text = {
+                Column {
+                    Text(zh("以下每周提醒的触发日与设定不符："))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    anchorMismatches.take(5).forEach { r ->
+                        val wd = arrayOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+                        val actualCal = java.util.Calendar.getInstance().apply { timeInMillis = r.firstTriggerAt }
+                        val actualDow = ((actualCal.get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7) + 1
+                        Text(
+                            zhf("· %1\$s：设定%2\$s，实际%3\$s", r.title, wd[(r.weeklyWeekday ?: 1) - 1], wd[actualDow - 1]),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        viewModel.fixAnchorWeekdays(anchorMismatches)
+                        anchorMismatches = emptyList()
+                    }
+                }) { Text(zh("修正为设定星期")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { anchorMismatches = emptyList() }) { Text(zh("忽略")) }
+            }
+        )
     }
 
     // 删除确认对话框

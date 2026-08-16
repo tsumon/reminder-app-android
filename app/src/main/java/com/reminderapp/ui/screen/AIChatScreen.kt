@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import android.content.Context
 import com.reminderapp.ReminderApp
 import com.reminderapp.data.database.AppDatabase
 import com.reminderapp.data.entity.ReminderEntity
@@ -54,9 +55,37 @@ data class ChatMessage(
     val role: Role,
     val content: String,
     val timestamp: Long = System.currentTimeMillis(),
+    // v2.4.2: 历史持久化用 @Transient 忽略（Gson 跳过该字段）
+    @com.google.gson.annotations.Expose(serialize = false, deserialize = false)
     val toolSteps: List<ToolStep> = emptyList()
 ) {
     enum class Role { USER, ASSISTANT, SYSTEM }
+}
+
+/** v2.4.2: AI 对话历史持久化（SharedPreferences JSON，保留最近 200 条） */
+object ChatHistoryStore {
+    private const val PREFS = "ai_chat_history"
+    private const val KEY = "messages"
+    private const val MAX = 200
+    private val gson = Gson()
+
+    fun save(context: Context, messages: List<ChatMessage>) {
+        val slim = messages.filter { it.content.isNotBlank() }.takeLast(MAX)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString(KEY, gson.toJson(slim)).apply()
+    }
+
+    fun load(context: Context): List<ChatMessage> {
+        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null)
+            ?: return emptyList()
+        return try {
+            gson.fromJson(raw, object : TypeToken<List<ChatMessage>>() {}.type) ?: emptyList()
+        } catch (e: Exception) { emptyList() }
+    }
+
+    fun clear(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY).apply()
+    }
 }
 
 // ---- Screen ----
@@ -77,7 +106,8 @@ fun AIChatScreen(
     val voiceService = remember { VoiceService(ReminderApp.instance) }
     val context = LocalContext.current
 
-    var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
+    // v2.4.2: 历史持久化——进入恢复、变化保存
+    var messages by remember { mutableStateOf<List<ChatMessage>>(ChatHistoryStore.load(context)) }
     var inputText by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
@@ -120,6 +150,10 @@ fun AIChatScreen(
 
 
     val listState = rememberLazyListState()
+    // v2.4.2: 消息变化即持久化（防退出丢失）
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) ChatHistoryStore.save(context, messages)
+    }
 
     // 欢迎消息
     LaunchedEffect(Unit) {
@@ -146,6 +180,47 @@ fun AIChatScreen(
                     }
                 },
                 actions = {
+                    // v2.4.2: 历史记录下拉（查看/清空）
+                    var historyMenu by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { historyMenu = true }) {
+                            Icon(Icons.Default.History, contentDescription = zh("历史记录"))
+                        }
+                        DropdownMenu(expanded = historyMenu, onDismissRequest = { historyMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(zhf("查看历史（%s 条）", messages.size)) },
+                                leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
+                                enabled = messages.isNotEmpty(),
+                                onClick = {
+                                    historyMenu = false
+                                    // 历史已持久化并在进入时恢复；此处滚动到底部
+                                    scope.launch {
+                                        kotlinx.coroutines.delay(100)
+                                        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+                                    }
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(zh("清空历史")) },
+                                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                                enabled = messages.isNotEmpty(),
+                                onClick = {
+                                    historyMenu = false
+                                    messages = emptyList()
+                                    ChatHistoryStore.clear(context)
+                                }
+                            )
+                            Divider()
+                            DropdownMenuItem(
+                                text = { Text(zh("AI 设置")) },
+                                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                                onClick = {
+                                    historyMenu = false
+                                    onNavigateSettings()
+                                }
+                            )
+                        }
+                    }
                     IconButton(onClick = onNavigateSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = zh("设置"))
                     }
@@ -628,26 +703,42 @@ private fun tryBuildEntity(args: Map<String, Any?>): Pair<ReminderEntity?, Strin
 
     val now = System.currentTimeMillis()
 
-    // 首次锚点：
-    // 1) AI 明确给了 trigger_date（如「下周日」算出的具体日期）→ 用它 + reminderHour/Minute。
-    //    v2.4.1 修复：原实现丢弃 trigger_date，永远取「下一个 9:00（已过就明天）」，
-    //    周日下午创建「每周日」→ 锚点落在周一，之后每周一响（用户报告的真实 bug）。
-    // 2) 无 trigger_date → 下一个到达 reminderHour:reminderMinute 的时刻（今天已过则明天）。
+    // 首次锚点（优先级从高到低）：
+    // 1) weekly/biweekly 且 AI 传了 weekday（1=周一..7=周日）→ 对齐到下一个该星期的
+    //    reminderHour:Minute（今天就是且未过 → 今天）。v2.4.2 根治：模型对「每周日」这类
+    //    周期描述往往不传 trigger_date，v2.4.1 只修 trigger_date 路径仍会落到错误的星期。
+    // 2) AI 明确给了 trigger_date → 用它 + reminderHour/Minute（v2.4.1）。
+    // 3) 默认 → 下一个到达 reminderHour:reminderMinute 的时刻（今天已过则明天）。
+    val weekdayParam = listOf("weekday", "week_day").firstNotNullOfOrNull { args[it] }
+        ?.let { (it as? Double)?.toInt() ?: (it as? Int) ?: (it as? String)?.toIntOrNull() }
+        ?.takeIf { it in 1..7 }
     val cal = Calendar.getInstance().apply { timeInMillis = now }
-    val triggerDateRaw = args["trigger_date"] as? String
-    val triggerDate = triggerDateRaw?.let { raw ->
-        runCatching {
-            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(raw.trim())
-        }.getOrNull()?.time
-    }
-    if (triggerDate != null && triggerDate > now) {
-        cal.timeInMillis = triggerDate
-    }
     cal.set(Calendar.HOUR_OF_DAY, reminderHour.coerceIn(0, 23))
     cal.set(Calendar.MINUTE, reminderMinute.coerceIn(0, 59))
     cal.set(Calendar.SECOND, 0)
     cal.set(Calendar.MILLISECOND, 0)
-    if (cal.timeInMillis <= now) cal.add(Calendar.DAY_OF_MONTH, 1)
+
+    if ((cycle == "weekly" || cycle == "biweekly") && weekdayParam != null) {
+        val cur = ((cal.get(Calendar.DAY_OF_WEEK) + 5) % 7) + 1  // 1=周一..7=周日
+        var diff = (weekdayParam - cur + 7) % 7
+        if (diff == 0 && cal.timeInMillis <= now) diff = 7
+        cal.add(Calendar.DAY_OF_MONTH, diff)
+    } else {
+        val triggerDateRaw = args["trigger_date"] as? String
+        val triggerDate = triggerDateRaw?.let { raw ->
+            runCatching {
+                java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(raw.trim())
+            }.getOrNull()?.time
+        }
+        if (triggerDate != null && triggerDate > now) {
+            cal.timeInMillis = triggerDate
+            cal.set(Calendar.HOUR_OF_DAY, reminderHour.coerceIn(0, 23))
+            cal.set(Calendar.MINUTE, reminderMinute.coerceIn(0, 59))
+            cal.set(Calendar.SECOND, 0)
+            cal.set(Calendar.MILLISECOND, 0)
+        }
+        if (cal.timeInMillis <= now) cal.add(Calendar.DAY_OF_MONTH, 1)
+    }
     val anchorNext = cal.timeInMillis
 
     // 日期类提醒必须带有合法的月日，否则引擎无法算出正确触发时间，
@@ -672,6 +763,8 @@ private fun tryBuildEntity(args: Map<String, Any?>): Pair<ReminderEntity?, Strin
         advanceDays = advanceDays, reminderHour = reminderHour, reminderMinute = reminderMinute,
         holidayName = holidayName,
         rulePeriod = rulePeriod, ruleWeek = ruleWeek, ruleWeekday = ruleWeekday,
+        // v2.4.2: 存意图星期（启动锚点检测/修正用；非 weekly 清空）
+        weeklyWeekday = if (cycle == "weekly" || cycle == "biweekly") weekdayParam else null,
         firstTriggerAt = anchorNext, nextTriggerAt = anchorNext,
         status = ReminderStatus.PENDING.name.lowercase(), retryCount = 0, isActive = true
     )

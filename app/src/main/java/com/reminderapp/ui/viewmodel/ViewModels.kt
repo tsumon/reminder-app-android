@@ -155,6 +155,35 @@ class HomeViewModel(
         }
     }
 
+    // MARK: - v2.4.2 锚点星期修正（weekly 意图星期与锚点不符 → 重对齐到下一个设定星期）
+
+    /** 把 weekly 提醒的锚点重对齐到 weeklyWeekday 指定的下一个星期（保留原时分），并重排通知 */
+    fun fixAnchorWeekdays(items: List<com.reminderapp.data.entity.ReminderEntity>) {
+        viewModelScope.launch {
+            items.forEach { r ->
+                val wd = r.weeklyWeekday ?: return@forEach
+                val oldCal = java.util.Calendar.getInstance().apply { timeInMillis = r.firstTriggerAt }
+                val hour = oldCal.get(java.util.Calendar.HOUR_OF_DAY)
+                val minute = oldCal.get(java.util.Calendar.MINUTE)
+                val now = System.currentTimeMillis()
+                val cal = java.util.Calendar.getInstance().apply { timeInMillis = now }
+                cal.set(java.util.Calendar.HOUR_OF_DAY, hour)
+                cal.set(java.util.Calendar.MINUTE, minute)
+                cal.set(java.util.Calendar.SECOND, 0)
+                cal.set(java.util.Calendar.MILLISECOND, 0)
+                val cur = ((cal.get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7) + 1  // 1=周一..7=周日
+                var diff = (wd - cur + 7) % 7
+                if (diff == 0 && cal.timeInMillis <= now) diff = 7
+                cal.add(java.util.Calendar.DAY_OF_MONTH, diff)
+                val fixed = r.copy(firstTriggerAt = cal.timeInMillis, nextTriggerAt = cal.timeInMillis)
+                dao.update(fixed)
+                scheduler.schedule(fixed)
+            }
+            com.reminderapp.service.SyncStore.touchLocalChange()
+            com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+        }
+    }
+
     // MARK: - v2.1.1 批量管理
 
     /** 批量确认完成（未完成的提醒逐条确认，一次同步版本） */

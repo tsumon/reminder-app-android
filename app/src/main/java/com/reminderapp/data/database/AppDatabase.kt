@@ -13,7 +13,7 @@ import com.reminderapp.data.entity.ReminderRecordEntity
 
 @Database(
     entities = [ReminderEntity::class, ReminderRecordEntity::class],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -56,6 +56,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // v2.4.2(v7): weekly 意图星期（锚点错位检测/修正用）
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE reminders ADD COLUMN weekly_weekday INTEGER")
+            }
+        }
+
         // 阶段2(v6): 跨端协议——sync_id（跨平台稳定 UUID）+ holiday_id（节假日稳定 ID）
         private val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -86,7 +93,7 @@ abstract class AppDatabase : RoomDatabase() {
                     // v1.9.6 fix: 原来靠 fallbackToDestructiveMigration 兜底，
                     // 老用户(v1.1/v1.2/v1.5)升级会整库 DROP 重建 → 全部提醒清空。
                     // 补 Migration 后 schema 不匹配时明确报错，绝不静默清库。
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .build()
                     .also { INSTANCE = it }
             }
