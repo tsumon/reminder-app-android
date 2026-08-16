@@ -77,6 +77,11 @@ class NotificationActionReceiver : BroadcastReceiver() {
 
                 // 取消已显示的通知
                 notificationMgr.cancelReminderNotifications(reminderId)
+            } catch (e: Exception) {
+                // v2.4.9: 后台广播协程未捕获异常会走默认 handler 杀进程（用户侧"点确认就闪退"）。
+                // 兜底：清掉该提醒的通知，避免状态已改但通知残留
+                android.util.Log.e("NotificationActionReceiver", "处理通知动作失败", e)
+                runCatching { notificationMgr.cancelReminderNotifications(reminderId) }
             } finally {
                 pendingResult.finish()
             }

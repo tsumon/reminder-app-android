@@ -27,11 +27,16 @@ class AISettings(context: Context) {
         get() {
             val raw = prefs.getString("api_key", "") ?: ""
             if (raw.isEmpty()) return ""
+            // v2.4.9: 不像密文格式（不含冒号分隔符）→ 视为旧版明文，自动加密迁移
+            if (!raw.contains(":")) {
+                val encrypted = CryptoHelper.encrypt(raw)
+                prefs.edit().putString("api_key", encrypted).apply()
+                return raw
+            }
             val decrypted = CryptoHelper.decrypt(raw)
             if (decrypted.isNotEmpty()) return decrypted
-            // 旧版本明文兼容：首次读取时自动加密并回写，避免明文落盘
-            prefs.edit().putString("api_key", CryptoHelper.encrypt(raw)).apply()
-            return raw
+            // 密文格式但解密失败（KeyStore 密钥轮换后旧密文不可恢复）→ 不回写，返回空串让用户重填
+            return ""
         }
         set(value) {
             val encrypted = if (value.isEmpty()) "" else CryptoHelper.encrypt(value)
@@ -62,10 +67,14 @@ class AISettings(context: Context) {
         get() {
             val raw = prefs.getString("fallback_api_key", "") ?: ""
             if (raw.isEmpty()) return ""
+            if (!raw.contains(":")) {
+                val encrypted = CryptoHelper.encrypt(raw)
+                prefs.edit().putString("fallback_api_key", encrypted).apply()
+                return raw
+            }
             val decrypted = CryptoHelper.decrypt(raw)
             if (decrypted.isNotEmpty()) return decrypted
-            prefs.edit().putString("fallback_api_key", CryptoHelper.encrypt(raw)).apply()
-            return raw
+            return ""
         }
         set(value) {
             val encrypted = if (value.isEmpty()) "" else CryptoHelper.encrypt(value)

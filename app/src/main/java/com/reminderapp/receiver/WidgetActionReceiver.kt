@@ -46,6 +46,12 @@ class WidgetActionReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val reminder = db.reminderDao().getById(reminderId) ?: return@launch
+                // v2.4.9: 对齐 NotificationActionReceiver——软删提醒后桌面上残留的小组件按钮
+                // 不应再操作已删除记录（否则会确认/重排已删任务、污染同步与统计）
+                if (!reminder.isActive) {
+                    com.reminderapp.service.NotificationManager(appContext).cancelReminderNotifications(reminderId)
+                    return@launch
+                }
                 val updated = ReminderEngine.confirm(reminder)
                 db.reminderDao().update(updated)
                 // v1.9.6 fix: 完成确认后取消已显示的通知
@@ -58,6 +64,10 @@ class WidgetActionReceiver : BroadcastReceiver() {
                 SyncStore.touchLocalChange()
                 // 刷新小组件（含下次提醒与倒计时）
                 ReminderWidgetProvider.refresh(appContext)
+            } catch (e: Exception) {
+                // v2.4.9: 后台广播协程未捕获异常会杀进程
+                android.util.Log.e("WidgetActionReceiver", "处理小组件完成动作失败", e)
+                runCatching { com.reminderapp.service.NotificationManager(appContext).cancelReminderNotifications(reminderId) }
             } finally {
                 pendingResult.finish()
             }
@@ -77,6 +87,11 @@ class WidgetActionReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val reminder = db.reminderDao().getById(reminderId) ?: return@launch
+                // v2.4.9: 对齐 NotificationActionReceiver——软删提醒后残留小组件按钮不操作已删记录
+                if (!reminder.isActive) {
+                    com.reminderapp.service.NotificationManager(appContext).cancelReminderNotifications(reminderId)
+                    return@launch
+                }
                 val updated = ReminderEngine.snooze(reminder)
                 db.reminderDao().update(updated)
                 // snooze 已把 nextTriggerAt 设成 15 分钟后，交给 scheduler 定时重推
@@ -94,6 +109,10 @@ class WidgetActionReceiver : BroadcastReceiver() {
                 com.reminderapp.service.NotificationManager(appContext).cancelReminderNotifications(reminderId)
                 SyncStore.touchLocalChange()
                 ReminderWidgetProvider.refresh(appContext)
+            } catch (e: Exception) {
+                // v2.4.9: 后台广播协程未捕获异常会杀进程
+                android.util.Log.e("WidgetActionReceiver", "处理小组件稍后动作失败", e)
+                runCatching { com.reminderapp.service.NotificationManager(appContext).cancelReminderNotifications(reminderId) }
             } finally {
                 pendingResult.finish()
             }

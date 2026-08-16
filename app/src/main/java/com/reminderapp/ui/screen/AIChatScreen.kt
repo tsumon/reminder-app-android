@@ -151,14 +151,22 @@ fun AIChatScreen(
                         // v1.9.6 fix: 语音识别结果先上屏（与文本路径一致），
                         // 否则对话列表只显示 AI 回复、看不到用户气泡
                         appendMessages(listOf(ChatMessage(role = ChatMessage.Role.USER, content = text)))
-                        scope.launch {
-                            sendToAI(
-                                text, settings, aiService, database, scheduler, notificationMgr, gson,
-                                history = messages,
-                                onMessages = ::appendMessages,
-                                onUpsert = ::upsertMessage,
-                                onLoading = { isLoading = it }
-                            )
+                        // v2.4.9 fix: 与文本发送路径一致——先置 isLoading 再请求，
+                        // 否则语音请求进行中用户仍可再发一条，两个 Agent 循环并发、
+                        // 固定 id 气泡互相覆盖、历史保存交错
+                        if (settings.isConfigured) {
+                            isLoading = true
+                            scope.launch {
+                                sendToAI(
+                                    text, settings, aiService, database, scheduler, notificationMgr, gson,
+                                    history = messages,
+                                    onMessages = ::appendMessages,
+                                    onUpsert = ::upsertMessage,
+                                    onLoading = { isLoading = it }
+                                )
+                            }
+                        } else {
+                            Toast.makeText(context, zh("请先在 AI 设置中配置 API Key"), Toast.LENGTH_SHORT).show()
                         }
                     }
                 },

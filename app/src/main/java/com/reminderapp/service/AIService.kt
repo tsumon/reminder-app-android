@@ -42,6 +42,30 @@ class AIService {
         val finish_reason: String?
     )
 
+    // v2.4.9: SSE tool_calls 分片解码器（字段全 Optional，兼容分片只含部分字段）
+    data class StreamDelta(
+        val content: String? = null,
+        val tool_calls: List<StreamToolCallFragment>? = null
+    )
+    data class StreamToolCallFragment(
+        val index: Int? = null,
+        val id: String? = null,
+        val type: String? = null,
+        val function: StreamFunctionFragment? = null
+    )
+    data class StreamFunctionFragment(
+        val name: String? = null,
+        val arguments: String? = null
+    )
+    data class StreamChoice(
+        val delta: StreamDelta? = null,
+        val finish_reason: String? = null
+    )
+    data class StreamChunkResponse(
+        val choices: List<StreamChoice>? = null,
+        val usage: Usage? = null
+    )
+
     data class Usage(
         val prompt_tokens: Int? = null,
         val completion_tokens: Int? = null,
@@ -183,31 +207,59 @@ class AIService {
             val content = StringBuilder()
             var finishReason: String? = null
             var usage: Usage? = null
+            // v2.4.9: 累积 SSE tool_calls 分片（OpenAI 协议：
+            // 首个分片带 id/name，后续分片只有 function.arguments 增量）
+            val toolCallAccumulator = mutableMapOf<Int, Triple<String, String, String>>() // index → (id, name, arguments)
 
             while (!source.exhausted()) {
                 val line = source.readUtf8Line() ?: break
                 if (!line.startsWith("data:")) continue
                 val payload = line.removePrefix("data:").trim()
                 if (payload == "[DONE]") break
-                val chunk = try {
-                    gson.fromJson(payload, ChatResponse::class.java)
-                } catch (e: Exception) {
-                    continue // 忽略残缺分片（半包场景）
-                }
-                chunk.choices?.firstOrNull()?.let { choice ->
-                    choice.delta?.content?.let { delta ->
-                        content.append(delta)
-                        onStream(delta)
+                // 优先用 StreamChunkResponse 解码（Optional 字段兼容分片）
+                val streamChunk = try { gson.fromJson(payload, StreamChunkResponse::class.java) } catch (_: Exception) { null }
+                if (streamChunk != null) {
+                    streamChunk.choices?.firstOrNull()?.let { choice ->
+                        choice.delta?.content?.let { delta ->
+                            content.append(delta)
+                            onStream(delta)
+                        }
+                        choice.delta?.tool_calls?.forEach { frag ->
+                            val idx = frag.index ?: return@forEach
+                            var entry = toolCallAccumulator[idx] ?: Triple("", "", "")
+                            frag.id?.let { entry = Triple(it, entry.second, entry.third) }
+                            frag.function?.name?.let { entry = Triple(entry.first, it, entry.third) }
+                            frag.function?.arguments?.let { entry = Triple(entry.first, entry.second, entry.third + it) }
+                            toolCallAccumulator[idx] = entry
+                        }
+                        if (choice.finish_reason != null) finishReason = choice.finish_reason
                     }
-                    if (choice.finish_reason != null) finishReason = choice.finish_reason
+                    if (streamChunk.usage != null) usage = streamChunk.usage
+                } else {
+                    // 回退：标准 ChatResponse（兼容不含 tool_calls 的纯文本流）
+                    val chunk = try { gson.fromJson(payload, ChatResponse::class.java) } catch (_: Exception) { continue }
+                    chunk.choices?.firstOrNull()?.let { choice ->
+                        choice.delta?.content?.let { delta ->
+                            content.append(delta)
+                            onStream(delta)
+                        }
+                        if (choice.finish_reason != null) finishReason = choice.finish_reason
+                    }
+                    if (chunk.usage != null) usage = chunk.usage
                 }
-                if (chunk.usage != null) usage = chunk.usage
             }
 
-            // 流式轮次只可能出现在纯文本回复阶段（工具调用轮次走非流式）
+            // 组装累积的 tool_calls
+            val assembledToolCalls = if (toolCallAccumulator.isEmpty()) null else {
+                toolCallAccumulator.toSortedMap().values.mapNotNull { (id, name, args) ->
+                    if (id.isNotBlank() && name.isNotBlank()) ToolCall(id, "function", FunctionCall(name, args))
+                    else null
+                }
+            }
+
             ChatResult(
                 content = content.toString().ifEmpty { null },
-                toolCalls = null,
+                toolCalls = assembledToolCalls,
                 usage = usage,
                 finishReason = finishReason,
                 usedFallback = false
