@@ -12,8 +12,8 @@ android {
         applicationId = "com.reminderapp"
         minSdk = 26
         targetSdk = 34
-        versionCode = 57
-        versionName = "2.4.5"
+        versionCode = 58
+        versionName = "2.4.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
