@@ -40,12 +40,16 @@
             android:textStyle="bold" />
     </LinearLayout>
 
-    <View
+    <!-- v2.4.5 fix: RemoteViews 只支持白名单控件（TextView/ImageView/Button 等），
+         裸 <View> 不在名单内——launcher 淫染时抛 InflateException，
+         整个小组件自 v1.5.0 起添加到桌面即空白。换成 ImageView 画分隔线。 -->
+    <ImageView
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginTop="8dp"
         android:layout_marginBottom="8dp"
-        android:background="#22000000" />
+        android:background="#22000000"
+        android:contentDescription="@null" />
 
     <!-- 今天农历（v1.8.7 小组件增强） -->
     <TextView

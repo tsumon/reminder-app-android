@@ -66,6 +66,8 @@ fun CalendarCard(
                 map[String.format(Locale.getDefault(), "%04d-%02d-%02d", displayYear, displayMonth + 1, d)] = count
             }
         }
+        // v2.4.5 诊断：日历任务点不渲染时定位是计算层还是渲染层
+        android.util.Log.d("CalendarCard", "taskDates=$map (n=${reminders.size})")
         map
     }
 
@@ -352,15 +354,18 @@ private fun DayCell(
                     else -> MaterialTheme.colorScheme.onSurface
                 }
             )
-            // 任务角标：数字右上角小圆点（v1.8.7 移出第三行，腾位给「休/班」）
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .size(5.dp)
-                    .clip(CircleShape)
-                    .background(if (taskCount > 0) Primary else Color.Transparent)
-            )
         }
+        // v2.4.5 fix: 任务标记从「数字右上角 5dp 小点」移到数字下方独立一行——
+        // 原实现在 32dp 圆内 TopEnd 叠 5dp 点：青点落在今日青色圆上不可见，
+        // 且与农历文字挤在同一列视觉上几乎感知不到（双端用户均反馈"没标识"）。
+        // 现与 iOS 对齐感知：有任务的日子数字正下方渲染 6dp 圆点。
+        Box(
+            modifier = Modifier
+                .padding(top = 1.dp)
+                .size(width = 6.dp, height = 6.dp)
+                .clip(CircleShape)
+                .background(if (taskCount > 0) Primary else Color.Transparent)
+        )
         // 农历（初二~三十 简化显示）
         Text(
             text = lunarText,
