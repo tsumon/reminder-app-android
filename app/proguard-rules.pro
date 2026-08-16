@@ -35,3 +35,13 @@
 -keep class com.reminderapp.ui.screen.ChatMessage$* { *; }
 -keep class com.reminderapp.ui.screen.ChatHistoryStore { *; }
 -keep class com.reminderapp.ui.screen.ToolStep { *; }
+
+# v2.4.4: Gson 运行时反射必需（Gson 官方 proguard 要求）。
+# release 复现（logcat 实锤）：R8 剥掉泛型 Signature 后，
+# 匿名 TypeToken<List<ChatMessage>> 构造直接抛
+# "TypeToken must be created with a type argument" → load/日志读取恒空。
+# debug 无 R8 所以从未暴露。全局修复：保留 Signature + keep TypeToken 及其匿名子类。
+-keepattributes Signature,InnerClasses,EnclosingMethod
+-keep class com.google.gson.reflect.TypeToken { *; }
+-keep class * extends com.google.gson.reflect.TypeToken
+-dontwarn com.google.gson.**

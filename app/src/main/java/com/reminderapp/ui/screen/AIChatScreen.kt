@@ -92,7 +92,12 @@ object ChatHistoryStore {
                     toolSteps = it.toolSteps ?: emptyList()
                 ) }
                 .distinctBy { it.id }
-        } catch (e: Exception) { emptyList() }
+        } catch (e: Exception) {
+            // v2.4.4: 静默吞异常让「历史消失」无从诊断（release 复现：R8 剥掉
+            // 泛型 Signature → TypeToken 擦除 → 反序列化抛异常 → 恒空）。必须打日志。
+            android.util.Log.e("ChatHistory", "load failed, raw=${raw.take(120)}", e)
+            emptyList()
+        }
     }
 
     fun clear(context: Context) {
@@ -145,7 +150,7 @@ fun AIChatScreen(
                     if (text.isNotBlank()) {
                         // v1.9.6 fix: 语音识别结果先上屏（与文本路径一致），
                         // 否则对话列表只显示 AI 回复、看不到用户气泡
-                        messages = messages + ChatMessage(role = ChatMessage.Role.USER, content = text)
+                        appendMessages(listOf(ChatMessage(role = ChatMessage.Role.USER, content = text)))
                         scope.launch {
                             sendToAI(
                                 text, settings, aiService, database, scheduler, notificationMgr, gson,
@@ -217,10 +222,11 @@ fun AIChatScreen(
                                 enabled = messages.isNotEmpty(),
                                 onClick = {
                                     historyMenu = false
-                                    // 历史已持久化并在进入时恢复；此处滚动到底部
+                                    // v2.4.4: 滚到顶部（最早的记录）——原实现滚到底部，
+                                    // 用户本来就在底部，点了毫无反应
                                     scope.launch {
                                         kotlinx.coroutines.delay(100)
-                                        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+                                        if (messages.isNotEmpty()) listState.animateScrollToItem(0)
                                     }
                                 }
                             )
@@ -305,7 +311,9 @@ fun AIChatScreen(
                                 if (text.isEmpty() || isLoading) return@IconButton
                                 val userMsg = text
                                 inputText = ""
-                                messages = messages + ChatMessage(role = ChatMessage.Role.USER, content = userMsg)
+                                // v2.4.4: 用户消息上屏即持久化（appendMessages 内含 save）——
+                                // 原来 AI 回复失败/中途退出时这条消息不会落盘
+                                appendMessages(listOf(ChatMessage(role = ChatMessage.Role.USER, content = userMsg)))
                                 isLoading = true
                                 errorMsg = null
 
