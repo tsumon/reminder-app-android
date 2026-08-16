@@ -53,6 +53,9 @@ fun CreateReminderScreen(
     var isDateMode by remember { mutableStateOf(false) }
     var isRuleMode by remember { mutableStateOf(false) }
     var selectedCycle by remember { mutableStateOf(Cycle.WEEKLY) }
+    // v2.4.1: 每周提醒的星期选择（0=今天，1-7=周一..周日）——修复「每周日」锚点错位
+    var weeklyWeekday by remember { mutableStateOf(0) }
+    var weeklyWeekdayExpanded by remember { mutableStateOf(false) }
     var customDays by remember { mutableIntStateOf(1) }
     var selectedDateType by remember { mutableStateOf<DateReminderType?>(null) }
     var targetMonth by remember { mutableIntStateOf(1) }
@@ -141,6 +144,13 @@ fun CreateReminderScreen(
         }
         cal.set(triggerYear, triggerMonth - 1, triggerDay, triggerHour, triggerMinute, 0)
         cal.set(Calendar.MILLISECOND, 0)
+        // v2.4.1: 每周提醒锚点对齐所选星期（1=周一..7=周日），已过则推到下周
+        if (selectedCycle == Cycle.WEEKLY && weeklyWeekday in 1..7) {
+            val cur = ((cal.get(Calendar.DAY_OF_WEEK) + 5) % 7) + 1
+            var diff = (weeklyWeekday - cur + 7) % 7
+            if (diff == 0 && cal.timeInMillis <= System.currentTimeMillis()) diff = 7
+            cal.add(Calendar.DAY_OF_MONTH, diff)
+        }
         return cal.timeInMillis
     }
 
@@ -558,6 +568,37 @@ fun CreateReminderScreen(
                     )
                 }
 
+                if (selectedCycle == Cycle.WEEKLY) {
+                    // v2.4.1: 每周几（默认今天；明确选择后锚点对齐，修复周日错位）
+                    Text(zh("星期几（可选）"), style = MaterialTheme.typography.labelLarge)
+                    ExposedDropdownMenuBox(
+                        expanded = weeklyWeekdayExpanded,
+                        onExpandedChange = { weeklyWeekdayExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = if (weeklyWeekday == 0) zh("今天") else weekdayLabels.getOrElse(weeklyWeekday - 1) { "" },
+                            onValueChange = {},
+                            readOnly = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = weeklyWeekdayExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = weeklyWeekdayExpanded,
+                            onDismissRequest = { weeklyWeekdayExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(zh("今天")) },
+                                onClick = { weeklyWeekday = 0; weeklyWeekdayExpanded = false }
+                            )
+                            (1..7).forEach { w ->
+                                DropdownMenuItem(
+                                    text = { Text(weekdayLabels[w - 1]) },
+                                    onClick = { weeklyWeekday = w; weeklyWeekdayExpanded = false }
+                                )
+                            }
+                        }
+                    }
+                }
                 if (selectedCycle == Cycle.CUSTOM) {
                     OutlinedTextField(
                         value = customDays.toString(),

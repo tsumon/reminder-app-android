@@ -6,7 +6,19 @@ package com.reminderapp.service
  */
 object AITools {
 
-    val systemPrompt = """
+        /** v2.4.1: 当前日期上下文（模型不知道"今天"是几号，必须注入才能算对"下周日"） */
+    private fun todayContext(): String {
+        val cal = java.util.Calendar.getInstance()
+        val weekdays = arrayOf("周日", "周一", "周二", "周三", "周四", "周五", "周六")
+        val dow = cal.get(java.util.Calendar.DAY_OF_WEEK) - 1
+        return String.format(
+            "今天是 %%d年%%d月%%d日（%%s）。用户说「下周日」「明天」等相对时间时，必须基于这个日期计算 trigger_date（yyyy-MM-dd）。\n",
+            cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH) + 1,
+            cal.get(java.util.Calendar.DAY_OF_MONTH), weekdays[dow.coerceIn(0, 6)]
+        )
+    }
+
+    val systemPrompt = "${todayContext()}" + """
         你是一个循环提醒助手，帮用户管理重复提醒事项。
 
         **核心规则：**

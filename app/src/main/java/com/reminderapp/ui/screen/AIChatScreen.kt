@@ -628,9 +628,21 @@ private fun tryBuildEntity(args: Map<String, Any?>): Pair<ReminderEntity?, Strin
 
     val now = System.currentTimeMillis()
 
-    // 首次锚点：下一个到达 reminderHour:reminderMinute 的时刻
-    // 对 cycle 作为周期锚点；对 date/rule 仅用于确定日期类提醒的时分
+    // 首次锚点：
+    // 1) AI 明确给了 trigger_date（如「下周日」算出的具体日期）→ 用它 + reminderHour/Minute。
+    //    v2.4.1 修复：原实现丢弃 trigger_date，永远取「下一个 9:00（已过就明天）」，
+    //    周日下午创建「每周日」→ 锚点落在周一，之后每周一响（用户报告的真实 bug）。
+    // 2) 无 trigger_date → 下一个到达 reminderHour:reminderMinute 的时刻（今天已过则明天）。
     val cal = Calendar.getInstance().apply { timeInMillis = now }
+    val triggerDateRaw = args["trigger_date"] as? String
+    val triggerDate = triggerDateRaw?.let { raw ->
+        runCatching {
+            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(raw.trim())
+        }.getOrNull()?.time
+    }
+    if (triggerDate != null && triggerDate > now) {
+        cal.timeInMillis = triggerDate
+    }
     cal.set(Calendar.HOUR_OF_DAY, reminderHour.coerceIn(0, 23))
     cal.set(Calendar.MINUTE, reminderMinute.coerceIn(0, 59))
     cal.set(Calendar.SECOND, 0)
