@@ -60,6 +60,10 @@ data class ReminderEntity(
     // 关键提醒走更高优先级渠道 + 全屏弹窗（setFullScreenIntent），确保重要事项不被漏看。
     @ColumnInfo(name = "is_critical") val isCritical: Boolean = false,
 
+    // v2.4.8: 避开节假日/周末自动顺延（报税、缴费等工作日事务）
+    // true = 触发时间落在周六日或法定节假日时，顺延到下一个工作日再提醒
+    @ColumnInfo(name = "holiday_aware") val holidayAware: Boolean = false,
+
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "is_active") val isActive: Boolean = true
 )

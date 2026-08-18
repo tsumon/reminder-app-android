@@ -42,7 +42,7 @@ class BackupServiceTest {
     fun `导入导出往返保持关键字段`() {
         val r = reminder("遛狗", 2_000L).copy(
             kind = "cycle", cycle = "daily", status = "notifying", retryCount = 2,
-            isCritical = true
+            isCritical = true, holidayAware = true
         )
         val json = BackupService.exportToJson(listOf(r), dataVersion = 0)
         val parsed = BackupService.importFromJson(json)
@@ -51,6 +51,7 @@ class BackupServiceTest {
         assertEquals(r.title, back.title)
         assertEquals(r.status, back.status)
         assertEquals(r.isCritical, back.isCritical)
+        assertEquals(r.holidayAware, back.holidayAware)
     }
 
     // ===== 阶段2: 跨端协议 golden fixture（与 iOS 共享同一份内容）=====
@@ -81,6 +82,10 @@ class BackupServiceTest {
         // 关键提醒 camelCase
         assertTrue(items[0].isCritical)
         assertTrue(!items[1].isCritical)
+
+        // v2.4.8: 避开节假日/周末
+        assertTrue(items[0].holidayAware)
+        assertTrue(!items[1].holidayAware)
 
         // 派生/元数据字段
         assertEquals(2, items[1].retryCount)
@@ -136,5 +141,6 @@ class BackupServiceTest {
         // 双写：新旧字段都在
         assertTrue(json.contains("\"isCritical\": false"))
         assertTrue(json.contains("\"is_critical\": false"))
+        assertTrue(json.contains("\"holidayAware\": false"))
     }
 }

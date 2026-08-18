@@ -77,6 +77,8 @@ object BackupService {
             // 阶段2: 统一为 camelCase，is_critical 双写兼容旧版读取
             obj.put("isCritical", r.isCritical)
             obj.put("is_critical", r.isCritical)
+            // v2.4.8: 避开节假日/周末（缺省 false，旧备份兼容）
+            obj.put("holidayAware", r.holidayAware)
             arr.put(obj)
         }
         root.put("reminders", arr)
@@ -122,7 +124,8 @@ object BackupService {
                     createdAt = o.optLong("createdAt", System.currentTimeMillis()),
                     holidayAdjustNote = if (o.isNull("holidayAdjustNote")) null else o.optString("holidayAdjustNote", "").ifEmpty { null },
                     // H1: 导入时写回关键标记（缺省 false，兼容旧备份文件缺字段）；阶段2 改 camelCase，旧 snake 兜底
-                    isCritical = o.optBoolean("isCritical", o.optBoolean("is_critical", false))
+                    isCritical = o.optBoolean("isCritical", o.optBoolean("is_critical", false)),
+                    holidayAware = o.optBoolean("holidayAware", false)
                 )
                 list.add(entity)
             }

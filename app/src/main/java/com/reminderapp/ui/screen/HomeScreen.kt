@@ -638,7 +638,7 @@ fun HomeScreen(
                         var imported = entity.copy(id = 0)
                         // I10: 导入时重算下次触发时间（对齐 WebDAV replaceLocal），
                         //     避免备份里的过期 nextTriggerAt 导致立即触发或永不触发
-                        imported = imported.copy(nextTriggerAt = com.reminderapp.service.ReminderEngine.calculateNextTrigger(imported))
+                        imported = imported.copy(nextTriggerAt = com.reminderapp.service.ReminderEngine.calculateNextTrigger(imported, com.reminderapp.ReminderApp.instance))
                         scope.launch {
                             val newId = ReminderApp.instance.database.reminderDao().insert(imported)
                             ReminderApp.instance.scheduler.schedule(imported.copy(id = newId))

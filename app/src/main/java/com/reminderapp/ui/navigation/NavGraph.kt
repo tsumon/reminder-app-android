@@ -195,7 +195,7 @@ fun NavGraph(
                                 id = 0,
                                 // I10: 导入时重算下次触发时间（对齐 WebDAV 合并），
                                 //     避免备份里的过期 nextTriggerAt 导致立即触发或永不触发
-                                nextTriggerAt = com.reminderapp.service.ReminderEngine.calculateNextTrigger(r)
+                                nextTriggerAt = com.reminderapp.service.ReminderEngine.calculateNextTrigger(r, com.reminderapp.ReminderApp.instance)
                             )
                             // 阶段2: 按 syncId 匹配——同一条提醒（用户编辑过、指纹已变）更新现有行，
                             // 本地自增 id 不变，通知/小组件/操作记录引用不失效
@@ -441,7 +441,7 @@ fun NavGraph(
                         val finalEntity = if (entity.kind == "cycle") {
                             entity
                         } else {
-                            entity.copy(nextTriggerAt = ReminderEngine.calculateNextTrigger(entity))
+                            entity.copy(nextTriggerAt = ReminderEngine.calculateNextTrigger(entity, com.reminderapp.ReminderApp.instance))
                         }
                         val id = database.reminderDao().insert(finalEntity)
                         val saved = finalEntity.copy(id = id)

@@ -134,7 +134,7 @@ class HomeViewModel(
     fun reopenReminder(reminder: ReminderEntity) {
         viewModelScope.launch {
             val next = if (reminder.nextTriggerAt <= System.currentTimeMillis())
-                ReminderEngine.calculateNextTrigger(reminder) else reminder.nextTriggerAt
+                ReminderEngine.calculateNextTrigger(reminder, com.reminderapp.ReminderApp.instance) else reminder.nextTriggerAt
             val updated = reminder.copy(status = "pending", nextTriggerAt = next, retryCount = 0, holidayAdjustNote = null)
             dao.update(updated)
             scheduler.schedule(updated)

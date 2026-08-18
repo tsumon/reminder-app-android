@@ -314,7 +314,7 @@ object WebDavSync {
                     val updated = remote.copy(
                         id = match.id,
                         syncId = match.syncId ?: remote.syncId,
-                        nextTriggerAt = ReminderEngine.calculateNextTrigger(remote),
+                        nextTriggerAt = ReminderEngine.calculateNextTrigger(remote, com.reminderapp.ReminderApp.instance),
                         // 阶段2: 状态随同步保留（iOS 同样保留 overdue/snoozed/notifying；未知值回落 pending）
                         status = if (remote.status in KEPT_STATUS) remote.status else "pending",
                         retryCount = 0
@@ -325,7 +325,7 @@ object WebDavSync {
                     // 新条目：id=0 自增，syncId 缺失补 UUID
                     val fresh = BackupService.ensureSyncId(remote).copy(
                         id = 0,
-                        nextTriggerAt = ReminderEngine.calculateNextTrigger(remote),
+                        nextTriggerAt = ReminderEngine.calculateNextTrigger(remote, com.reminderapp.ReminderApp.instance),
                         status = if (remote.status in KEPT_STATUS) remote.status else "pending",
                         retryCount = 0
                     )

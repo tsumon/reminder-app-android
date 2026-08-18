@@ -1,5 +1,6 @@
 package com.reminderapp.service
 
+import android.content.Context
 import com.reminderapp.data.entity.ReminderEntity
 import com.reminderapp.model.Holiday
 import com.reminderapp.model.ReminderKind
@@ -41,8 +42,56 @@ object ReminderEngine {
         }
     }
 
+    /**
+     * v2.4.8: 带节假日/周末顺延的触发时间计算。
+     * holidayAware=true 时，把原始触发时间顺延到下一个工作日
+     * （跳过周六日 + 法定节假日，保留原时分）。
+     * 报税/缴费等工作日事务用；换滤芯/生日等不设。
+     */
+    fun calculateNextTrigger(
+        reminder: ReminderEntity,
+        context: Context,
+        from: Long = System.currentTimeMillis()
+    ): Long {
+        val raw = calculateNextTrigger(reminder, from)
+        if (!reminder.holidayAware) return raw
+        return deferToWorkday(raw, context)
+    }
+
+    /** 顺延到下一个工作日：跳过周六日与法定节假日（最多 30 天防死循环） */
+    fun deferToWorkday(ts: Long, context: Context): Long =
+        deferToWorkdayCore(ts) { cal ->
+            HolidayRemoteService.status(
+                context,
+                cal.get(Calendar.YEAR),
+                cal.get(Calendar.MONTH) + 1,
+                cal.get(Calendar.DAY_OF_MONTH)
+            )?.isHoliday == true
+        }
+
+    /**
+     * v2.4.8: 顺延核心（纯逻辑，JVM 可单测）。
+     * 从 ts 起逐日推进，跳过周六日与 isHoliday(cal) 判定的节假日，保留时分。
+     */
+    internal fun deferToWorkdayCore(ts: Long, isHoliday: (Calendar) -> Boolean): Long {
+        val cal = Calendar.getInstance().apply { timeInMillis = ts }
+        var guard = 0
+        while (guard < 30) {
+            val dow = cal.get(Calendar.DAY_OF_WEEK)
+            val isWeekend = dow == Calendar.SATURDAY || dow == Calendar.SUNDAY
+            if (!isWeekend && !isHoliday(cal)) break
+            cal.add(Calendar.DAY_OF_MONTH, 1)
+            guard++
+        }
+        return cal.timeInMillis
+    }
+
     /** v2.1.1: 未来 N 次触发时间预览（详情页展示；once 只有一次；已停用/已完成/已逾期为空） */
-    fun futureTriggers(reminder: ReminderEntity, count: Int = 10): List<Long> {
+    fun futureTriggers(
+        reminder: ReminderEntity,
+        count: Int = 10,
+        context: Context? = null
+    ): List<Long> {
         if (!reminder.isActive || reminder.status == "confirmed" || reminder.status == "overdue") {
             return emptyList()
         }
@@ -50,7 +99,9 @@ object ReminderEngine {
         val dates = mutableListOf<Long>()
         var cursor = reminder.nextTriggerAt
         for (i in 0 until count) {
-            dates.add(cursor)
+            // v2.4.8: holidayAware 且给了 context → 预览展示顺延后的时间（与真实调度一致）
+            val shown = if (context != null && reminder.holidayAware) deferToWorkday(cursor, context) else cursor
+            dates.add(shown)
             val next = calculateNextTrigger(reminder, from = cursor)
             if (next <= cursor) break // 防死循环
             cursor = next

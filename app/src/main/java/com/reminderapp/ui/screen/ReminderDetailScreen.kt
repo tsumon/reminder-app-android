@@ -527,7 +527,7 @@ fun ReminderDetailScreen(
             }
 
             // v2.1.1: 未来触发预览（验证周期计算是否正确）
-            val futureDates = com.reminderapp.service.ReminderEngine.futureTriggers(currentReminder, count = 10)
+            val futureDates = com.reminderapp.service.ReminderEngine.futureTriggers(currentReminder, count = 10, context = com.reminderapp.ReminderApp.instance)
             if (futureDates.isNotEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),

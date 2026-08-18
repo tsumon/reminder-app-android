@@ -731,6 +731,13 @@ private fun tryBuildEntity(args: Map<String, Any?>): Pair<ReminderEntity?, Strin
     val reminderHour = (args["reminder_hour"] as? Double)?.toInt() ?: 9
     val reminderMinute = (args["reminder_minute"] as? Double)?.toInt() ?: 0
     val holidayName = args["holiday_name"] as? String
+    // v2.4.8: 避开节假日/周末（Boolean 容错——部分模型输出字符串 "true"/"false"）
+    val holidayAware = when (val v = args["holiday_aware"]) {
+        is Boolean -> v
+        is String -> v.equals("true", ignoreCase = true)
+        is Number -> v.toInt() != 0
+        else -> false
+    }
     // v1.9.0 fix: 规则提醒（第N周周X）参数
     val rulePeriod = args["rule_period"] as? String
     val ruleWeek = (args["rule_week"] as? Double)?.toInt() ?: (args["rule_week"] as? Int)
@@ -817,12 +824,13 @@ private fun tryBuildEntity(args: Map<String, Any?>): Pair<ReminderEntity?, Strin
         rulePeriod = rulePeriod, ruleWeek = ruleWeek, ruleWeekday = ruleWeekday,
         // v2.4.2: 存意图星期（启动锚点检测/修正用；非 weekly 清空）
         weeklyWeekday = if (cycle == "weekly" || cycle == "biweekly") weekdayParam else null,
+        holidayAware = holidayAware,
         firstTriggerAt = anchorNext, nextTriggerAt = anchorNext,
         status = ReminderStatus.PENDING.name.lowercase(), retryCount = 0, isActive = true
     )
 
     // 用引擎重算 nextTriggerAt（日期/规则类按目标月日计算，避免落到 +1 分钟）
-    val nextTrigger = ReminderEngine.calculateNextTrigger(entity)
+    val nextTrigger = ReminderEngine.calculateNextTrigger(entity, com.reminderapp.ReminderApp.instance)
     return Pair(entity.copy(nextTriggerAt = nextTrigger), null)
 }
 
@@ -971,6 +979,13 @@ private suspend fun handleUpdate(
     val hasHour = args.containsKey("reminder_hour")
     val hasMinute = args.containsKey("reminder_minute")
     val holidayName = args["holiday_name"] as? String ?: match.holidayName
+    // v2.4.8: 修改提醒时支持切换「避开节假日/周末」
+    val holidayAware = when (val v = args["holiday_aware"]) {
+        is Boolean -> v
+        is String -> v.equals("true", ignoreCase = true)
+        is Number -> v.toInt() != 0
+        else -> match.holidayAware
+    }
 
         // C3: 用「生效后的周期」判断——提醒已是 custom 时模型只传 custom_days 不传 cycle，旧守卫会漏
         val effectiveCycle = cycleRaw ?: match.cycle
@@ -994,6 +1009,7 @@ private suspend fun handleUpdate(
             reminderHour = reminderHour,
             reminderMinute = reminderMinute,
             holidayName = holidayName,
+            holidayAware = holidayAware,
             holidayAdjustNote = null
         )
         // C1: AI 修改已逾期提醒必须重置状态，否则 Worker 幽灵守卫(status=="overdue" 直接 return)
@@ -1011,7 +1027,7 @@ private suspend fun handleUpdate(
             cal.set(Calendar.MILLISECOND, 0)
             updatedForTime = updatedBase.copy(firstTriggerAt = cal.timeInMillis)
         }
-        val nextTrigger = ReminderEngine.calculateNextTrigger(updatedForTime)
+        val nextTrigger = ReminderEngine.calculateNextTrigger(updatedForTime, com.reminderapp.ReminderApp.instance)
         val finalUpdated = updatedForTime.copy(nextTriggerAt = nextTrigger, holidayAdjustNote = null)
         database.reminderDao().update(finalUpdated)
         scheduler.schedule(finalUpdated)

@@ -72,6 +72,8 @@ fun CreateReminderScreen(
 
     // 批次3 功能5: 关键提醒开关（触发更高优先级渠道 + 全屏弹窗）
     var isCritical by remember { mutableStateOf(false) }
+    // v2.4.8: 避开节假日/周末自动顺延
+    var holidayAware by remember { mutableStateOf(false) }
 
     // H2: 关键提醒全屏权限引导对话框（Android 14+ 未授予时弹出）
     var showFullScreenPermissionDialog by remember { mutableStateOf(false) }
@@ -208,7 +210,8 @@ fun CreateReminderScreen(
                                     note = note.trim(),
                                     firstTriggerAt = firstTrigger,
                                     nextTriggerAt = firstTrigger,
-                                    isCritical = isCritical
+                                    isCritical = isCritical,
+                                    holidayAware = holidayAware
                                 )
                             } else if (isRuleMode) {
                                 ReminderEntity(
@@ -224,7 +227,8 @@ fun CreateReminderScreen(
                                     note = note.trim(),
                                     firstTriggerAt = firstTrigger,
                                     nextTriggerAt = firstTrigger,
-                                    isCritical = isCritical
+                                    isCritical = isCritical,
+                                    holidayAware = holidayAware
                                 )
                             } else {
                                 ReminderEntity(
@@ -237,6 +241,7 @@ fun CreateReminderScreen(
                                     firstTriggerAt = firstTrigger,
                                     nextTriggerAt = firstTrigger,
                                     isCritical = isCritical,
+                                    holidayAware = holidayAware,
                                     weeklyWeekday = if (selectedCycle == Cycle.WEEKLY) weeklyWeekday.takeIf { it in 1..7 } else null
                                 )
                             }
@@ -785,6 +790,35 @@ fun CreateReminderScreen(
                         },
                         modifier = Modifier.semantics {
                             contentDescription = zh("关键提醒开关：开启后触发时全屏弹出，确保不被漏看")
+                        }
+                    )
+                }
+            }
+
+            // v2.4.8: 避开节假日/周末自动顺延（报税/缴费等工作日事务）
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(zh("避开节假日/周末"), style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            zh("触发日期落在周六日或法定节假日时，自动顺延到下一个工作日再提醒（报税、缴费等需工作日办理的事务用）"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = holidayAware,
+                        onCheckedChange = { holidayAware = it },
+                        modifier = Modifier.semantics {
+                            contentDescription = zh("避开节假日周末开关：触发日期落在周六日或法定节假日时顺延到下一个工作日")
                         }
                     )
                 }
