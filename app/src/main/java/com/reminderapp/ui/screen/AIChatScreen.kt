@@ -259,6 +259,27 @@ fun AIChatScreen(
                             )
                         }
                     }
+                    // v2.4.9: 本周洞察（触发 AI 周报）
+                    IconButton(onClick = {
+                        if (settings.isConfigured) {
+                            inputText = ""
+                            appendMessages(listOf(ChatMessage(role = ChatMessage.Role.USER, content = "给我一份本周提醒总结和洞察")))
+                            isLoading = true
+                            scope.launch {
+                                sendToAI(
+                                    "给我一份本周提醒总结和洞察", settings, aiService, database, scheduler, notificationMgr, gson,
+                                    history = messages,
+                                    onMessages = ::appendMessages,
+                                    onUpsert = ::upsertMessage,
+                                    onLoading = { isLoading = it }
+                                )
+                            }
+                        } else {
+                            Toast.makeText(context, zh("请先在 AI 设置中配置 API Key"), Toast.LENGTH_SHORT).show()
+                        }
+                    }) {
+                        Icon(Icons.Default.BarChart, contentDescription = zh("本周洞察"))
+                    }
                     IconButton(onClick = onNavigateSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = zh("设置"))
                     }
@@ -701,6 +722,7 @@ private suspend fun executeTool(
         "delete_reminder" -> handleDelete(args, database)
         "update_reminder" -> handleUpdate(args, database, scheduler)
         "import_tasks" -> handleImportTasks(args, database, scheduler, notificationMgr, gson)
+        "get_stats_context" -> handleStatsContext(database)
         else -> zhf("未知工具: %s", name)
     }
 }
@@ -903,6 +925,63 @@ private suspend fun handleList(database: AppDatabase): String {
         }
         sb.append("\n · ${r.title} [$display]")
     }
+    return sb.toString()
+}
+
+/**
+ * v2.4.9: 本周统计上下文（AI 周报数据源）——确认/错过/完成率/时段习惯/AI 调用量。
+ * 只读数据库与 AILogStore，无副作用，可安全被模型调用。
+ */
+private suspend fun handleStatsContext(database: AppDatabase): String {
+    val records = database.reminderRecordDao().getAll()
+    val summary = com.reminderapp.service.StatsService.summarize(records)
+
+    // 本周（周一 00:00 起）
+    val cal = Calendar.getInstance()
+    cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+    val dow = ((cal.get(Calendar.DAY_OF_WEEK) + 5) % 7)  // 0=周一
+    cal.add(Calendar.DAY_OF_MONTH, -dow)
+    val weekStart = cal.timeInMillis
+    val weekConfirm = records.count { it.action == com.reminderapp.data.entity.ReminderRecordEntity.ACTION_CONFIRMED && it.timestamp >= weekStart }
+    val startOfDayLocal: (Long) -> Long = { ts ->
+        val c = Calendar.getInstance().apply { timeInMillis = ts }
+        c.set(Calendar.HOUR_OF_DAY, 0); c.set(Calendar.MINUTE, 0); c.set(Calendar.SECOND, 0); c.set(Calendar.MILLISECOND, 0)
+        c.timeInMillis
+    }
+    val weekMissed = records.filter { it.action == com.reminderapp.data.entity.ReminderRecordEntity.ACTION_NOTIFIED && it.timestamp >= weekStart }
+        .map { startOfDayLocal(it.timestamp) }.toSet().size
+    val rate = if (weekConfirm + weekMissed > 0) {
+        (weekConfirm.toDouble() / (weekConfirm + weekMissed) * 100).toInt()
+    } else null
+
+    // 本周各提醒完成情况（标题 → 确认次数）
+    val df = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+    val weekKeys = mutableSetOf<String>()
+    var c = Calendar.getInstance().apply { timeInMillis = weekStart }
+    for (i in 0 until 7) {
+        weekKeys.add(df.format(Date(c.timeInMillis)))
+        c.add(Calendar.DAY_OF_MONTH, 1)
+    }
+    val titleById = database.reminderDao().getAllSync().associate { it.id to it.title }
+    val byReminder = mutableMapOf<String, Int>()
+    records.filter { it.timestamp >= weekStart && it.action == com.reminderapp.data.entity.ReminderRecordEntity.ACTION_CONFIRMED }
+        .forEach { r -> val t = titleById[r.reminderId] ?: "已删除的提醒"; byReminder[t] = (byReminder[t] ?: 0) + 1 }
+
+    // 最常忘记时段（复用 summary）
+    val forget = summary.forgetHours.take(3).joinToString("、") { zhf("%s点(%s次)", it.first, it.second) }
+
+    // AI 调用量（本周）
+    val aiLogs = com.reminderapp.service.AILogStore.recent(com.reminderapp.ReminderApp.instance)
+        .filter { it.time >= weekStart }
+    val aiOk = aiLogs.count { it.ok }
+    val aiFail = aiLogs.count { !it.ok }
+
+    val sb = StringBuilder()
+    sb.append(zhf("本周统计（%s 起 7 天）：确认 %s 次，错过 %s 天，完成率 %s。", df.format(Date(weekStart)), weekConfirm, weekMissed, rate?.let { "$it%" } ?: "暂无数据"))
+    sb.append(zhf("当前连续 %s 天，最长连续 %s 天。", summary.currentStreak, summary.longestStreak))
+    if (forget.isNotBlank()) sb.append(zhf("最常忘记的时段：%s。", forget))
+    if (byReminder.isNotEmpty()) sb.append("本周各提醒确认次数：" + byReminder.entries.joinToString("、") { zhf("%s×%s", it.key, it.value) } + "。")
+    sb.append(zhf("本周 AI 调用 %s 次（成功 %s，失败 %s）。", aiLogs.size, aiOk, aiFail))
     return sb.toString()
 }
 

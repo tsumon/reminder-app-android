@@ -85,6 +85,9 @@ fun CreateReminderScreen(
     var nlText by remember { mutableStateOf("") }
     var nlHint by remember { mutableStateOf<String?>(null) }
     var nlError by remember { mutableStateOf(false) }
+    // v2.4.9: 新历+旧历并存 → 保存时拆两条
+    var nlDualBirthday by remember { mutableStateOf(false) }
+    var nlExtraLunar by remember { mutableStateOf<ReminderEntity?>(null) }
 
     // 日期时间选择
     val now = Calendar.getInstance()
@@ -246,7 +249,36 @@ fun CreateReminderScreen(
                                 )
                             }
 
+                            // v2.4.9: 新历+旧历并存 → 保存时拆两条（先主后农历补充）
+                            if (nlDualBirthday && entity.kind == "date" && entity.dateType == "solar_birthday") {
+                                val lm = Regex("""(?:农历|旧历|阴历)\s*(\d{1,2})\s*月\s*(\d{1,2})""").find(nlText)
+                                if (lm != null) {
+                                    val lmM = lm.groupValues[1].toInt().coerceIn(1, 12)
+                                    val lmD = lm.groupValues[2].toInt().coerceIn(1, 30)
+                                    val lunarCal = java.util.Calendar.getInstance()
+                                    lunarCal.set(java.util.Calendar.HOUR_OF_DAY, triggerHour)
+                                    lunarCal.set(java.util.Calendar.MINUTE, triggerMinute)
+                                    lunarCal.set(java.util.Calendar.SECOND, 0)
+                                    lunarCal.set(java.util.Calendar.MILLISECOND, 0)
+                                    val solar = com.reminderapp.service.LunarCalendar.lunarToSolar(
+                                        lunarCal.get(java.util.Calendar.YEAR), lmM, lmD
+                                    ) ?: lunarCal.timeInMillis
+                                    lunarCal.timeInMillis = solar
+                                    if (lunarCal.timeInMillis <= System.currentTimeMillis()) {
+                                        lunarCal.add(java.util.Calendar.YEAR, 1)
+                                    }
+                                    nlExtraLunar = entity.copy(
+                                        title = entity.title + "（农历）",
+                                        dateType = "lunar_birthday",
+                                        targetMonth = lmM,
+                                        targetDay = lmD,
+                                        firstTriggerAt = lunarCal.timeInMillis,
+                                        nextTriggerAt = lunarCal.timeInMillis
+                                    )
+                                }
+                            }
                             onSave(entity)
+                            nlExtraLunar?.let { extra -> onSave(extra); nlExtraLunar = null }
                         },
                         enabled = title.isNotBlank()
                     ) {
@@ -343,6 +375,16 @@ fun CreateReminderScreen(
                                         "weekly" -> {
                                             isDateMode = false; isRuleMode = false
                                             selectedCycle = Cycle.WEEKLY
+                                            // v2.4.9: 对齐 AI——「每周日」自动填星期
+                                            p.weekday?.let { weeklyWeekday = it }
+                                        }
+                                        "quarterly" -> {
+                                            isDateMode = false; isRuleMode = false
+                                            selectedCycle = Cycle.QUARTERLY
+                                        }
+                                        "biweekly" -> {
+                                            isDateMode = false; isRuleMode = false
+                                            selectedCycle = Cycle.BIWEEKLY
                                         }
                                         "monthly" -> {
                                             isDateMode = false; isRuleMode = false
@@ -360,10 +402,18 @@ fun CreateReminderScreen(
                                         "yearly" -> zh("每年")
                                         "daily" -> zh("每天")
                                         "weekly" -> zh("每周")
+                                        "biweekly" -> zh("每两周")
+                                        "quarterly" -> zh("每季度")
                                         "monthly" -> zh("每月")
                                         else -> zh("仅一次")
                                     }
-                                    nlHint = "「${p.title}」· $cycleText · ${p.label}"
+                                    // v2.4.9: 对齐 AI——事务类自动开启「避开节假日/周末」
+                                    holidayAware = p.holidayAware
+                                    // v2.4.9: 对齐 AI——新历+旧历并存时提示将拆两条创建
+                                    val hasSolar = Regex("""(\d{1,2})\s*月\s*(\d{1,2})\s*[号日]""").containsMatchIn(nlText)
+                                    val hasLunar = Regex("""(?:农历|旧历|阴历)\s*(\d{1,2})\s*月\s*(\d{1,2})""").containsMatchIn(nlText)
+                                    nlDualBirthday = hasSolar && hasLunar
+                                    nlHint = "「${p.title}」· $cycleText · ${p.label}" + if (nlDualBirthday) " · " + zh("检测到新旧历两个生日，将创建两条") else "" + if (p.holidayAware) " · " + zh("已开启避开节假日/周末") else ""
                                 }
                             },
                             enabled = nlText.isNotBlank()

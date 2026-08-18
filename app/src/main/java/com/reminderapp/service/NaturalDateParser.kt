@@ -22,12 +22,15 @@ object NaturalDateParser {
 
     data class ParsedSchedule(
         val nextTriggerAt: Long,
-        val repeatMode: String,   // once | daily | weekly | monthly | yearly | lunar
+        val repeatMode: String,   // once | daily | weekly | biweekly | monthly | quarterly | yearly | lunar
         val dateType: String?,    // null | solar_birthday | lunar_birthday
         val targetMonth: Int?,
         val targetDay: Int?,
         val title: String,
-        val label: String
+        val label: String,
+        // v2.4.9: 手动创建对齐 AI——周几（1=周一..7=周日，weekly 用）与避开节假日/周末
+        val weekday: Int? = null,
+        val holidayAware: Boolean = false
     )
 
     private val weekdayMap = mapOf(
@@ -42,6 +45,7 @@ object NaturalDateParser {
         var hour = 9
         var minute = 0
         var repeatMode = "once"
+        var weekday: Int? = null
         var dateType: String? = null
         var targetMonth: Int? = null
         var targetDay: Int? = null
@@ -55,6 +59,8 @@ object NaturalDateParser {
             }
             text.contains("每天") || text.contains("每日") || text.contains("天天") -> repeatMode = "daily"
             text.contains("每年") || text.contains("年年") -> repeatMode = "yearly"
+            text.contains("每季度") || text.contains("每个季度") || text.contains("每季") -> repeatMode = "quarterly"
+            text.contains("每两周") || text.contains("每二个礼拜") || text.contains("每2周") || text.contains("双周") -> repeatMode = "biweekly"
             text.contains("每月") || text.contains("每个月") -> repeatMode = "monthly"
             text.contains("每周") || text.contains("每星期") || text.contains("每礼拜") -> repeatMode = "weekly"
         }
@@ -126,6 +132,7 @@ object NaturalDateParser {
             if (!nextWeek && !previousWeek && diff == 0) diff = 7 // 本周已过的同一天 → 下周
             cal.add(Calendar.DAY_OF_MONTH, diff)
             if (repeatMode == "once") repeatMode = "weekly"
+            weekday = target
         }
 
         // 每月X号
@@ -179,9 +186,18 @@ object NaturalDateParser {
             next = c2.timeInMillis
         }
 
+        // v2.4.9: 避开节假日/周末——显式关键词优先，其次事务类关键词自动开启
+        val holidayAware = when {
+            text.contains("避开节假日") || text.contains("顺延") || text.contains("工作日") -> true
+            text.contains("报税") || text.contains("缴费") || text.contains("还款") ||
+                text.contains("办证") || text.contains("开会") || text.contains("取件") ||
+                text.contains("办事") || text.contains("银行") || text.contains("上班") -> true
+            else -> false
+        }
+
         val title = extractTitle(text)
         val label = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(next))
-        return ParsedSchedule(next, repeatMode, dateType, targetMonth, targetDay, title, label)
+        return ParsedSchedule(next, repeatMode, dateType, targetMonth, targetDay, title, label, weekday, holidayAware)
     }
 
     private fun dowFromCalendar(cal: Calendar): Int {

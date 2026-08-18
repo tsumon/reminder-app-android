@@ -86,6 +86,20 @@ class HomeViewModel(
      * @param isMakeUp 是否为「补打今天」（逾期后补打卡）。行为与普通确认一致
      *                 （按今天完成 + 推进周期 + 计入统计），只区分反馈文案。
      */
+    /** v2.4.9: 遗漏补办——把指定提醒推到明天提醒时刻（HomeScreen 错过卡片用） */
+    fun snoozeTomorrow(reminder: ReminderEntity) {
+        viewModelScope.launch {
+            val updated = ReminderEngine.snoozeTomorrow(reminder)
+            dao.update(updated)
+            recordDao.insert(ReminderRecordEntity(reminderId = reminder.id, action = ReminderRecordEntity.ACTION_SNOOZED))
+            scheduler.schedule(updated)
+            com.reminderapp.service.NotificationManager(com.reminderapp.ReminderApp.instance)
+                .cancelReminderNotifications(reminder.id)
+            com.reminderapp.service.SyncStore.touchLocalChange()
+            com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+        }
+    }
+
     fun confirmReminder(reminder: ReminderEntity, isMakeUp: Boolean = false) {
         viewModelScope.launch {
             val updated = ReminderEngine.confirm(reminder)
@@ -201,6 +215,32 @@ class HomeViewModel(
     }
 
     /** 批量删除（软删 + 清通知 + 清记录） */
+    /** v2.4.9: 批量修改提醒时间（只改时分，按原锚点重算下次触发） */
+    fun batchChangeTime(ids: Set<Long>, hour: Int, minute: Int) {
+        viewModelScope.launch {
+            val all = dao.getAllSync()
+            for (id in ids) {
+                val r = all.find { it.id == id } ?: continue
+                val updated = r.copy(reminderHour = hour.coerceIn(0, 23), reminderMinute = minute.coerceIn(0, 59))
+                // 周期/规则类改锚点时分；日期类由引擎按目标月日+新时分重算
+                val withAnchor = if (updated.kind == "cycle" || updated.kind == "rule") {
+                    val cal = java.util.Calendar.getInstance().apply { timeInMillis = updated.firstTriggerAt }
+                    cal.set(java.util.Calendar.HOUR_OF_DAY, hour.coerceIn(0, 23))
+                    cal.set(java.util.Calendar.MINUTE, minute.coerceIn(0, 59))
+                    cal.set(java.util.Calendar.SECOND, 0)
+                    cal.set(java.util.Calendar.MILLISECOND, 0)
+                    updated.copy(firstTriggerAt = cal.timeInMillis)
+                } else updated
+                val next = ReminderEngine.calculateNextTrigger(withAnchor, com.reminderapp.ReminderApp.instance)
+                val final = withAnchor.copy(nextTriggerAt = next)
+                dao.update(final)
+                scheduler.schedule(final)
+            }
+            com.reminderapp.service.SyncStore.touchLocalChange()
+            com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+        }
+    }
+
     fun batchDelete(ids: Set<Long>) {
         viewModelScope.launch {
             ids.forEach { id ->

@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BarChart
@@ -180,6 +181,10 @@ fun HomeScreen(
     // v2.1.1: 批量管理（长按进入多选，批量完成/删除）
     var selectionMode by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    // v2.4.9: 批量改提醒时间对话框
+    var showBatchTimeDialog by remember { mutableStateOf(false) }
+    var batchHour by remember { mutableStateOf(9) }
+    var batchMinute by remember { mutableStateOf(0) }
     // 点击日历某天 → 查看当日任务
     var selectedDate by remember { mutableStateOf<Long?>(null) }
     // 智能清单
@@ -238,6 +243,11 @@ fun HomeScreen(
                             },
                             enabled = selectedIds.isNotEmpty()
                         ) { Text(zh("删除"), color = MaterialTheme.colorScheme.error) }
+                        // v2.4.9: 批量改提醒时间
+                        TextButton(
+                            onClick = { showBatchTimeDialog = true },
+                            enabled = selectedIds.isNotEmpty()
+                        ) { Text(zh("改时间"), color = MaterialTheme.colorScheme.primary) }
                         TextButton(onClick = {
                             selectedIds = emptySet()
                             selectionMode = false
@@ -397,6 +407,67 @@ fun HomeScreen(
                 )
             }
 
+            // v2.4.9: 遗漏补办卡——已触发未确认 / 已到时间未确认的提醒，一键补确认或推到明天
+            val now = System.currentTimeMillis()
+            val missedReminders = allReminders
+                .filter {
+                    it.isActive && it.status != "confirmed" &&
+                        (it.status == "notifying" || it.status == "overdue" || (it.status == "pending" && it.nextTriggerAt <= now))
+                }
+                .sortedBy { it.nextTriggerAt }
+            if (missedReminders.isNotEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Filled.Warning,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    zhf("你错过了 %d 条提醒", missedReminders.size),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            missedReminders.take(5).forEach { r ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(r.title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                                        Text(
+                                            zhf("错过于 %s", java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(r.nextTriggerAt))),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                    TextButton(onClick = { viewModel.confirmReminder(r, isMakeUp = true) }) {
+                                        Text(zh("补确认"), color = MaterialTheme.colorScheme.error)
+                                    }
+                                    TextButton(onClick = { viewModel.snoozeTomorrow(r) }) {
+                                        Text(zh("明天"), color = MaterialTheme.colorScheme.error)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // v2.4.0: 今日安排时间线（今天要触发的提醒按时间排列，布局重设计核心）
             val cal0 = java.util.Calendar.getInstance()
             cal0.set(java.util.Calendar.HOUR_OF_DAY, 0); cal0.set(java.util.Calendar.MINUTE, 0)
@@ -532,6 +603,44 @@ fun HomeScreen(
                 }
             }
         }
+    }
+
+    // v2.4.9: 批量改提醒时间
+    if (showBatchTimeDialog) {
+        AlertDialog(
+            onDismissRequest = { showBatchTimeDialog = false },
+            title = { Text(zhf("批量修改 %d 条提醒的时间", selectedIds.size)) },
+            text = {
+                Column {
+                    listOf(6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 22).forEach { h ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(zhf("%d 点", h), Modifier.weight(1f))
+                            RadioButton(selected = batchHour == h, onClick = { batchHour = h })
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(zh("分钟"), Modifier.weight(1f))
+                        listOf(0, 15, 30, 45).forEach { m ->
+                            TextButton(onClick = { batchMinute = m }) {
+                                Text(zhf("%02d", m), color = if (batchMinute == m) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.batchChangeTime(selectedIds, batchHour, batchMinute)
+                    showBatchTimeDialog = false
+                    selectedIds = emptySet()
+                    selectionMode = false
+                }) { Text(zh("应用")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBatchTimeDialog = false }) { Text(zh("取消")) }
+            }
+        )
     }
 
     // v2.4.2: 锚点星期修正对话框
