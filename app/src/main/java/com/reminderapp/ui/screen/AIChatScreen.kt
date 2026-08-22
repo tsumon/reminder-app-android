@@ -55,6 +55,8 @@ data class ChatMessage(
     val role: Role,
     val content: String,
     val timestamp: Long = System.currentTimeMillis(),
+    // ask_user 澄清气泡的快捷回复选项（点击后 copy(options=null) 防重复点）
+    val options: List<String>? = null,
     // v2.4.2: 历史持久化用 @Transient 忽略（Gson 跳过该字段）
     @com.google.gson.annotations.Expose(serialize = false, deserialize = false)
     val toolSteps: List<ToolStep> = emptyList()
@@ -424,7 +426,23 @@ fun AIChatScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(messages, key = { it.id }) { msg ->
-                        ChatBubble(msg)
+                        ChatBubble(msg) { option ->
+                            // 点击 ask_user 选项——原气泡按钮置空防重复点，选项作为
+                            // user 消息发送，带历史走正常循环（模型看到自己问过、用户选了什么）
+                            if (isLoading) return@ChatBubble
+                            upsertMessage(msg.copy(options = null))
+                            appendMessages(listOf(ChatMessage(role = ChatMessage.Role.USER, content = option)))
+                            isLoading = true
+                            scope.launch {
+                                sendToAI(
+                                    option, settings, aiService, database, scheduler, notificationMgr, gson,
+                                    history = messages,
+                                    onMessages = ::appendMessages,
+                                    onUpsert = ::upsertMessage,
+                                    onLoading = { isLoading = it }
+                                )
+                            }
+                        }
                     }
                     if (isLoading) {
                         item {
@@ -476,7 +494,7 @@ fun AIChatScreen(
 }
 
 @Composable
-private fun ChatBubble(msg: ChatMessage) {
+private fun ChatBubble(msg: ChatMessage, onOption: ((String) -> Unit)? = null) {
     val isUser = msg.role == ChatMessage.Role.USER
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -503,6 +521,7 @@ private fun ChatBubble(msg: ChatMessage) {
                 )
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
+            Column {
             // v2.2.0: Agent 工具步骤可视化（执行中 → 完成/失败）
             if (!msg.toolSteps.isNullOrEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -551,6 +570,23 @@ private fun ChatBubble(msg: ChatMessage) {
                 text = msg.content,
                 color = if (isUser) Color.White else MaterialTheme.colorScheme.onSurface
             )
+
+            // ask_user 快捷回复按钮（历法澄清等）
+            if (!msg.options.isNullOrEmpty() && onOption != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    msg.options.orEmpty().forEach { opt ->
+                        OutlinedButton(
+                            onClick = { onOption.invoke(opt) },
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                            modifier = Modifier.height(34.dp)
+                        ) {
+                            Text(opt, style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                }
+            }
+            }
         }
     }
 }
@@ -628,6 +664,35 @@ private suspend fun sendToAI(
                 // Agent 步骤：逐个工具执行，UI 实时显示状态
                 val steps = mutableListOf<ToolStep>()
                 for (tc in reply.toolCalls) {
+                    // ask_user：澄清问题渲染为选项按钮，中断本轮 Agent 循环；
+                    // 用户点选后作为 user 消息带着历史重新进入 sendToAI。
+                    // 用 STEP_BUBBLE_ID upsert——直接把（可能存在的）步骤气泡替换成问题气泡
+                    if (tc.function.name == "ask_user") {
+                        var question = zh("请补充信息")
+                        var options: List<String> = emptyList()
+                        try {
+                            val args: Map<String, Any?> = gson.fromJson(
+                                tc.function.arguments, object : TypeToken<Map<String, Any?>>() {}.type)
+                            (args["question"] as? String)?.takeIf { it.isNotBlank() }?.let { question = it }
+                            (args["options"] as? List<*>)?.filterIsInstance<String>()
+                                ?.filter { it.isNotBlank() }?.let { options = it }
+                        } catch (_: Exception) { }
+                        onUpsert(ChatMessage(
+                            id = STEP_BUBBLE_ID, role = ChatMessage.Role.ASSISTANT,
+                            content = question, options = options.ifEmpty { null }
+                        ))
+                        onLoading(false)
+                        com.reminderapp.service.AILogStore.add(ReminderApp.instance, com.reminderapp.service.AILogStore.Entry(
+                            model = if (usedFallback) settings.fallbackModel else settings.model,
+                            provider = if (usedFallback) "fallback" else "primary",
+                            turns = 5 - maxTurns,
+                            promptTokens = finalUsage?.prompt_tokens,
+                            completionTokens = finalUsage?.completion_tokens,
+                            durationMs = System.currentTimeMillis() - startedAt,
+                            ok = true
+                        ))
+                        return
+                    }
                     steps.add(ToolStep(name = tc.function.name, status = "running"))
                     pushStep(steps.toList())
                     val result = executeTool(tc.function.name, tc.function.arguments, database, scheduler, notificationMgr, gson)
@@ -829,6 +894,11 @@ private fun tryBuildEntity(args: Map<String, Any?>): Pair<ReminderEntity?, Strin
         (targetMonth !in 1..12 || targetDay !in 1..31)
     ) {
         return Pair(null, zh("需要具体的公历/农历月日才能创建日期提醒（例如：农历八月十五、公历5月1日）。请补充月日，我再为你创建。"))
+    }
+    // 农历没有 31 日——大概率是模型把公历习惯带进了农历或历法判断错了，
+    // 拦下让它回头和用户确认历法，而不是创建一条永远不会触发的提醒
+    if (kind == "date" && dateType == "lunar_birthday" && targetDay > 30) {
+        return Pair(null, zh("农历日期没有 31 日，日期或历法可能有误。请与用户确认是新历还是农历后再创建。"))
     }
     if (kind == "date" && dateType == "holiday" && holidayName.isNullOrBlank()) {
         return Pair(null, zh("需要指定节假日名称（例如：春节、中秋节）才能创建节假日提醒。"))

@@ -153,6 +153,17 @@ object NaturalDateParser {
             cal.set(Calendar.DAY_OF_MONTH, targetDay!!)
         }
 
+        // 公历数字简写 2.10 / 2-10 / 2/10。紧凑无分隔格式（211）歧义太大
+        // （2/11 还是 21/1 无从判断），不在此处理——AI 入口会反问确认
+        val solarShortReg = Regex("""(?<![0-9.])(\d{1,2})[.\-/](\d{1,2})(?![0-9.\-/])""").find(text)
+        if (solarShortReg != null && repeatMode != "lunar" && solarReg == null) {
+            targetMonth = solarShortReg.groupValues[1].toInt().coerceIn(1, 12)
+            targetDay = solarShortReg.groupValues[2].toInt().coerceIn(1, 31)
+            repeatMode = "yearly"; dateType = "solar_birthday"
+            cal.set(Calendar.MONTH, targetMonth!! - 1)
+            cal.set(Calendar.DAY_OF_MONTH, targetDay!!)
+        }
+
         // 农历 X月X
         val lunarReg = Regex("""(?:农历|旧历|阴历)\s*(\d{1,2})\s*月\s*(\d{1,2})""").find(text)
         if (lunarReg != null) {
@@ -214,6 +225,7 @@ object NaturalDateParser {
         t = Regex("""(每)?(下|上)?(周|星期|礼拜)[一二三四五六日天1-7]""").replace(t, " ")
         t = Regex("""每月\s*\d{1,2}\s*[号日]""").replace(t, " ")
         t = Regex("""\d{1,2}\s*月\s*\d{1,2}\s*[号日]""").replace(t, " ")
+        t = Regex("""(?<![0-9.])\d{1,2}[.\-/]\d{1,2}(?![0-9.\-/])""").replace(t, " ")
         t = Regex("""(农历|旧历|阴历)\s*\d{1,2}\s*月\s*\d{1,2}""").replace(t, " ")
         t = Regex("""(早上|上午|中午|下午|晚上|凌晨|傍晚)""").replace(t, " ")
         t = Regex("""\d{1,3}\s*(天|周|小时|分钟)\s*[后以後]""").replace(t, " ")

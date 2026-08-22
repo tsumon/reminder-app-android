@@ -61,4 +61,35 @@ class NaturalDateParserEnhancedTest {
         val lunarP = NaturalDateParser.parse("我生日旧历8月11")
         assertEquals("lunar_birthday", lunarP?.dateType)
     }
+
+    @Test
+    fun `点分隔数字日期识别为公历月日`() {
+        val p = NaturalDateParser.parse("爸爸生日 2.10")
+        assertEquals("yearly", p?.repeatMode)
+        assertEquals("solar_birthday", p?.dateType)
+        assertEquals(2, p?.targetMonth)
+        assertEquals(10, p?.targetDay)
+    }
+
+    @Test
+    fun `横线与斜杠数字日期同样识别`() {
+        for (text in listOf("妈妈生日 2-10", "妈妈生日 2/10")) {
+            val p = NaturalDateParser.parse(text)
+            assertEquals("solar_birthday", p?.dateType)
+            assertEquals(2, p?.targetMonth)
+            assertEquals(10, p?.targetDay)
+        }
+    }
+
+    @Test
+    fun `数字日期从标题中剥离`() {
+        val p = NaturalDateParser.parse("爸爸生日 2.10")
+        assertEquals("标题不应残留日期片段", "爸爸生日", p?.title)
+    }
+
+    @Test
+    fun `农历词优先于数字日期格式`() {
+        val p = NaturalDateParser.parse("爷爷生日 农历2.10")
+        assertEquals("有农历信号 → lunar", "lunar_birthday", p?.dateType)
+    }
 }
