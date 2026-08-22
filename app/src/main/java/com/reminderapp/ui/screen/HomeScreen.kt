@@ -562,23 +562,34 @@ fun HomeScreen(
                     }
                 }
 
-                // 等待中
-                if (waiting.isNotEmpty()) {
-                    item { SectionHeader(zh("等待中"), StatusWaiting, count = waiting.size) }
-                    items(waiting, key = { it.id }) { reminder ->
-                        SwipeableReminderCard(
-                            reminder = reminder,
-                            statusColor = StatusWaiting,
-                            onComplete = { viewModel.confirmReminder(reminder) },
-                            onDelete = { pendingDelete = reminder },
-                            onClick = { onReminderClick(reminder.id) },
-                            modifier = Modifier.animateItemPlacement(),
-                            selectionMode = selectionMode,
-                            selected = reminder.id in selectedIds,
-                            onToggleSelect = {
-                                selectedIds = if (reminder.id in selectedIds) selectedIds - reminder.id else selectedIds + reminder.id
+                // 等待中（同一人公历+农历生日合并显示一行；批量选择时按原始条目）
+                val waitingRows = pairWaitingRows(waiting, selectionMode)
+                if (waitingRows.isNotEmpty()) {
+                    item { SectionHeader(zh("等待中"), StatusWaiting, count = waitingRows.size) }
+                    items(waitingRows, key = { it.key }) { row ->
+                        when (row) {
+                            is WaitingRow.BirthdayPair -> MergedBirthdayCard(
+                                solar = row.solar,
+                                lunar = row.lunar,
+                                onClick = { onReminderClick(row.nearest.id) }
+                            )
+                            is WaitingRow.Single -> {
+                                val reminder = row.reminder
+                                SwipeableReminderCard(
+                                    reminder = reminder,
+                                    statusColor = StatusWaiting,
+                                    onComplete = { viewModel.confirmReminder(reminder) },
+                                    onDelete = { pendingDelete = reminder },
+                                    onClick = { onReminderClick(reminder.id) },
+                                    modifier = Modifier.animateItemPlacement(),
+                                    selectionMode = selectionMode,
+                                    selected = reminder.id in selectedIds,
+                                    onToggleSelect = {
+                                        selectedIds = if (reminder.id in selectedIds) selectedIds - reminder.id else selectedIds + reminder.id
+                                    }
+                                )
                             }
-                        )
+                        }
                     }
                 }
 
@@ -1491,6 +1502,138 @@ fun ReminderCard(
                 text = dateFormat.format(Date(reminder.nextTriggerAt)),
                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                 color = statusColor
+            )
+        }
+    }
+}
+
+// ---- 等待中同人生日合并（显示层一行，底层两条独立提醒） ----
+
+/** 等待中显示条目：同一人的公历+农历生日对，或单条提醒 */
+private sealed class WaitingRow {
+    data class BirthdayPair(val solar: ReminderEntity, val lunar: ReminderEntity) : WaitingRow() {
+        val nearest: ReminderEntity get() = if (solar.nextTriggerAt <= lunar.nextTriggerAt) solar else lunar
+    }
+    data class Single(val reminder: ReminderEntity) : WaitingRow()
+
+    val key: Long
+        get() = when (this) {
+            is BirthdayPair -> solar.id
+            is Single -> reminder.id
+        }
+}
+
+/**
+ * 配对规则：kind=date、dateType 为 solar/lunar、标题分别以「（公历）/（农历）」结尾
+ * 且去后缀后同名。批量选择模式下不合并（按原始条目逐条可选）。
+ */
+private fun pairWaitingRows(waiting: List<ReminderEntity>, selectionMode: Boolean): List<WaitingRow> {
+    if (selectionMode) return waiting.map { WaitingRow.Single(it) }
+    val solar = mutableMapOf<String, ReminderEntity>()
+    val lunar = mutableMapOf<String, ReminderEntity>()
+    val rest = mutableListOf<ReminderEntity>()
+    for (r in waiting) {
+        val t = r.title
+        when {
+            r.kind == "date" && r.dateType == "solar_birthday" && t.endsWith("（公历）") ->
+                solar[t.removeSuffix("（公历）")] = r
+            r.kind == "date" && r.dateType == "lunar_birthday" && t.endsWith("（农历）") ->
+                lunar[t.removeSuffix("（农历）")] = r
+            else -> rest.add(r)
+        }
+    }
+    val rows = mutableListOf<WaitingRow>()
+    val singles = mutableListOf<ReminderEntity>()
+    for ((base, s) in solar) {
+        val l = lunar.remove(base)
+        if (l != null) rows.add(WaitingRow.BirthdayPair(s, l)) else singles.add(s)
+    }
+    singles.addAll(lunar.values)
+    singles.addAll(rest)
+    rows.addAll(singles.map { WaitingRow.Single(it) })
+    return rows.sortedBy {
+        when (it) {
+            is WaitingRow.BirthdayPair -> minOf(it.solar.nextTriggerAt, it.lunar.nextTriggerAt)
+            is WaitingRow.Single -> it.reminder.nextTriggerAt
+        }
+    }
+}
+
+/** 同一人公历+农历生日合并卡：点击进入「下次先到」那条的详情 */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun MergedBirthdayCard(solar: ReminderEntity, lunar: ReminderEntity, onClick: () -> Unit) {
+    val nearest = if (solar.nextTriggerAt <= lunar.nextTriggerAt) solar else lunar
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = onClick, onClickLabel = zh("打开详情")),
+        shape = RoundedCornerShape(Tokens.RadiusCell),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                Color(0xFFE91E63).copy(alpha = 0.32f),
+                                Color(0xFF8E24AA).copy(alpha = 0.12f)
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(reminderEmoji(nearest), fontSize = 16.sp)
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    solar.title.removeSuffix("（公历）"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        zhf("公历 %d月%d日", solar.targetMonth ?: 1, solar.targetDay ?: 1),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFD81B60),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(Color(0xFFD81B60).copy(alpha = 0.10f))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                    Text(
+                        zhf("农历 %d月%d", lunar.targetMonth ?: 1, lunar.targetDay ?: 1),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF8E24AA),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(Color(0xFF8E24AA).copy(alpha = 0.10f))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+                Text(
+                    zh("等待中"), style = MaterialTheme.typography.labelSmall, color = StatusWaiting
+                )
+            }
+            Text(
+                zhf("%s 后", relativeMinutes(nearest.nextTriggerAt)),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
