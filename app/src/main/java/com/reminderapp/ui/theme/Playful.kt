@@ -382,7 +382,9 @@ private val confettiParticles: List<ConfettiParticle> = run {
         return ((seed ushr 33) and 0xFFFFFF).toDouble() / 0xFFFFFF.toDouble()
     }
     val palette = listOf(Playful.gold, Playful.coral, Playful.mint, Playful.purple, Color(0xFFFFD9E8))
-    val emojis = listOf("⭐️", "✨", "🎉", "💫")
+    // v2.5.1: 必须与 iOS 一致为 5 元素（末位 null=纯彩纸矩形）——原 4 元素配
+    // (rand()*4.99).toInt() 会在静态初始化越界（index=4），首页加载即闪退
+    val emojis: List<String?> = listOf("⭐️", "✨", "🎉", "💫", null)
     (0 until 46).map { i ->
         ConfettiParticle(
             angle = Math.PI / 2 + (rand() - 0.5) * Math.PI * 1.3,
