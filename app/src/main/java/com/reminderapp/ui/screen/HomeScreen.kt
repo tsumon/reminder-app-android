@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -148,18 +149,19 @@ fun HomeScreen(
         viewModel.checkMissed()
     }
 
-    // v2.3.0: 今日完成数（hero 完成率环）
+    // v2.3.0: 今日完成数；v2.5.0 扩展为治愈游戏化口径（今日打卡/连续天数/本周打卡天数）。
+    // 打卡会更新提醒流（allReminders），keying 在流上即可在打卡后自动刷新（只读统计，零业务逻辑改动）
     val database = com.reminderapp.data.database.AppDatabase.getInstance(androidx.compose.ui.platform.LocalContext.current)
     var todayDone by remember { mutableStateOf(0) }
-    LaunchedEffect(Unit) {
+    var streakDays by remember { mutableStateOf(0) }
+    var weekDone by remember { mutableStateOf(0) }
+    LaunchedEffect(allReminders) {
         // v2.4.0: 防御——统计失败不影响首页渲染
         runCatching {
-            val cal = java.util.Calendar.getInstance()
-            cal.set(java.util.Calendar.HOUR_OF_DAY, 0); cal.set(java.util.Calendar.MINUTE, 0)
-            cal.set(java.util.Calendar.SECOND, 0); cal.set(java.util.Calendar.MILLISECOND, 0)
-            val start = cal.timeInMillis
-            todayDone = database.reminderRecordDao().getAll()
-                .count { it.action == com.reminderapp.data.entity.ReminderRecordEntity.ACTION_CONFIRMED && it.timestamp >= start }
+            val records = database.reminderRecordDao().getAll()
+            todayDone = todayDoneCount(records)
+            streakDays = com.reminderapp.service.StatsService.summarize(records).currentStreak
+            weekDone = weekDoneDays(records)
         }
     }
 
@@ -197,8 +199,14 @@ fun HomeScreen(
     // I10: 导入分享卡片需写库（suspend），用协程作用域
     val scope = rememberCoroutineScope()
     val cardImportContext = androidx.compose.ui.platform.LocalContext.current
+    // v2.5.0: 打卡彩带触发 token（每次打卡自增，重放一次 ConfettiBurst）
+    var confettiTrigger by remember { mutableStateOf(0) }
 
-    Scaffold(
+    // v2.5.0: 治愈游戏化——桃粉薰衣草渐变背景铺在最底层，Scaffold 透明透出
+    Box(modifier = Modifier.fillMaxSize()) {
+        PastelBackground()
+        Scaffold(
+            containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = {
@@ -218,7 +226,7 @@ fun HomeScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
+                    containerColor = Color.Transparent
                 ),
                 actions = {
                     if (selectionMode) {
@@ -394,7 +402,7 @@ fun HomeScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // 概览卡片（参考滴答清单：待处理数 + 最近提醒）
+            // 概览卡片（v2.5.0 粘土卡：日期 + 打卡城堡 + 待办/今日打卡 + 本周彩虹跑道）
             item {
                 OverviewCard(
                     unhandledCount = allReminders.count { it.isActive && it.status != "confirmed" },
@@ -403,7 +411,9 @@ fun HomeScreen(
                     // （nextTriggerAt 是过去值），会被误选成「下一条提醒」显示历史时间
                     nextReminder = allReminders
                         .filter { it.isActive && it.status != "confirmed" && it.nextTriggerAt > System.currentTimeMillis() }
-                        .minByOrNull { it.nextTriggerAt }
+                        .minByOrNull { it.nextTriggerAt },
+                    streakDays = streakDays,
+                    weekDone = weekDone
                 )
             }
 
@@ -482,8 +492,22 @@ fun HomeScreen(
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         todayReminders.forEachIndexed { index, r ->
-                            TodayTimelineRow(reminder = r, isLast = index == todayReminders.size - 1, onClick = { onReminderClick(r.id) })
+                            TodayTimelineRow(
+                                reminder = r,
+                                isLast = index == todayReminders.size - 1,
+                                onClick = { onReminderClick(r.id) },
+                                // v2.5.0: 发光球打卡（复用现有确认函数，零逻辑改动）→ 彩带庆祝
+                                onCheckIn = {
+                                    viewModel.confirmReminder(r)
+                                    confettiTrigger++
+                                }
+                            )
                         }
+                        // v2.5.0: 时间线底里程碑宝箱（今日全打卡开启）
+                        MilestoneChest(
+                            doneToday = todayDone,
+                            totalToday = todayReminders.size + todayDone
+                        )
                     }
                 }
             }
@@ -502,39 +526,33 @@ fun HomeScreen(
             }
 
             if (reminding.isEmpty() && waiting.isEmpty() && completed.isEmpty()) {
-                // 空状态
+                // 空状态（v2.5.0: 全部清单空时挥手小狐狸；筛选态保留简版提示）
                 item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 48.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                "📭",
-                                style = MaterialTheme.typography.headlineLarge
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                if (smartList == SmartList.ALL) zh("暂无提醒") else zhf("「%s」没有提醒", smartList.label),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                if (smartList == SmartList.ALL) zh("点击右下角 + 创建新提醒") else zh("换个清单看看"),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(onClick = onCreateReminder) {
-                                Icon(
-                                    Icons.Default.Add,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
+                    if (smartList == SmartList.ALL) {
+                        WavingEmptyMascot(onCreate = onCreateReminder)
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 48.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    "📭",
+                                    style = MaterialTheme.typography.headlineLarge
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(zh("创建提醒"))
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    zhf("「%s」没有提醒", smartList.label),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    zh("换个清单看看"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }
@@ -614,7 +632,18 @@ fun HomeScreen(
                 }
             }
         }
-    }
+        } // Scaffold
+
+        // 批次2 功能2: 打卡成功正向反馈卡片（顶部浮层，自动消失）
+        // v2.5.0: 同层叠加全屏彩带（同一打卡触发，纯展示不拦截点击）
+        Box(modifier = Modifier.fillMaxSize()) {
+            com.reminderapp.ui.component.CheckInFeedbackCard(
+                text = checkInFeedback,
+                onDismiss = viewModel::consumeCheckInFeedback
+            )
+            ConfettiBurst(trigger = confettiTrigger)
+        }
+    } // 背景 Box
 
     // v2.4.9: 批量改提醒时间
     if (showBatchTimeDialog) {
@@ -828,14 +857,6 @@ fun HomeScreen(
             }
         }
     }
-
-    // 批次2 功能2: 打卡成功正向反馈卡片（顶部浮层，自动消失）
-    Box(modifier = Modifier.fillMaxSize()) {
-        com.reminderapp.ui.component.CheckInFeedbackCard(
-            text = checkInFeedback,
-            onDismiss = viewModel::consumeCheckInFeedback
-        )
-    }
 }
 
 /** 分组标题：小色条 + 标题 + 数量（设计图风格） */
@@ -990,169 +1011,98 @@ fun SwipeableReminderCard(
     }
 }
 
-/** 首页概览卡片：待处理数量 + 最近一次提醒（v1.8.7 改品牌渐变卡，滴答清单风格） */
+/** 首页概览卡片（v2.5.0 粘土卡：日期大标题 + 打卡城堡 + 待办/今日打卡 + 本周彩虹跑道） */
 @Composable
-fun OverviewCard(unhandledCount: Int, nextReminder: ReminderEntity?, todayDone: Int = 0) {
-    // v2.2.1 设计语言：日期大标题 + 农历徽章 + 待办强调 + 光斑装饰（对齐 iOS OverviewCard）
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(Tokens.RadiusCard),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+fun OverviewCard(
+    unhandledCount: Int,
+    nextReminder: ReminderEntity?,
+    todayDone: Int = 0,
+    streakDays: Int = 0,
+    weekDone: Int = 0
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clayCard(radiusDp = Tokens.RadiusCard)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(Tokens.RadiusCard))
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(Tokens.BrandGradientStart, Primary, Tokens.BrandPrimaryDark)
+        // 行1：日期大标题 + 星期 + 「🌙 农历」ink 胶囊 | 右：连续打卡城堡
+        Row(verticalAlignment = Alignment.Top) {
+            Column {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        overviewDateTitle(),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                )
-        ) {
-            // 装饰光斑（右上角柔光圆）
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .size(130.dp)
-                    .offset(x = 45.dp, y = (-55).dp)
-                    .background(Color.White.copy(alpha = 0.14f), CircleShape)
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color.White.copy(alpha = 0.25f), Color.Transparent)
-                        )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        overviewWeekday(),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    .padding(18.dp)
-            ) {
-                Column {
-                    // 日期大标题 + 农历徽章
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            overviewDateTitle(),
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            overviewWeekday(),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.White.copy(alpha = 0.85f)
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        com.reminderapp.service.LunarCalendar.solarToLunar(System.currentTimeMillis())
-                            ?.let { lunar ->
-                                Row(
-                                    modifier = Modifier
-                                        .clip(CircleShape)
-                                        .background(Color.White.copy(alpha = 0.18f))
-                                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.Default.DateRange, contentDescription = null,
-                                        tint = Color.White, modifier = Modifier.size(12.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        overviewLunar(lunar),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color.White
-                                    )
-                                }
-                            }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.25f))
-                    Spacer(modifier = Modifier.height(12.dp))
-                    // 待处理 + 下次提醒
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.Notifications,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    zhf("待处理 %s 项", unhandledCount),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
-                            val nextText = nextReminder?.let {
-                                val f = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
-                                "${it.title} · ${f.format(Date(it.nextTriggerAt))}"
-                            } ?: zh("暂无即将到来的提醒")
-                            Text(
-                                nextText,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.9f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        // v2.3.0: 今日完成率环（感知强的核心视觉，对齐 iOS）
-                        Box(
-                            modifier = Modifier.size(62.dp).padding(end = 4.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Canvas(modifier = Modifier.fillMaxSize()) {
-                                val stroke = 6.dp.toPx()
-                                val inset = stroke / 2
-                                val arcSize = androidx.compose.ui.geometry.Size(
-                                    (size.width - stroke).coerceAtLeast(1f),
-                                    (size.height - stroke).coerceAtLeast(1f)
-                                )
-                                drawArc(
-                                    color = Color.White.copy(alpha = 0.22f),
-                                    startAngle = 0f, sweepAngle = 360f,
-                                    useCenter = false,
-                                    topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
-                                    size = arcSize,
-                                    style = Stroke(width = stroke)
-                                )
-                                val total = todayDone + unhandledCount
-                                val progress = if (total > 0) todayDone.toFloat() / total else 0f
-                                drawArc(
-                                    color = Color.White,
-                                    startAngle = -90f,
-                                    sweepAngle = 360f * progress.coerceIn(0.02f, 1f),
-                                    useCenter = false,
-                                    topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
-                                    size = arcSize,
-                                    style = Stroke(width = stroke, cap = StrokeCap.Round)
-                                )
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = "${if (todayDone + unhandledCount > 0) (todayDone * 100 / (todayDone + unhandledCount)) else 0}%",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                                Text(
-                                    zh("今日完成"),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White.copy(alpha = 0.85f)
-                                )
-                            }
-                        }
-                    }
                 }
+                Spacer(modifier = Modifier.height(6.dp))
+                com.reminderapp.service.LunarCalendar.solarToLunar(System.currentTimeMillis())
+                    ?.let { lunar ->
+                        Text(
+                            "🌙 ${overviewLunar(lunar)}",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White.copy(alpha = 0.92f),
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(Playful.ink.copy(alpha = 0.88f))
+                                .padding(horizontal = 9.dp, vertical = 4.dp)
+                        )
+                    }
             }
+            Spacer(modifier = Modifier.weight(1f))
+            StreakCastle(streakDays = streakDays, compact = true)
         }
+
+        HorizontalDivider(color = Playful.lavender)
+
+        // 行2：「🔔 待处理 N 项」+「今日 ✅ N」mint 胶囊 + 下次提醒
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("🔔", fontSize = 15.sp)
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    zhf("待处理 %d 项", unhandledCount),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    "今日 ✅ $todayDone",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Playful.ink,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Playful.mint.copy(alpha = 0.28f))
+                        .padding(horizontal = 9.dp, vertical = 4.dp)
+                )
+            }
+            val nextText = nextReminder?.let {
+                val f = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+                "🕐 ${it.title} · ${f.format(Date(it.nextTriggerAt))}"
+            } ?: zh("暂无即将到来的提醒")
+            Text(
+                nextText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        // 行3：本周彩虹跑道（streak 走 StatsService 口径，weekDone=本周打卡天数）
+        WeeklyProgressTrack(done = weekDone, total = 7)
     }
 }
 
@@ -1175,16 +1125,20 @@ private fun overviewLunar(lunar: com.reminderapp.service.LunarCalendar.LunarDate
     return month + "月" + day
 }
 
-/** v2.4.0: 今日安排时间线行（左侧时间 + 竖线圆点 + 右侧卡片，对齐 iOS TodayTimelineView） */
+/** v2.4.0: 今日安排时间线行；v2.5.0 治愈游戏化：左时间（等宽）+ 发光球打卡 + 粘土卡（规则徽章/逾期/倒计时） */
 @Composable
-fun TodayTimelineRow(reminder: ReminderEntity, isLast: Boolean, onClick: () -> Unit) {
+fun TodayTimelineRow(
+    reminder: ReminderEntity,
+    isLast: Boolean,
+    onClick: () -> Unit,
+    onCheckIn: () -> Unit = {}
+) {
     val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-    val dateFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Top
     ) {
-        // 左侧时间 + 时间线
+        // 左侧时间（等宽字体）+ 时间线
         Column(
             horizontalAlignment = Alignment.End,
             modifier = Modifier.width(46.dp)
@@ -1192,6 +1146,7 @@ fun TodayTimelineRow(reminder: ReminderEntity, isLast: Boolean, onClick: () -> U
             Text(
                 timeFormat.format(Date(reminder.nextTriggerAt)),
                 style = MaterialTheme.typography.labelLarge,
+                fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.SemiBold,
                 color = Tokens.BrandPrimary
             )
@@ -1205,71 +1160,59 @@ fun TodayTimelineRow(reminder: ReminderEntity, isLast: Boolean, onClick: () -> U
                 )
             }
         }
-        // 圆点
-        Box(
-            modifier = Modifier
-                .padding(top = 4.dp)
-                .size(9.dp)
-                .clip(CircleShape)
-                .background(Tokens.BrandPrimary)
-                .border(1.5.dp, Color.White.copy(alpha = 0.6f), CircleShape)
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        // 右侧卡片
-        Card(
+        Spacer(modifier = Modifier.width(4.dp))
+        // v2.5.0: 发光球打卡位（点击=现有打卡确认，零逻辑改动）
+        OrbCheckButton(done = false, onClick = onCheckIn, modifier = Modifier.padding(top = 8.dp))
+        Spacer(modifier = Modifier.width(10.dp))
+        // 右侧粘土卡：emoji + 标题 + 智能重复规则徽章 + 逾期红字 + 倒计时
+        Row(
             modifier = Modifier
                 .weight(1f)
-                .clickable(onClick = onClick),
-            shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                .clayCard(radiusDp = 16.dp)
+                .clickable(onClick = onClick)
+                .padding(11.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(10.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Playful.gold.copy(alpha = 0.32f), Playful.coral.copy(alpha = 0.16f))
+                        )
+                    ),
+                contentAlignment = Alignment.Center
             ) {
-                // emoji 图标（渐变底）
-                Box(
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    Tokens.BrandPrimary.copy(alpha = 0.30f),
-                                    Tokens.BrandPrimary.copy(alpha = 0.10f)
-                                )
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(reminderEmoji(reminder), fontSize = 16.sp)
-                }
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        reminder.title,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        if (reminder.status == "overdue") zh("已逾期") else zh("等待中"),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (reminder.status == "overdue") Tokens.StatusOverdue else Tokens.StatusWaiting
-                    )
-                }
-                Text(
-                    zhf("%s 后", relativeMinutes(reminder.nextTriggerAt)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(reminderEmoji(reminder), fontSize = 18.sp)
             }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    reminder.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                RepeatRuleBadge(entity = reminder)
+                if (reminder.status == "overdue") {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        zh("已逾期"),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Tokens.StatusOverdue
+                    )
+                }
+            }
+            // 倒计时
+            Text(
+                zhf("%s 后", relativeMinutes(reminder.nextTriggerAt)),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

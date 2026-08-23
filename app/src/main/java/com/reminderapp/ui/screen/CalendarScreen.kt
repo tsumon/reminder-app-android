@@ -21,12 +21,15 @@ import com.reminderapp.i18n.zhf
 /**
  * 日历 Tab（v1.9.8 UI 对齐设计图）：
  * 整页月历（农历/节假日/任务标记）+ 点击日期展示「当天任务」列表
+ * v2.5.0: 传入 streak/weekDone 时日历卡底部展示本周彩虹跑道（默认 null 隐藏）
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarScreen(
     reminders: List<ReminderEntity>,
-    onReminderClick: (Long) -> Unit
+    onReminderClick: (Long) -> Unit,
+    streak: Int? = null,
+    weekDone: Int? = null
 ) {
     var selectedDate by remember { mutableStateOf<Long?>(null) }
 
@@ -59,7 +62,12 @@ fun CalendarScreen(
         ) {
             // 整页月历
             item {
-                CalendarCard(reminders = reminders, onDateClick = { selectedDate = it })
+                CalendarCard(
+                    reminders = reminders,
+                    onDateClick = { selectedDate = it },
+                    streak = streak,
+                    weekDone = weekDone
+                )
             }
 
             // 当日任务标题

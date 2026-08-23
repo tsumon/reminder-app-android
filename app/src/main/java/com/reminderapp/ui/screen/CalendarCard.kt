@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
@@ -26,8 +27,13 @@ import com.reminderapp.data.entity.ReminderEntity
 import com.reminderapp.service.HolidayRemoteService
 import com.reminderapp.service.LunarCalendar
 import com.reminderapp.service.ReminderEngine
+import com.reminderapp.ui.theme.MascotBadge
+import com.reminderapp.ui.theme.MascotMood
+import com.reminderapp.ui.theme.Playful
 import com.reminderapp.ui.theme.Primary
 import com.reminderapp.ui.theme.Tokens
+import com.reminderapp.ui.theme.WeeklyProgressTrack
+import com.reminderapp.ui.theme.clayCard
 import androidx.compose.ui.platform.LocalContext
 import java.text.SimpleDateFormat
 import java.util.*
@@ -36,14 +42,25 @@ import com.reminderapp.i18n.zhf
 
 /**
  * 主页日历卡片：公历 + 农历 + 星期几 + 任务缩略标记
+ * v2.5.0 治愈游戏化：粘土卡底 + 逐格热力密度 + 今日吉祥物 + 本周彩虹跑道
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarCard(
     reminders: List<ReminderEntity>,
     modifier: Modifier = Modifier,
-    onDateClick: (Long) -> Unit = {}
+    onDateClick: (Long) -> Unit = {},
+    /** v2.5.0: 连续打卡天数（预留口径，与 iOS 对齐） */
+    streak: Int? = null,
+    /** v2.5.0: 本周打卡天数（彩虹跑道/吉祥物心情），null 隐藏 */
+    weekDone: Int? = null
 ) {
+    // 吉祥物心情随本周完成度变化（weekDone=null 时 idle）
+    val mascotMood = when {
+        (weekDone ?: 0) >= 5 -> MascotMood.CHEER
+        (weekDone ?: 0) > 0 -> MascotMood.HAPPY
+        else -> MascotMood.IDLE
+    }
     val todayCal = remember { Calendar.getInstance() }
     val todayDate = remember {
         SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(todayCal.time)
@@ -85,12 +102,11 @@ fun CalendarCard(
         todayCal.get(Calendar.DAY_OF_MONTH)
     )?.let { if (it.isHoliday) zhf(" · %s休", it.name) else zh(" · 调休上班") } ?: ""
 
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    // v2.5.0: 粘土卡底（替代 Material Card）
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clayCard(radiusDp = 22.dp)
     ) {
         Column(
             modifier = Modifier
@@ -223,11 +239,12 @@ fun CalendarCard(
                         Box(modifier = Modifier.weight(1f)) {
                             if (dayNum != null) {
                                 val key = dateKey(displayYear, displayMonth, dayNum)
+                                val isTodayCell = displayYear == todayCal.get(Calendar.YEAR) &&
+                                    displayMonth == todayCal.get(Calendar.MONTH) &&
+                                    dayNum == todayCal.get(Calendar.DAY_OF_MONTH)
                                 DayCell(
                                     day = dayNum,
-                                    isToday = displayYear == todayCal.get(Calendar.YEAR) &&
-                                        displayMonth == todayCal.get(Calendar.MONTH) &&
-                                        dayNum == todayCal.get(Calendar.DAY_OF_MONTH),
+                                    isToday = isTodayCell,
                                     isSelected = selectedDateKey == key,
                                     lunarText = lunarTextFor(displayYear, displayMonth, dayNum),
                                     taskCount = taskDates[key] ?: 0,
@@ -235,6 +252,8 @@ fun CalendarCard(
                                     holidayStatus = HolidayRemoteService.status(
                                         context, displayYear, displayMonth + 1, dayNum
                                     ),
+                                    // v2.5.0: 今日格右上角小狐狸（心情随本周完成度）
+                                    mascotMood = if (isTodayCell) mascotMood else null,
                                     onClick = {
                                         selectedDateKey = key
                                         val t = Calendar.getInstance().apply {
@@ -245,11 +264,17 @@ fun CalendarCard(
                                     }
                                 )
                             } else {
-                                Spacer(modifier = Modifier.height(52.dp))
+                                Spacer(modifier = Modifier.height(74.dp))
                             }
                         }
                     }
                 }
+            }
+
+            // v2.5.0: 本周彩虹跑道（有打卡数据时展示）
+            if (weekDone != null) {
+                Spacer(modifier = Modifier.height(6.dp))
+                WeeklyProgressTrack(done = weekDone, total = 7, modifier = Modifier.padding(horizontal = 8.dp))
             }
         }
     }
@@ -314,7 +339,10 @@ fun CalendarCard(
 }
 
 /**
- * 单个日期格子：公历数字 + 农历 + 「休/班」角标 + 任务角标（数字右上）
+ * 单个日期格子（v2.5.0 治愈游戏化）：
+ * 顶部 14dp 吉祥物站立区 + 数字气泡（30dp 圆角 10dp，热力底色）+ 珊瑚任务圆点 + 农历 + 休/班。
+ * 注意：格高 74dp 且吉祥物必须完全画在格内——外层 Row 会按格子实际高度排布，
+ * 溢出格外的装饰会在滚动/复用中被裁剪或压盖（iOS LazyVGrid 同款教训）。
  */
 @Composable
 private fun DayCell(
@@ -325,61 +353,87 @@ private fun DayCell(
     taskCount: Int,
     isFutureMonth: Boolean,
     holidayStatus: HolidayRemoteService.DayStatus?,
+    mascotMood: MascotMood?,
     onClick: () -> Unit
 ) {
-    Column(
+    // 热力底色：任务数 0/1/2/3+ → 透明/primary14%/26%/40%；今日=品牌渐变白字
+    val bubbleBrush: Brush = when {
+        isToday -> Brush.linearGradient(listOf(Tokens.BrandGradientStart, Tokens.BrandPrimary))
+        taskCount <= 0 -> Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
+        taskCount == 1 -> Brush.linearGradient(listOf(Primary.copy(alpha = 0.14f), Primary.copy(alpha = 0.14f)))
+        taskCount == 2 -> Brush.linearGradient(listOf(Primary.copy(alpha = 0.26f), Primary.copy(alpha = 0.26f)))
+        else -> Brush.linearGradient(listOf(Primary.copy(alpha = 0.40f), Primary.copy(alpha = 0.40f)))
+    }
+    val bubbleShape = RoundedCornerShape(10.dp)
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 2.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .height(74.dp)
     ) {
-        Box(
+        Column(
             modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .background(if (isToday) Primary else if (isSelected) Primary.copy(alpha = 0.15f) else Color.Transparent)
-                .then(if (isSelected && !isToday) Modifier.border(1.5.dp, Primary, CircleShape) else Modifier)
-                .padding(1.dp),
-            contentAlignment = Alignment.Center
+                .fillMaxSize()
+                .clickable(onClick = onClick),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // 顶部 14dp 空位：今日格小狐狸的站立区（完全在格内）
+            Spacer(modifier = Modifier.height(14.dp))
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(bubbleShape)
+                    .background(bubbleBrush)
+                    .then(
+                        if (isSelected && !isToday) Modifier.border(1.5.dp, Primary, bubbleShape)
+                        else Modifier
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = day.toString(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
+                    color = when {
+                        isToday -> Color.White
+                        isSelected -> Primary
+                        isFutureMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        else -> MaterialTheme.colorScheme.onSurface
+                    }
+                )
+            }
+            // v2.4.5 fix（沿用）：任务圆点独立一行，数字正下方——贴色圈的小点不可见
+            Box(
+                modifier = Modifier
+                    .padding(top = 1.dp)
+                    .size(width = 6.dp, height = 6.dp)
+                    .clip(CircleShape)
+                    .background(if (taskCount > 0) Playful.coral else Color.Transparent)
+            )
+            // 农历（初二~三十 简化显示）
             Text(
-                text = day.toString(),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
-                color = when {
-                    isToday -> Color.White
-                    isSelected -> Primary
-                    isFutureMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                    else -> MaterialTheme.colorScheme.onSurface
-                }
+                text = lunarText,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = Tokens.FontTiny, lineHeight = Tokens.FontTiny * 1.2f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                maxLines = 1
+            )
+            // 休/班角标：放假红「休」、调休上班橙「班」；普通日占位保持对齐（v1.8.7 任务②）
+            Text(
+                text = holidayStatus?.let { if (it.isHoliday) zh("休") else zh("班") } ?: "",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = Tokens.FontTiny, lineHeight = Tokens.FontTiny * 1.2f, fontWeight = FontWeight.Bold),
+                color = if (holidayStatus?.isHoliday == true) Tokens.HolidayRest else Tokens.HolidayWork,
+                maxLines = 1
             )
         }
-        // v2.4.5 fix: 任务标记从「数字右上角 5dp 小点」移到数字下方独立一行——
-        // 原实现在 32dp 圆内 TopEnd 叠 5dp 点：青点落在今日青色圆上不可见，
-        // 且与农历文字挤在同一列视觉上几乎感知不到（双端用户均反馈"没标识"）。
-        // 现与 iOS 对齐感知：有任务的日子数字正下方渲染 6dp 圆点。
-        Box(
-            modifier = Modifier
-                .padding(top = 1.dp)
-                .size(width = 6.dp, height = 6.dp)
-                .clip(CircleShape)
-                .background(if (taskCount > 0) Primary else Color.Transparent)
-        )
-        // 农历（初二~三十 简化显示）
-        Text(
-            text = lunarText,
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = Tokens.FontTiny),
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            maxLines = 1
-        )
-        // 休/班角标：放假红「休」、调休上班橙「班」；普通日占位保持对齐（v1.8.7 任务②）
-        Text(
-            text = holidayStatus?.let { if (it.isHoliday) zh("休") else zh("班") } ?: "",
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = Tokens.FontTiny, fontWeight = FontWeight.Bold),
-            color = if (holidayStatus?.isHoliday == true) Tokens.HolidayRest else Tokens.HolidayWork,
-            maxLines = 1
-        )
+        // 今日格右上角小狐狸站在气泡上（完全在格内，不拦截点击）
+        if (mascotMood != null) {
+            MascotBadge(
+                mood = mascotMood,
+                sizeDp = 24.dp,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 2.dp, y = 1.dp)
+            )
+        }
     }
 }
 

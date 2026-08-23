@@ -1,8 +1,14 @@
 package com.reminderapp.ui.screen
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -11,9 +17,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.reminderapp.data.entity.ReminderEntity
 import com.reminderapp.model.Cycle
 import com.reminderapp.model.DateReminderType
@@ -24,6 +40,7 @@ import com.reminderapp.service.HolidayService
 import com.reminderapp.service.LunarCalendar
 import com.reminderapp.service.NaturalDateParser
 import com.reminderapp.service.ReminderEngine
+import com.reminderapp.ui.theme.Playful
 import java.util.*
 import com.reminderapp.i18n.zh
 import com.reminderapp.i18n.zhf
@@ -98,12 +115,10 @@ fun CreateReminderScreen(
     var triggerMinute by remember { mutableIntStateOf(0) }
 
     // 下拉展开状态
-    var cycleExpanded by remember { mutableStateOf(false) }
     var dateTypeExpanded by remember { mutableStateOf(false) }
     var holidayExpanded by remember { mutableStateOf(false) }
     var rulePeriodExpanded by remember { mutableStateOf(false) }
     var ruleWeekExpanded by remember { mutableStateOf(false) }
-    var ruleWeekdayExpanded by remember { mutableStateOf(false) }
 
     // 日期/时间选择弹窗状态
     var showDateDialog by remember { mutableStateOf(false) }
@@ -531,60 +546,44 @@ fun CreateReminderScreen(
                     }
                 }
 
+                // v2.5.0 星期灯泡：点亮=选中（金色光晕+金底），熄灭=灰色；仍写 ruleWeekday
                 Text(zh("星期几"), style = MaterialTheme.typography.labelLarge)
-                ExposedDropdownMenuBox(
-                    expanded = ruleWeekdayExpanded,
-                    onExpandedChange = { ruleWeekdayExpanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = weekdayLabels.getOrElse(ruleWeekday - 1) { zhf("周%s", ruleWeekday) },
-                        onValueChange = {},
-                        readOnly = true,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = ruleWeekdayExpanded) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = ruleWeekdayExpanded,
-                        onDismissRequest = { ruleWeekdayExpanded = false }
-                    ) {
-                        (1..7).forEach { w ->
-                            DropdownMenuItem(
-                                text = { Text(weekdayLabels[w - 1]) },
-                                onClick = {
-                                    ruleWeekday = w
-                                    ruleWeekdayExpanded = false
-                                }
-                            )
-                        }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    (1..7).forEach { w ->
+                        WeekdayBulb(
+                            label = weekdayLabels[w - 1],
+                            isOn = ruleWeekday == w,
+                            onClick = { ruleWeekday = w },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             } else if (!isDateMode) {
                 // === 周期提醒 ===
-                // 周期选择
+                // v2.5.0 治愈游戏化：emoji 卡片网格（选中=彩虹描边+紫渐变底+spring 放大）
                 Text(zh("周期"), style = MaterialTheme.typography.labelLarge)
-                ExposedDropdownMenuBox(
-                    expanded = cycleExpanded,
-                    onExpandedChange = { cycleExpanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = selectedCycle.label,
-                        onValueChange = {},
-                        readOnly = true,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = cycleExpanded) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = cycleExpanded,
-                        onDismissRequest = { cycleExpanded = false }
-                    ) {
-                        Cycle.entries.forEach { cycle ->
-                            DropdownMenuItem(
-                                text = { Text(cycle.label) },
-                                onClick = {
-                                    selectedCycle = cycle
-                                    cycleExpanded = false
-                                }
-                            )
+                val cycleOptions = listOf(
+                    Cycle.ONCE to "1️⃣",
+                    Cycle.DAILY to "☀️",
+                    Cycle.WEEKLY to "📆",
+                    Cycle.BIWEEKLY to "🌗",
+                    Cycle.MONTHLY to "🌙",
+                    Cycle.QUARTERLY to "🧭",
+                    Cycle.YEARLY to "🎂",
+                    Cycle.CUSTOM to "🪄"
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    cycleOptions.chunked(4).forEach { rowOptions ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            rowOptions.forEach { (option, emoji) ->
+                                CycleOptionCard(
+                                    emoji = emoji,
+                                    label = if (option == Cycle.CUSTOM) zh("自定义") else option.label,
+                                    isSelected = selectedCycle == option,
+                                    onClick = { selectedCycle = option },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                     }
                 }
@@ -1013,5 +1012,105 @@ fun CreateReminderScreen(
                 }
             )
         }
+    }
+}
+
+/**
+ * v2.5.0 周期选择卡片：emoji + 标签；选中 = sweepGradient 彩虹描边 + 紫渐变底 + spring 1.05 放大。
+ * 仅展示层，选择仍写原 selectedCycle 状态。
+ */
+@Composable
+private fun CycleOptionCard(
+    emoji: String,
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scale by animateFloatAsState(
+        targetValue = if (isSelected) 1.05f else 1f,
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMedium),
+        label = "cycleScale"
+    )
+    val cardShape = RoundedCornerShape(14.dp)
+    Column(
+        modifier = modifier
+            .scale(scale)
+            .clip(cardShape)
+            .then(
+                if (isSelected) Modifier.background(
+                    Brush.linearGradient(
+                        listOf(Playful.purple.copy(alpha = 0.14f), Playful.coral.copy(alpha = 0.10f))
+                    )
+                ) else Modifier.background(Playful.ink.copy(alpha = 0.05f))
+            )
+            .then(
+                if (isSelected) Modifier.border(
+                    2.dp,
+                    Brush.sweepGradient(
+                        listOf(Playful.mint, Playful.gold, Playful.coral, Playful.purple, Playful.mint)
+                    ),
+                    cardShape
+                ) else Modifier
+            )
+            .clickable(onClick = onClick, onClickLabel = label)
+            .padding(vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(emoji, fontSize = 22.sp)
+        Text(
+            label,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (isSelected) Playful.purple else MaterialTheme.colorScheme.onSurface,
+            maxLines = 1
+        )
+    }
+}
+
+/**
+ * v2.5.0 星期灯泡：点亮=选中（金色光晕+金 18% 底），熄灭=灰色 40%。
+ * emoji 无法做真灰度，用 alpha 0.4 近似（iOS grayscale 1 + opacity 0.4）。
+ */
+@Composable
+private fun WeekdayBulb(
+    label: String,
+    isOn: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scale by animateFloatAsState(
+        targetValue = if (isOn) 1.05f else 1f,
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMedium),
+        label = "bulbScale"
+    )
+    Column(
+        modifier = modifier
+            .scale(scale)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (isOn) Playful.gold.copy(alpha = 0.18f) else Color.Transparent)
+            .clickable(onClick = onClick, onClickLabel = label)
+            .padding(vertical = 7.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(
+            "💡",
+            fontSize = 17.sp,
+            style = TextStyle(
+                shadow = if (isOn) Shadow(
+                    Playful.gold.copy(alpha = 0.85f),
+                    blurRadius = with(LocalDensity.current) { 6.dp.toPx() }
+                ) else null
+            ),
+            modifier = Modifier.alpha(if (isOn) 1f else 0.4f)
+        )
+        Text(
+            label,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (isOn) Playful.purple else MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

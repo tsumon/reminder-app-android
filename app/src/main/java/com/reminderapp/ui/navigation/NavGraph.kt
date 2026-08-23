@@ -355,9 +355,22 @@ fun NavGraph(
         composable("calendar") {
             val calendarReminders by database.reminderDao().getAllActive()
                 .collectAsState(initial = emptyList())
+            // v2.5.0: 打卡记录 → 连续天数 + 本周打卡天数（只读统计，喂给日历卡彩虹跑道）
+            var calendarPlayful by remember {
+                mutableStateOf<Pair<Int, Int>?>(null)
+            }
+            LaunchedEffect(calendarReminders) {
+                runCatching {
+                    val records = database.reminderRecordDao().getAll()
+                    val streak = com.reminderapp.service.StatsService.summarize(records).currentStreak
+                    calendarPlayful = streak to com.reminderapp.ui.theme.weekDoneDays(records)
+                }
+            }
             CalendarScreen(
                 reminders = calendarReminders,
-                onReminderClick = { id -> navController.navigate("detail/$id") }
+                onReminderClick = { id -> navController.navigate("detail/$id") },
+                streak = calendarPlayful?.first,
+                weekDone = calendarPlayful?.second
             )
         }
 
