@@ -2,16 +2,48 @@
 
 ---
 
-# 📱 提醒助手 (Reminder App) — Android
+# 循环提醒
 
-一个功能完善的 Android 原生提醒应用，支持循环提醒、日期提醒、农历生日、节假日提醒以及 **AI 语音助手**。
+English subtitle: Recurring Reminder. Android 原生 App。支持循环提醒、日期提醒、农历生日、节假日提醒以及 **AI 语音助手**。
 
 [![Platform](https://img.shields.io/badge/Platform-Android-brightgreen.svg)](https://developer.android.com)
 [![Language](https://img.shields.io/badge/Language-Kotlin-purple.svg)](https://kotlinlang.org/)
 [![Min SDK](https://img.shields.io/badge/Min%20SDK-26-orange.svg)](https://developer.android.com/about/versions/oreo)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-![App UI](docs/screenshots/android.png)
+| 首页 | 日历 | 统计 |
+|:---:|:---:|:---:|
+| ![首页](docs/screenshots/home.png) | ![日历](docs/screenshots/calendar.png) | ![统计](docs/screenshots/stats.png) |
+
+## 当前界面
+
+深色 UI，对齐 GitHub 2.5.1 方向；不是 Home A，也没有 QuietHome。底部四个 Tab。AI 在设置里配置，不是独立 Tab。
+
+- **首页**（标题「提醒事项」）：筛选芯片只有 全部 / 今天 / 本周；列表分组 提醒中 / 等待中。到期行内「确认」，不再弹大确认框。
+- **日历**：公历 + 农历 + 今日狐狸 + 班/休；点选日期列出当天任务。没有本周进度条（进度在统计「本周花园」）。
+- **统计**：本月完成 / 连续天数 / 完成率 三数字 + 确认/漏掉；保留打卡城堡、本周花园、最常忘记时段。没有大圆环、没有热力图。
+- **设置**：主题皮肤等。
+
+```mermaid
+flowchart TB
+  app[循环提醒]
+  app --> home[首页 · 提醒事项]
+  app --> cal[日历]
+  app --> stats[统计]
+  app --> set[设置]
+```
+
+```mermaid
+flowchart LR
+  waiting[等待中] --> due[到点提醒]
+  due -->|确认| next[下个周期]
+  due -->|未确认| retry[递增重试]
+  retry -->|确认| next
+  retry -->|上限| overdue[逾期]
+  overdue -->|手动确认| next
+```
+
+递增重试引擎仍是 1 小时 → 4 小时 → 12 小时 → 24 小时 → 逾期（停止自动再响）。通知按钮是「确认」和「稍后」。
 
 ---
 
@@ -103,7 +135,7 @@ app/src/main/java/com/reminderapp/
 │   ├── NearbyShareService.kt    # 局域网 TCP 互传（47823）
 │   └── QrCodeUtils.kt           # 二维码生成与扫码
 ├── ui/
-│   ├── screen/                  # HomeScreen / CalendarScreen / StatsScreen / AIChatScreen / NearbyShareScreen / Settings / ...
+│   ├── screen/                  # HomeScreen / CalendarScreen / StatsScreen / SettingsScreen / AIChatScreen / ...
 │   ├── theme/                   # 设计令牌（与 iOS 主题色一致）
 │   └── viewmodel/               # HomeViewModel / ReminderDetailViewModel / ...
 ├── receiver/
@@ -186,6 +218,7 @@ android {
 
 | 版本 | 日期 | 更新内容 |
 |------|------|----------|
+| quiet-confirmation | 2026-09 | 首页/日历/统计三屏优化；重试副文案「还没确认 · HH:MM 再响」；统计 Tab 去掉返回箭头；日历默认列出当天任务；README 按现状。签名/keystore/applicationId 未改 |
 | v2.4.11 | 2026-08 | AI 提问优化：一次只问一个问题（禁止一段话连问多个），信息完备直接创建不再二次确认日期/追问提醒时间；等待中列表同一人的公历+农历生日合并显示一行（底层仍两条独立提醒） |
 | v2.4.10 | 2026-08 | AI 历法歧义澄清：输入「2.10」「211」等纯数字日期时不再瞎猜新历/农历——新增 ask_user 工具在聊天里渲染「新历/农历」按钮一点即选，同会话确认过后续默认沿用；手动创建支持 2.10/2-10/2/10 数字日期；农历 31 日兜底拦截 |
 | v2.4.9 | 2026-08 | AI 每周洞察（统计上下文工具生成周报）+ 遗漏补办卡（一键补确认/推到明天）+ 批量改时间 + 手动创建对齐 AI（一句话解析支持避开节假日/每季度/每两周/自动填星期/新历旧历拆两条） |

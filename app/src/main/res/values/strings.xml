@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- 原有具名资源：被 AndroidManifest / Widget XML 引用，名称不可更改 -->
-    <string name="app_name">循环提醒器</string>
+    <string name="app_name">循环提醒</string>
     <string name="tab_reminding">提醒中</string>
     <string name="tab_waiting">等待中</string>
     <string name="tab_completed">已完成</string>
     <string name="create_reminder">新建提醒</string>
     <string name="edit_reminder">编辑提醒</string>
-    <string name="confirm_done">确认完成</string>
-    <string name="snooze">稍后提醒</string>
+    <string name="confirm_done">确认</string>
+    <string name="snooze">稍后</string>
     <string name="save">保存</string>
     <string name="cancel">取消</string>
     <string name="delete">删除</string>
@@ -39,8 +39,8 @@
     <string name="advance_channel_desc">日期提醒的提前预告通知</string>
     <string name="weekly_channel_name">统计周报</string>
     <string name="weekly_channel_desc">每周日推送本周完成统计</string>
-    <string name="confirm_action">确认完成</string>
-    <string name="snooze_action">稍后提醒</string>
+    <string name="confirm_action">确认</string>
+    <string name="snooze_action">稍后</string>
     <string name="no_reminders">暂无提醒</string>
     <string name="empty_hint">点击右下角 + 创建新提醒</string>
     <string name="widget_description">显示未处理提醒数和最近提醒</string>
@@ -192,7 +192,7 @@
     <string name="s_0144">待处理 %s 项</string>
     <string name="s_0145">循环提醒</string>
     <string name="s_0146">循环提醒 · 支持多端同步与在线升级</string>
-    <string name="s_0147">循环提醒器</string>
+    <string name="s_0147">循环提醒</string>
     <string name="s_0148">快速模板</string>
     <string name="s_0149">或手动输入对方地址</string>
     <string name="s_0150">打开详情</string>
@@ -290,9 +290,9 @@
     <string name="s_0242">确定</string>
     <string name="s_0243">确定要删除「%s」吗？此操作不可恢复。</string>
     <string name="s_0244">确认 %s</string>
-    <string name="s_0245">确认完成</string>
+    <string name="s_0245">确认</string>
     <string name="s_0246">稍后再说</string>
-    <string name="s_0247">稍后提醒</string>
+    <string name="s_0247">稍后</string>
     <string name="s_0248">空响应</string>
     <string name="s_0249">立即同步</string>
     <string name="s_0250">第%s周</string>

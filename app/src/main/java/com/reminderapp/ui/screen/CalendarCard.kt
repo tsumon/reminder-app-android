@@ -32,7 +32,6 @@ import com.reminderapp.ui.theme.MascotMood
 import com.reminderapp.ui.theme.Playful
 import com.reminderapp.ui.theme.Primary
 import com.reminderapp.ui.theme.Tokens
-import com.reminderapp.ui.theme.WeeklyProgressTrack
 import com.reminderapp.ui.theme.clayCard
 import androidx.compose.ui.platform.LocalContext
 import java.text.SimpleDateFormat
@@ -42,7 +41,7 @@ import com.reminderapp.i18n.zhf
 
 /**
  * 主页日历卡片：公历 + 农历 + 星期几 + 任务缩略标记
- * v2.5.0 治愈游戏化：粘土卡底 + 逐格热力密度 + 今日吉祥物 + 本周彩虹跑道
+ * v2.5.0 治愈游戏化：粘土卡底 + 逐格热力密度 + 今日吉祥物
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,7 +67,16 @@ fun CalendarCard(
     val context = LocalContext.current
     var displayYear by remember { mutableIntStateOf(todayCal.get(Calendar.YEAR)) }
     var displayMonth by remember { mutableIntStateOf(todayCal.get(Calendar.MONTH)) } // 0-based
-    var selectedDateKey by remember { mutableStateOf<String?>(null) }
+    var selectedDateKey by remember { mutableStateOf<String?>(todayDate) }
+    LaunchedEffect(Unit) {
+        val t0 = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        onDateClick(t0)
+    }
     // v1.8.7 UI 优化: 月份选择器弹窗
     var showMonthPicker by remember { mutableStateOf(false) }
 
@@ -271,11 +279,6 @@ fun CalendarCard(
                 }
             }
 
-            // v2.5.0: 本周彩虹跑道（有打卡数据时展示）
-            if (weekDone != null) {
-                Spacer(modifier = Modifier.height(6.dp))
-                WeeklyProgressTrack(done = weekDone, total = 7, modifier = Modifier.padding(horizontal = 8.dp))
-            }
         }
     }
 

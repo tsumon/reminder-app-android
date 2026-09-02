@@ -17,10 +17,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Cake
@@ -120,6 +123,12 @@ private fun matchSmartList(reminder: ReminderEntity, list: SmartList): Boolean =
     SmartList.DONE -> reminder.status == "confirmed"
 }
 
+private fun matchesSearch(reminder: ReminderEntity, query: String): Boolean {
+    if (query.isBlank()) return true
+    return reminder.title.contains(query, ignoreCase = true) ||
+        reminder.note.contains(query, ignoreCase = true)
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
@@ -149,22 +158,6 @@ fun HomeScreen(
         viewModel.checkMissed()
     }
 
-    // v2.3.0: 今日完成数；v2.5.0 扩展为治愈游戏化口径（今日打卡/连续天数/本周打卡天数）。
-    // 打卡会更新提醒流（allReminders），keying 在流上即可在打卡后自动刷新（只读统计，零业务逻辑改动）
-    val database = com.reminderapp.data.database.AppDatabase.getInstance(androidx.compose.ui.platform.LocalContext.current)
-    var todayDone by remember { mutableStateOf(0) }
-    var streakDays by remember { mutableStateOf(0) }
-    var weekDone by remember { mutableStateOf(0) }
-    LaunchedEffect(allReminders) {
-        // v2.4.0: 防御——统计失败不影响首页渲染
-        runCatching {
-            val records = database.reminderRecordDao().getAll()
-            todayDone = todayDoneCount(records)
-            streakDays = com.reminderapp.service.StatsService.summarize(records).currentStreak
-            weekDone = weekDoneDays(records)
-        }
-    }
-
     // v2.4.2: 锚点星期修正——weekly 意图星期与实际锚点不符的提醒
     var anchorMismatches by remember { mutableStateOf<List<ReminderEntity>>(emptyList()) }
     LaunchedEffect(allReminders.size) {
@@ -189,8 +182,10 @@ fun HomeScreen(
     var batchMinute by remember { mutableStateOf(0) }
     // 点击日历某天 → 查看当日任务
     var selectedDate by remember { mutableStateOf<Long?>(null) }
-    // 智能清单
+    // 智能清单（筛选条只展示 全部 / 今天 / 本周）
     var smartList by remember { mutableStateOf(SmartList.ALL) }
+    var searchOpen by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
 
     // 批次3 功能6: 单条分享卡片粘贴导入
     var showCardImportDialog by remember { mutableStateOf(false) }
@@ -213,7 +208,7 @@ fun HomeScreen(
                     if (selectionMode) {
                         Text(zhf("已选 %s 项", selectedIds.size), style = MaterialTheme.typography.headlineMedium)
                     } else {
-                        Text(zh("循环提醒器"), style = MaterialTheme.typography.headlineMedium)
+                        Text(zh("提醒事项"), style = MaterialTheme.typography.headlineMedium)
                     }
                 },
                 navigationIcon = {
@@ -261,6 +256,15 @@ fun HomeScreen(
                             selectionMode = false
                         }) { Text(zh("取消")) }
                     } else {
+                    IconButton(onClick = {
+                        searchOpen = !searchOpen
+                        if (!searchOpen) searchQuery = ""
+                    }) {
+                        Icon(
+                            if (searchOpen) Icons.Default.Close else Icons.Default.Search,
+                            contentDescription = zh("搜索")
+                        )
+                    }
                     Box {
                         IconButton(onClick = { menuExpanded = true }) {
                             Icon(
@@ -391,9 +395,20 @@ fun HomeScreen(
             }
         }
     ) { padding ->
-        val reminding = grouped.reminding.filter { matchSmartList(it, smartList) }
-        val waiting = grouped.waiting.filter { matchSmartList(it, smartList) }
-        val completed = grouped.completed.filter { matchSmartList(it, smartList) }
+        val now = System.currentTimeMillis()
+        val due = allReminders.filter { r ->
+            r.isActive && r.status != "confirmed" &&
+                (r.status == "notifying" || r.status == "overdue" || r.status == "snoozed" ||
+                    (r.status == "pending" && r.nextTriggerAt <= now)) &&
+                matchSmartList(r, smartList) && matchesSearch(r, searchQuery)
+        }.sortedBy { it.nextTriggerAt }
+        val dueIds = due.map { it.id }.toSet()
+        val waiting = grouped.waiting.filter {
+            matchSmartList(it, smartList) && matchesSearch(it, searchQuery) && it.id !in dueIds
+        }
+        val completed = grouped.completed.filter {
+            matchSmartList(it, smartList) && matchesSearch(it, searchQuery)
+        }
 
         LazyColumn(
             modifier = Modifier
@@ -402,133 +417,69 @@ fun HomeScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // 概览卡片（v2.5.0 粘土卡：日期 + 打卡城堡 + 待办/今日打卡 + 本周彩虹跑道）
-            item {
-                OverviewCard(
-                    unhandledCount = allReminders.count { it.isActive && it.status != "confirmed" },
-                    todayDone = todayDone,
-                    // v1.9.6 fix: 过滤已确认/已过期——is_active=1 包含 confirmed 的 once 提醒
-                    // （nextTriggerAt 是过去值），会被误选成「下一条提醒」显示历史时间
-                    nextReminder = allReminders
-                        .filter { it.isActive && it.status != "confirmed" && it.nextTriggerAt > System.currentTimeMillis() }
-                        .minByOrNull { it.nextTriggerAt },
-                    streakDays = streakDays,
-                    weekDone = weekDone
-                )
-            }
-
-            // v2.4.9: 遗漏补办卡——已触发未确认 / 已到时间未确认的提醒，一键补确认或推到明天
-            val now = System.currentTimeMillis()
-            val missedReminders = allReminders
-                .filter {
-                    it.isActive && it.status != "confirmed" &&
-                        (it.status == "notifying" || it.status == "overdue" || (it.status == "pending" && it.nextTriggerAt <= now))
-                }
-                .sortedBy { it.nextTriggerAt }
-            if (missedReminders.isNotEmpty()) {
+            if (searchOpen) {
                 item {
-                    Card(
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Filled.Warning,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    zhf("你错过了 %d 条提醒", missedReminders.size),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            missedReminders.take(5).forEach { r ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(r.title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
-                                        Text(
-                                            zhf("错过于 %s", java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(r.nextTriggerAt))),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
-                                        )
-                                    }
-                                    TextButton(onClick = { viewModel.confirmReminder(r, isMakeUp = true) }) {
-                                        Text(zh("补确认"), color = MaterialTheme.colorScheme.error)
-                                    }
-                                    TextButton(onClick = { viewModel.snoozeTomorrow(r) }) {
-                                        Text(zh("明天"), color = MaterialTheme.colorScheme.error)
-                                    }
+                        placeholder = { Text(zh("搜索提醒")) },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Close, contentDescription = zh("清除"))
                                 }
                             }
-                        }
-                    }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(24.dp)
+                    )
                 }
             }
 
-            // v2.4.0: 今日安排时间线（今天要触发的提醒按时间排列，布局重设计核心）
-            val cal0 = java.util.Calendar.getInstance()
-            cal0.set(java.util.Calendar.HOUR_OF_DAY, 0); cal0.set(java.util.Calendar.MINUTE, 0)
-            cal0.set(java.util.Calendar.SECOND, 0); cal0.set(java.util.Calendar.MILLISECOND, 0)
-            val dayStart = cal0.timeInMillis
-            val dayEnd = dayStart + 86_400_000L
-            val todayReminders = allReminders
-                .filter { it.isActive && it.status != "confirmed" && it.nextTriggerAt in dayStart until dayEnd }
-                .sortedBy { it.nextTriggerAt }
-            if (todayReminders.isNotEmpty()) {
-                item { SectionHeader(zh("今日安排"), Tokens.BrandPrimary, count = todayReminders.size) }
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        todayReminders.forEachIndexed { index, r ->
-                            TodayTimelineRow(
-                                reminder = r,
-                                isLast = index == todayReminders.size - 1,
-                                onClick = { onReminderClick(r.id) },
-                                // v2.5.0: 发光球打卡（复用现有确认函数，零逻辑改动）→ 彩带庆祝
-                                onCheckIn = {
-                                    viewModel.confirmReminder(r)
-                                    confettiTrigger++
-                                }
-                            )
-                        }
-                        // v2.5.0: 时间线底里程碑宝箱（今日全打卡开启）
-                        MilestoneChest(
-                            doneToday = todayDone,
-                            totalToday = todayReminders.size + todayDone
-                        )
-                    }
-                }
-            }
-
-            // v1.9.8 UI 对齐设计图：日历卡移到「日历」Tab（CalendarScreen），首页只保留列表
-
-            // 智能清单筛选条
             item {
                 SmartListBar(
                     selected = smartList,
-                    counts = SmartList.entries.associateWith { sl ->
-                        allReminders.count { matchSmartList(it, sl) }
-                    },
                     onSelect = { smartList = it }
                 )
             }
 
-            if (reminding.isEmpty() && waiting.isEmpty() && completed.isEmpty()) {
-                // 空状态（v2.5.0: 全部清单空时挥手小狐狸；筛选态保留简版提示）
+            item {
+                OverviewCard(
+                    unhandledCount = allReminders.count { it.isActive && it.status != "confirmed" }
+                )
+            }
+
+            if (due.isNotEmpty()) {
+                items(due, key = { "due-${it.id}" }) { reminder ->
+                    SwipeableReminderCard(
+                        reminder = reminder,
+                        statusColor = if (reminder.status == "overdue") StatusOverdue else StatusReminding,
+                        onComplete = {
+                            viewModel.confirmReminder(reminder)
+                            confettiTrigger++
+                        },
+                        onDelete = { pendingDelete = reminder },
+                        onClick = { onReminderClick(reminder.id) },
+                        modifier = Modifier.animateItemPlacement(),
+                        onMakeUp = { viewModel.confirmReminder(reminder, isMakeUp = true) },
+                        onConfirm = {
+                            viewModel.confirmReminder(reminder)
+                            confettiTrigger++
+                        },
+                        selectionMode = selectionMode,
+                        selected = reminder.id in selectedIds,
+                        onToggleSelect = {
+                            selectedIds = if (reminder.id in selectedIds) selectedIds - reminder.id else selectedIds + reminder.id
+                        }
+                    )
+                }
+            }
+
+            if (due.isEmpty() && waiting.isEmpty() && completed.isEmpty()) {
                 item {
-                    if (smartList == SmartList.ALL) {
+                    if (smartList == SmartList.ALL && searchQuery.isBlank()) {
                         WavingEmptyMascot(onCreate = onCreateReminder)
                     } else {
                         Box(
@@ -544,43 +495,23 @@ fun HomeScreen(
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text(
-                                    zhf("「%s」没有提醒", smartList.label),
+                                    if (searchQuery.isNotBlank()) zh("没有匹配的提醒")
+                                    else zhf("「%s」没有提醒", smartList.label),
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Text(
-                                    zh("换个清单看看"),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                if (searchQuery.isBlank()) {
+                                    Text(
+                                        zh("换个清单看看"),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
                 }
             } else {
-                // 提醒中
-                if (reminding.isNotEmpty()) {
-                    item { SectionHeader(zh("提醒中"), StatusReminding, count = reminding.size) }
-                    items(reminding, key = { it.id }) { reminder ->
-                        SwipeableReminderCard(
-                            reminder = reminder,
-                            // v1.9.7: overdue 用更深一档红色区分
-                            statusColor = if (reminder.status == "overdue") StatusOverdue else StatusReminding,
-                            onComplete = { viewModel.confirmReminder(reminder) },
-                            onDelete = { pendingDelete = reminder },
-                            onClick = { onReminderClick(reminder.id) },
-                            modifier = Modifier.animateItemPlacement(),
-                            onMakeUp = { viewModel.confirmReminder(reminder, isMakeUp = true) },
-                            selectionMode = selectionMode,
-                            selected = reminder.id in selectedIds,
-                            onToggleSelect = {
-                                selectedIds = if (reminder.id in selectedIds) selectedIds - reminder.id else selectedIds + reminder.id
-                            }
-                        )
-                    }
-                }
-
-                // 等待中（同一人公历+农历生日合并显示一行；批量选择时按原始条目）
                 val waitingRows = pairWaitingRows(waiting, selectionMode)
                 if (waitingRows.isNotEmpty()) {
                     item { SectionHeader(zh("等待中"), StatusWaiting, count = waitingRows.size) }
@@ -611,7 +542,6 @@ fun HomeScreen(
                     }
                 }
 
-                // 已完成
                 if (completed.isNotEmpty()) {
                     item { SectionHeader(zh("已完成"), StatusCompleted, count = completed.size) }
                     items(completed, key = { it.id }) { reminder ->
@@ -890,28 +820,24 @@ fun SectionHeader(title: String, color: Color, count: Int? = null) {
     }
 }
 
-/** 智能清单筛选条：横向可滚动的 Chip 列表 */
+/** 智能清单筛选条：只展示 全部 / 今天 / 本周 */
 @Composable
 fun SmartListBar(
     selected: SmartList,
-    counts: Map<SmartList, Int>,
     onSelect: (SmartList) -> Unit
 ) {
+    val visible = listOf(SmartList.ALL, SmartList.TODAY, SmartList.WEEK)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
             .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        SmartList.entries.forEach { item ->
-            val count = counts[item] ?: 0
+        visible.forEach { item ->
             FilterChip(
                 selected = selected == item,
                 onClick = { onSelect(item) },
-                label = {
-                    Text(if (count > 0) "${item.label} $count" else item.label)
-                }
+                label = { Text(item.label) }
             )
         }
     }
@@ -932,6 +858,8 @@ fun SwipeableReminderCard(
     modifier: Modifier = Modifier,
     /** 批次3 功能2：逾期提醒的「补打今天」入口，传 null 则不显示 */
     onMakeUp: (() -> Unit)? = null,
+    /** 到期/逾期/已推迟：行内确认 */
+    onConfirm: (() -> Unit)? = null,
     /** v2.1.1: 批量管理透传 */
     selectionMode: Boolean = false,
     selected: Boolean = false,
@@ -1005,104 +933,55 @@ fun SwipeableReminderCard(
         ) {
             ReminderCard(
                 reminder, statusColor, onDelete = onDelete, onClick = onClick, onMakeUp = onMakeUp,
+                onConfirm = onConfirm,
                 selectionMode = selectionMode, selected = selected, onToggleSelect = onToggleSelect
             )
         }
     }
 }
 
-/** 首页概览卡片（v2.5.0 粘土卡：日期大标题 + 打卡城堡 + 待办/今日打卡 + 本周彩虹跑道） */
+/** 首页概览卡片：左日期+农历，右待处理数量 */
 @Composable
 fun OverviewCard(
-    unhandledCount: Int,
-    nextReminder: ReminderEntity?,
-    todayDone: Int = 0,
-    streakDays: Int = 0,
-    weekDone: Int = 0
+    unhandledCount: Int
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .clayCard(radiusDp = Tokens.RadiusCard)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = 16.dp, vertical = 18.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        // 行1：日期大标题 + 星期 + 「🌙 农历」ink 胶囊 | 右：连续打卡城堡
-        Row(verticalAlignment = Alignment.Top) {
-            Column {
-                Row(verticalAlignment = Alignment.Bottom) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "${overviewDateTitle()} ${overviewWeekday()}",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            com.reminderapp.service.LunarCalendar.solarToLunar(System.currentTimeMillis())
+                ?.let { lunar ->
                     Text(
-                        overviewDateTitle(),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        overviewWeekday(),
-                        style = MaterialTheme.typography.titleMedium,
+                        zhf("农历%s", overviewLunar(lunar)),
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Spacer(modifier = Modifier.height(6.dp))
-                com.reminderapp.service.LunarCalendar.solarToLunar(System.currentTimeMillis())
-                    ?.let { lunar ->
-                        Text(
-                            "🌙 ${overviewLunar(lunar)}",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White.copy(alpha = 0.92f),
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(Playful.ink.copy(alpha = 0.88f))
-                                .padding(horizontal = 9.dp, vertical = 4.dp)
-                        )
-                    }
-            }
-            Spacer(modifier = Modifier.weight(1f))
-            StreakCastle(streakDays = streakDays, compact = true)
         }
-
-        HorizontalDivider(color = Playful.lavender)
-
-        // 行2：「🔔 待处理 N 项」+「今日 ✅ N」mint 胶囊 + 下次提醒
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("🔔", fontSize = 15.sp)
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    zhf("待处理 %d 项", unhandledCount),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    "今日 ✅ $todayDone",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Playful.ink,
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(Playful.mint.copy(alpha = 0.28f))
-                        .padding(horizontal = 9.dp, vertical = 4.dp)
-                )
-            }
-            val nextText = nextReminder?.let {
-                val f = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
-                "🕐 ${it.title} · ${f.format(Date(it.nextTriggerAt))}"
-            } ?: zh("暂无即将到来的提醒")
+        Column(horizontalAlignment = Alignment.End) {
             Text(
-                nextText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                unhandledCount.toString(),
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                zh("待处理"),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-
-        // 行3：本周彩虹跑道（streak 走 StatsService 口径，weekDone=本周打卡天数）
-        WeeklyProgressTrack(done = weekDone, total = 7)
     }
 }
 
@@ -1110,9 +989,11 @@ fun OverviewCard(
 private fun overviewDateTitle(): String =
     SimpleDateFormat("M月d日", Locale.getDefault()).format(Date())
 
-/** 今天周几（如「周六」） */
-private fun overviewWeekday(): String =
-    SimpleDateFormat("EEEE", Locale.getDefault()).format(Date())
+/** 今天周几（如「星期四」） */
+private fun overviewWeekday(): String {
+    val names = arrayOf("星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六")
+    return names[Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1]
+}
 
 /** 今天农历（如「六月廿三」） */
 private fun overviewLunar(lunar: com.reminderapp.service.LunarCalendar.LunarDate): String {
@@ -1227,6 +1108,100 @@ private fun relativeMinutes(target: Long): String {
     }
 }
 
+/** 卡片右侧倒计时：今天 / 明天 / n天后 / n周后 */
+private fun relativeDaysLabel(target: Long): String {
+    val start = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    val end = Calendar.getInstance().apply {
+        timeInMillis = target
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    val days = ((end.timeInMillis - start.timeInMillis) / 86_400_000L).toInt()
+    return when {
+        days < 0 -> zh("已过期")
+        days == 0 -> zh("今天")
+        days == 1 -> zh("明天")
+        days < 7 -> zhf("%d天后", days)
+        else -> zhf("%d周后", (days / 7).coerceAtLeast(1))
+    }
+}
+
+private fun lunarMonthDayLabel(month: Int, day: Int): String {
+    val monthNames = arrayOf("", "正", "二", "三", "四", "五", "六", "七", "八", "九", "十", "冬", "腊")
+    val dayNames = arrayOf(
+        "", "初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",
+        "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
+        "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"
+    )
+    val m = monthNames.getOrElse(month.coerceIn(1, 12)) { "" }
+    val d = dayNames.getOrElse(day.coerceIn(1, 30)) { "${day}日" }
+    return m + "月" + d
+}
+
+@Composable
+private fun MetaTag(text: String, color: Color) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = color,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(color.copy(alpha = 0.12f))
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+    )
+}
+
+@Composable
+private fun ReminderTagRow(reminder: ReminderEntity) {
+    val time = String.format(Locale.getDefault(), "%02d:%02d", reminder.reminderHour, reminder.reminderMinute)
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        when {
+            reminder.kind == "date" && reminder.dateType == "solar_birthday" -> {
+                MetaTag(
+                    zhf("公历 %d月%d日", reminder.targetMonth ?: 1, reminder.targetDay ?: 1),
+                    Color(0xFFD81B60)
+                )
+            }
+            reminder.kind == "date" && reminder.dateType == "lunar_birthday" -> {
+                MetaTag(
+                    zhf("农历 %s", lunarMonthDayLabel(reminder.targetMonth ?: 1, reminder.targetDay ?: 1)),
+                    Color(0xFF8E24AA)
+                )
+            }
+            reminder.kind == "date" && reminder.dateType == "holiday" -> {
+                MetaTag(reminder.holidayName ?: zh("节假日"), Color(0xFFF39C12))
+            }
+            reminder.kind == "rule" -> {
+                MetaTag("${ruleLabel(reminder)} · $time", MaterialTheme.colorScheme.primary)
+            }
+            else -> {
+                val cycle = when (reminder.cycle) {
+                    "once" -> zh("仅一次")
+                    "daily" -> zh("每天")
+                    "weekly" -> zh("每周")
+                    "biweekly" -> zh("每两周")
+                    "monthly" -> zh("每月")
+                    "quarterly" -> zh("每季度")
+                    "yearly" -> zh("每年")
+                    "custom" -> zhf("每%s天", reminder.customDays)
+                    else -> reminder.cycle
+                }
+                MetaTag("$cycle · $time", MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
 /** 规则提醒的显示文本，如「每季度第2周周二」 */
 fun ruleLabel(reminder: ReminderEntity): String {
     val periodLabel = when (reminder.rulePeriod) {
@@ -1277,6 +1252,8 @@ fun ReminderCard(
     onClick: () -> Unit,
     /** 批次3 功能2：逾期提醒的「补打今天」入口，传 null 则不显示 */
     onMakeUp: (() -> Unit)? = null,
+    /** 到期项行内确认按钮 */
+    onConfirm: (() -> Unit)? = null,
     /** v2.1.1: 批量管理——选择模式标记/选择回调，非空时卡片进入多选态 */
     selectionMode: Boolean = false,
     selected: Boolean = false,
@@ -1286,31 +1263,10 @@ fun ReminderCard(
     val statusText = when (reminder.status) {
         "notifying" -> zh("需要确认")
         "overdue" -> zh("已逾期")   // v1.9.7: 递增重试到上限
-        "idle", "pending" -> zh("等待中")
+        "snoozed" -> zh("已推迟")
+        "idle", "pending" -> ""     // 等待中由分组标题表示，卡片上不再画 chip
         "confirmed" -> zh("已完成")
         else -> ""
-    }
-    val kindLabel = when {
-        reminder.kind == "date" && reminder.dateType == "holiday" -> "🎉${reminder.holidayName ?: ""}"
-        reminder.kind == "date" && reminder.dateType == "lunar_birthday" -> zh("🌙农历生日")
-        reminder.kind == "date" && reminder.dateType == "solar_birthday" -> zh("🎂生日")
-        reminder.kind == "rule" -> ruleLabel(reminder)
-        else -> when (reminder.cycle) {
-            "once" -> zh("仅一次")
-            "daily" -> zh("每天")
-            "weekly" -> zh("每周")
-            "biweekly" -> zh("每两周")
-            "monthly" -> zh("每月")
-            "quarterly" -> zh("每季度")
-            "yearly" -> zh("每年")
-            "custom" -> zhf("每%s天", reminder.customDays)
-            else -> reminder.cycle
-        }
-    }
-    val priorityLabel = when (reminder.priority) {
-        "high" -> zh("🔴高")
-        "low" -> zh("⚪低")
-        else -> zh("🟢中")
     }
     val isDone = reminder.status == "confirmed"
 
@@ -1381,23 +1337,16 @@ fun ReminderCard(
                     color = if (isDone) MaterialTheme.colorScheme.onSurfaceVariant
                     else MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.height(3.dp))
-                // meta：类型 · 优先级 · 重试
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(modifier = Modifier.height(5.dp))
+                ReminderTagRow(reminder)
+                if (reminder.retryCount > 0 && !isDone) {
                     Text(
-                        text = "$kindLabel · $priorityLabel",
+                        text = "还没确认 · ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(java.util.Date(reminder.nextTriggerAt))} 再响",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = Color(0xFFF39C12)
                     )
-                    if (reminder.retryCount > 0 && !isDone) {
-                        Text(
-                            text = zhf(" · 第%s次重试", reminder.retryCount),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFFF39C12)
-                        )
-                    }
                 }
-                // 状态胶囊（设计图独立 chip）+ 逾期时的「补打今天」快捷入口
+                // 状态胶囊：等待中不画；到期/逾期/已完成保留
                 if (statusText.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(5.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1427,8 +1376,6 @@ fun ReminderCard(
                         }
                     }
                 }
-                // v2.0.22: 原条件 statusText.isEmpty() 永远为 false（所有状态都有文案），
-                // 备注在首页被完全隐藏，只能进详情看；去掉该条件，备注跟随状态胶囊展示
                 if (reminder.note.isNotEmpty()) {
                     Text(
                         text = reminder.note,
@@ -1440,12 +1387,32 @@ fun ReminderCard(
                     )
                 }
             }
-            // 右侧时间：状态色（设计图）
-            Text(
-                text = dateFormat.format(Date(reminder.nextTriggerAt)),
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                color = statusColor
-            )
+            if (onConfirm != null && !isDone && !selectionMode) {
+                Button(
+                    onClick = onConfirm,
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Text(zh("确认"), style = MaterialTheme.typography.labelLarge)
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (isDone) dateFormat.format(Date(reminder.nextTriggerAt))
+                        else relativeDaysLabel(reminder.nextTriggerAt),
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = if (isDone) statusColor else MaterialTheme.colorScheme.primary
+                    )
+                    if (!isDone) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -1550,34 +1517,29 @@ private fun MergedBirthdayCard(solar: ReminderEntity, lunar: ReminderEntity, onC
                     overflow = TextOverflow.Ellipsis
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
+                    MetaTag(
                         zhf("公历 %d月%d日", solar.targetMonth ?: 1, solar.targetDay ?: 1),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFFD81B60),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(Color(0xFFD81B60).copy(alpha = 0.10f))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                        Color(0xFFD81B60)
                     )
-                    Text(
-                        zhf("农历 %d月%d", lunar.targetMonth ?: 1, lunar.targetDay ?: 1),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF8E24AA),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(Color(0xFF8E24AA).copy(alpha = 0.10f))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    MetaTag(
+                        zhf("农历 %s", lunarMonthDayLabel(lunar.targetMonth ?: 1, lunar.targetDay ?: 1)),
+                        Color(0xFF8E24AA)
                     )
                 }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    zh("等待中"), style = MaterialTheme.typography.labelSmall, color = StatusWaiting
+                    relativeDaysLabel(nearest.nextTriggerAt),
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                    modifier = Modifier.size(18.dp)
                 )
             }
-            Text(
-                zhf("%s 后", relativeMinutes(nearest.nextTriggerAt)),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }

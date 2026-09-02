@@ -2,7 +2,7 @@
 
 ---
 
-# 📱 Reminder Assistant (Reminder App) — Android
+# Recurring Reminder — Android
 
 A full-featured native Android reminder app supporting recurring reminders, date reminders, lunar birthdays, holiday reminders, and an **AI voice assistant**.
 
@@ -11,7 +11,39 @@ A full-featured native Android reminder app supporting recurring reminders, date
 [![Min SDK](https://img.shields.io/badge/Min%20SDK-26-orange.svg)](https://developer.android.com/about/versions/oreo)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-![App UI](docs/screenshots/android.png)
+| Home | Calendar | Stats |
+|:---:|:---:|:---:|
+| ![Home](docs/screenshots/home.png) | ![Calendar](docs/screenshots/calendar.png) | ![Stats](docs/screenshots/stats.png) |
+
+## Current UI
+
+Dark UI aligned with GitHub 2.5.1 — not Home A, not QuietHome. Four bottom tabs. AI lives in Settings, not as its own tab.
+
+- **Home** (title 「提醒事项」): chips 全部 / 今天 / 本周 only; groups 提醒中 / 等待中. Due rows confirm in-line (no large confirm dialog).
+- **Calendar**: solar + lunar + fox on today + 班/休; selecting a date lists that day's tasks. No weekly progress bar (progress lives on 本周花园).
+- **Stats**: this-month done / streak / completion rate + confirmed/missed; check-in castle, weekly garden, most-forgotten hours. No big ring, no heatmap.
+- **Settings**: skins, etc.
+
+```mermaid
+flowchart TB
+  app[Recurring Reminder]
+  app --> home[Home]
+  app --> cal[Calendar]
+  app --> stats[Stats]
+  app --> set[Settings]
+```
+
+```mermaid
+flowchart LR
+  waiting[Waiting] --> due[Due]
+  due -->|Confirm| next[Next cycle]
+  due -->|Unconfirmed| retry[Escalating retry]
+  retry -->|Confirm| next
+  retry -->|Cap| overdue[Overdue]
+  overdue -->|Manual confirm| next
+```
+
+Retry engine remains 1h → 4h → 12h → 24h → overdue (then stops auto-ringing). Notification actions are Confirm and Later.
 
 ---
 

@@ -6,8 +6,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Notifications
@@ -19,7 +17,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reminderapp.data.entity.ReminderRecordEntity
@@ -31,13 +28,11 @@ import com.reminderapp.ui.theme.Tokens
 import com.reminderapp.ui.theme.clayCard
 import com.reminderapp.ui.theme.weekDayConfirmCounts
 import java.util.Calendar
-import java.util.Locale
 import com.reminderapp.i18n.zh
 import com.reminderapp.i18n.zhf
 
 /**
- * 统计洞察页（v1.8.7 任务③）：完成率 / 连续打卡 / 最常忘记时段 / 月历热力图
- * 镜像 iOS StatsView.swift
+ * 统计洞察页：本月完成 / 连续天数 / 完成率 + 打卡城堡 / 本周花园 / 最常忘记时段
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,7 +41,6 @@ fun StatsScreen(
     onBack: () -> Unit
 ) {
     val summary = remember(records) { StatsService.summarize(records) }
-    var displayMonth by remember { mutableStateOf(Calendar.getInstance()) }
 
     // v2.5.0: 治愈游戏化——桃粉薰衣草渐变背景透出
     Box(modifier = Modifier.fillMaxSize()) {
@@ -56,11 +50,6 @@ fun StatsScreen(
             topBar = {
                 TopAppBar(
                     title = { Text(zh("统计洞察")) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = zh("返回"))
-                        }
-                    },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent
                     )
@@ -98,74 +87,24 @@ fun StatsScreen(
                 }
             }
 
-            // v2.5.0: 连续打卡城堡大卡（替代两张 streak 小卡）+ 本周盆栽花园
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    LabelChip(zhf("确认 %s", summary.confirmCount), Icons.Filled.CheckCircle, Tokens.StatusCompleted)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    LabelChip(zhf("漏掉 %s", summary.missedCount), Icons.Filled.Notifications, Tokens.StatusReminding)
+                }
+            }
+
             item { CastleCard(summary) }
             item { GardenCard(records) }
-
-            item { CompletionCard(summary) }
-
             item { ForgetHoursCard(summary) }
-
-            item {
-                HeatmapCard(
-                    summary = summary,
-                    displayMonth = displayMonth,
-                    onPrevMonth = {
-                        displayMonth = Calendar.getInstance().apply {
-                            timeInMillis = displayMonth.timeInMillis
-                            add(Calendar.MONTH, -1)
-                        }
-                    },
-                    onNextMonth = {
-                        displayMonth = Calendar.getInstance().apply {
-                            timeInMillis = displayMonth.timeInMillis
-                            add(Calendar.MONTH, 1)
-                        }
-                    }
-                )
-            }
         }
         } // Scaffold
     } // 背景 Box
-}
-
-@Composable
-private fun CompletionCard(summary: StatsService.Summary) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clayCard(radiusDp = 20.dp)
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-            // 完成率环形进度
-            Box(contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(
-                    progress = { summary.completionRate?.toFloat() ?: 0f },
-                    modifier = Modifier.size(140.dp),
-                    strokeWidth = 12.dp,
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-                )
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = summary.completionRate?.let { "${(it * 100).toInt()}%" } ?: "—",
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        zh("完成率"),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                LabelChip(zhf("确认 %s", summary.confirmCount), Icons.Filled.CheckCircle, Tokens.StatusCompleted)
-                LabelChip(zhf("漏掉 %s", summary.missedCount), Icons.Filled.Notifications, Tokens.StatusReminding)
-            }
-    }
 }
 
 /** v1.9.8 设计图风格：数字概览小卡（大数字 + 小标题） */
@@ -345,131 +284,4 @@ private fun ForgetHoursCard(summary: StatsService.Summary) {
             }
         }
     }
-}
-
-@Composable
-private fun HeatmapCard(
-    summary: StatsService.Summary,
-    displayMonth: Calendar,
-    onPrevMonth: () -> Unit,
-    onNextMonth: () -> Unit
-) {
-    val year = displayMonth.get(Calendar.YEAR)
-    val month = displayMonth.get(Calendar.MONTH) // 0-based
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clayCard(radiusDp = 20.dp)
-            .padding(16.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.DateRange, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("🗓 月历热力图", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.weight(1f))
-                IconButton(onClick = onPrevMonth, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = zh("上一月"))
-                }
-                Text(zhf("%1\$s年%2\$s月", year, month + 1), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                IconButton(onClick = onNextMonth, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = zh("下一月"))
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 星期表头
-            Row(modifier = Modifier.fillMaxWidth()) {
-                listOf("一", "二", "三", "四", "五", "六", "日").forEach { label ->
-                    Text(
-                        text = label,
-                        modifier = Modifier.weight(1f),
-                        textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // 热力格子
-            val cal = Calendar.getInstance().apply { set(year, month, 1, 0, 0, 0); set(Calendar.MILLISECOND, 0) }
-            val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-            val firstWeekday = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7 + 1
-            val leading = firstWeekday - 1
-            val total = ((leading + daysInMonth + 6) / 7) * 7
-
-            val df = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                for (row in 0 until total / 7) {
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        for (col in 0 until 7) {
-                            val idx = row * 7 + col
-                            val day = idx - leading + 1
-                            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                                if (day in 1..daysInMonth) {
-                                    val cal2 = Calendar.getInstance().apply {
-                                        set(year, month, day, 12, 0, 0)
-                                        set(Calendar.MILLISECOND, 0)
-                                    }
-                                    val key = df.format(cal2.time)
-                                    val count = summary.heatmap[key] ?: 0
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 3.dp)
-                                                .height(28.dp)
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(heatColor(heatLevel(count)))
-                                        )
-                                        Text("$day", fontSize = Tokens.FontMicro, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                } else {
-                                    Spacer(modifier = Modifier.height(34.dp))
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 图例
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(zh("少"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(modifier = Modifier.width(6.dp))
-                for (lv in 0..3) {
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 2.dp)
-                            .size(14.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(heatColor(lv))
-                    )
-                }
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(zh("多"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(modifier = Modifier.weight(1f))
-                Icon(Icons.Filled.DateRange, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
-            }
-    }
-}
-
-/** 0=无，1=1次，2=2-3次，3=4+次（色阶令牌化，与 iOS 一致） */
-private fun heatLevel(count: Int): Int = when {
-    count <= 0 -> 0
-    count == 1 -> 1
-    count in 2..3 -> 2
-    else -> 3
-}
-
-private fun heatColor(level: Int): Color = when (level) {
-    0 -> Tokens.Heatmap0
-    1 -> Tokens.Heatmap1
-    2 -> Tokens.Heatmap2
-    else -> Tokens.Heatmap3
 }

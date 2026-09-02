@@ -80,12 +80,20 @@ class HomeViewModel(
         }
     }
 
-    /**
-     * 滑动完成：确认当前提醒（周期类自动前进到下一次；一次性提醒归档）
-     *
-     * @param isMakeUp 是否为「补打今天」（逾期后补打卡）。行为与普通确认一致
-     *                 （按今天完成 + 推进周期 + 计入统计），只区分反馈文案。
-     */
+    /** 安静确认「稍后」：推迟 N 分钟后重响（默认 60 分钟） */
+    fun snoozeLater(reminder: ReminderEntity, minutes: Long = 60) {
+        viewModelScope.launch {
+            val updated = ReminderEngine.snooze(reminder, minutes)
+            dao.update(updated)
+            recordDao.insert(ReminderRecordEntity(reminderId = reminder.id, action = ReminderRecordEntity.ACTION_SNOOZED))
+            scheduler.schedule(updated)
+            com.reminderapp.service.NotificationManager(com.reminderapp.ReminderApp.instance)
+                .cancelReminderNotifications(reminder.id)
+            com.reminderapp.service.SyncStore.touchLocalChange()
+            com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+        }
+    }
+
     /** v2.4.9: 遗漏补办——把指定提醒推到明天提醒时刻（HomeScreen 错过卡片用） */
     fun snoozeTomorrow(reminder: ReminderEntity) {
         viewModelScope.launch {
@@ -100,6 +108,12 @@ class HomeViewModel(
         }
     }
 
+    /**
+     * 滑动完成：确认当前提醒（周期类自动前进到下一次；一次性提醒归档）
+     *
+     * @param isMakeUp 是否为「补打今天」（逾期后补打卡）。行为与普通确认一致
+     *                 （按今天完成 + 推进周期 + 计入统计），只区分反馈文案。
+     */
     fun confirmReminder(reminder: ReminderEntity, isMakeUp: Boolean = false) {
         viewModelScope.launch {
             val updated = ReminderEngine.confirm(reminder)
