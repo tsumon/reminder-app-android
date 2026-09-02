@@ -2,7 +2,7 @@
 
 ---
 
-# 📱 提醒助手 (Reminder App) — Android
+# 循環提醒 — Android
 
 一套功能完整的 Android 原生提醒應用，支援循環提醒、日期提醒、農曆生日、節假日提醒，以及 **AI 語音助理**。
 
@@ -11,7 +11,11 @@
 [![Min SDK](https://img.shields.io/badge/Min%20SDK-26-orange.svg)](https://developer.android.com/about/versions/oreo)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-![App UI](docs/screenshots/android.png)
+![Home](docs/screenshots/home.png)
+
+![Calendar](docs/screenshots/calendar.png)
+
+![Stats](docs/screenshots/stats.png)
 
 ---
 

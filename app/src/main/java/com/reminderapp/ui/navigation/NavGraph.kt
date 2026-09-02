@@ -5,7 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -70,10 +70,10 @@ fun NavGraph(
         onDeepLinkConsumed()
     }
 
-    // v1.9.8 UI 对齐设计图：底部导航 4 Tab（首页 / 日历 / 统计 / AI）
+    // 安静确认：底部导航 4 Tab（首页 / 日历 / 统计 / 设置）；AI 从首页入口进入，不是 Tab
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val tabRoutes = listOf("home", "calendar", "stats", "chat")
+    val tabRoutes = listOf("home", "calendar", "stats", "settings")
     val showBottomBar = currentRoute in tabRoutes
 
     Scaffold(
@@ -121,18 +121,18 @@ fun NavGraph(
                         icon = { Icon(Icons.Filled.BarChart, contentDescription = null) },
                         label = { Text(zh("统计")) }
                     )
-                    // AI
+                    // 设置（AI 不是 Tab）
                     NavigationBarItem(
-                        selected = currentRoute == "chat",
+                        selected = currentRoute == "settings",
                         onClick = {
-                            navController.navigate("chat") {
+                            navController.navigate("settings") {
                                 popUpTo(navController.graph.startDestinationId) { saveState = true }
                                 launchSingleTop = true
                                 restoreState = true
                             }
                         },
-                        icon = { Icon(Icons.Filled.SmartToy, contentDescription = null) },
-                        label = { Text("AI") }
+                        icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+                        label = { Text(zh("设置")) }
                     )
                 }
             }
@@ -396,7 +396,8 @@ fun NavGraph(
         composable("settings") {
             // v1.9.2: 设置页（版本号/检查更新/更新日志/同步/AI）
             SettingsScreen(
-                onBack = { navController.popBackStack() },
+                onBack = {},
+                showBack = false,
                 onOpenSyncSettings = { navController.navigate("sync_settings") },
                 onOpenAISettings = { navController.navigate("ai_settings") },
                 onOpenDiagnostics = { navController.navigate("diagnostics") }

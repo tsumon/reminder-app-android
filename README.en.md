@@ -2,7 +2,7 @@
 
 ---
 
-# 📱 Reminder Assistant (Reminder App) — Android
+# Recurring Reminder — Android
 
 A full-featured native Android reminder app supporting recurring reminders, date reminders, lunar birthdays, holiday reminders, and an **AI voice assistant**.
 
@@ -11,7 +11,27 @@ A full-featured native Android reminder app supporting recurring reminders, date
 [![Min SDK](https://img.shields.io/badge/Min%20SDK-26-orange.svg)](https://developer.android.com/about/versions/oreo)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-![App UI](docs/screenshots/android.png)
+| Home | Calendar | Stats |
+|:---:|:---:|:---:|
+| ![Home](docs/screenshots/home.png) | ![Calendar](docs/screenshots/calendar.png) | ![Stats](docs/screenshots/stats.png) |
+
+## Current UI
+
+Four bottom tabs: Home / Calendar / Stats / Settings. AI lives in Settings, not as its own tab.
+
+Home title is 「提醒事项」: toolbar search, chips 全部 / 今天 / 本周, groups 提醒中 / 等待中. Due rows have in-line 确认; retry subtitle is 「还没确认 · HH:MM 再响」. Calendar lists that day's tasks after a date is selected. Stats show this-month done / streak / completion rate (empty state 0%), plus check-in castle, weekly garden, and most-forgotten hours.
+
+```mermaid
+flowchart LR
+  waiting[Waiting] --> due[Due]
+  due -->|Confirm| next[Next cycle]
+  due -->|Unconfirmed| retry[Escalating retry]
+  retry -->|Confirm| next
+  retry -->|Cap| overdue[Overdue]
+  overdue -->|Manual confirm| next
+```
+
+Retry engine remains 1h → 4h → 12h → 24h → overdue (then stops auto-ringing). Notification actions are Confirm and Later.
 
 ---
 

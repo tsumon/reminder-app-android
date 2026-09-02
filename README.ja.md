@@ -11,7 +11,11 @@
 [![Min SDK](https://img.shields.io/badge/Min%20SDK-26-orange.svg)](https://developer.android.com/about/versions/oreo)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-![App UI](docs/screenshots/android.png)
+![Home](docs/screenshots/home.png)
+
+![Calendar](docs/screenshots/calendar.png)
+
+![Stats](docs/screenshots/stats.png)
 
 ---
 

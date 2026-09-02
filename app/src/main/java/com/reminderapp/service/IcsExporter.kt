@@ -29,7 +29,7 @@ object IcsExporter {
             "VERSION:2.0",
             "PRODID:-//ReminderApp//循环提醒//CN",
             "CALSCALE:GREGORIAN",
-            "X-WR-CALNAME:循环提醒器",
+            "X-WR-CALNAME:循环提醒",
             "X-WR-TIMEZONE:${timeZone.id}"
         )
 

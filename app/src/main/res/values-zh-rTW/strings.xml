@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- 原有具名资源：被 AndroidManifest / Widget XML 引用，名称不可更改 -->
-    <string name="app_name">循環提醒器</string>
+    <string name="app_name">循環提醒</string>
     <string name="tab_reminding">提醒中</string>
     <string name="tab_waiting">等待中</string>
     <string name="tab_completed">已完成</string>
@@ -192,7 +192,7 @@
     <string name="s_0144">待處理 %s 項</string>
     <string name="s_0145">循環提醒</string>
     <string name="s_0146">循環提醒 · 支援多端同步與線上升級</string>
-    <string name="s_0147">循環提醒器</string>
+    <string name="s_0147">循環提醒</string>
     <string name="s_0148">快速範本</string>
     <string name="s_0149">或手動輸入對方位址</string>
     <string name="s_0150">開啟詳情</string>

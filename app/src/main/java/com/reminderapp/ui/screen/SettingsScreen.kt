@@ -45,6 +45,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    showBack: Boolean = true,
     onOpenSyncSettings: () -> Unit,
     onOpenAISettings: () -> Unit,
     onOpenDiagnostics: () -> Unit
@@ -63,8 +64,10 @@ fun SettingsScreen(
             TopAppBar(
                 title = { Text(zh("设置")) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = zh("返回"))
+                    if (showBack) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = zh("返回"))
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
