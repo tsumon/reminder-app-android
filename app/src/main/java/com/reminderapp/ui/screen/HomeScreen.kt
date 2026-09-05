@@ -1,7 +1,6 @@
 package com.reminderapp.ui.screen
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -197,35 +196,145 @@ fun HomeScreen(
     // v2.5.0: 打卡彩带触发 token（每次打卡自增，重放一次 ConfettiBurst）
     var confettiTrigger by remember { mutableStateOf(0) }
 
-    // v2.5.0: 治愈游戏化——桃粉薰衣草渐变背景铺在最底层，Scaffold 透明透出
-    Box(modifier = Modifier.fillMaxSize()) {
-        PastelBackground()
+    Box(modifier = Modifier.fillMaxSize().background(softCanvas())) {
         Scaffold(
             containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                title = {
-                    if (selectionMode) {
+            if (!selectionMode) {
+                SoftScreenTitle(
+                    title = zh("提醒事项"),
+                    leading = {
+                        SoftCircleButton(onClick = onAIChat, size = 40.dp, contentDescription = zh("AI 助手")) {
+                            Icon(
+                                Icons.Filled.AutoAwesome,
+                                contentDescription = null,
+                                tint = Tokens.BrandPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    },
+                    trailing = {
+                        Box {
+                            SoftCircleButton(onClick = { menuExpanded = true }, size = 40.dp, contentDescription = zh("更多")) {
+                                Icon(
+                                    Icons.Default.MoreVert,
+                                    contentDescription = null,
+                                    tint = softText(),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = menuExpanded,
+                                onDismissRequest = { menuExpanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text(zh("批量管理")) },
+                                    leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        selectionMode = true
+                                        selectedIds = emptySet()
+                                    }
+                                )
+                                Divider()
+                                DropdownMenuItem(
+                                    text = { Text(zh("立即同步")) },
+                                    leadingIcon = { Icon(Icons.Default.Sync, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onSyncNow()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(zh("同步设置")) },
+                                    leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onOpenSyncSettings()
+                                    }
+                                )
+                                Divider()
+                                DropdownMenuItem(
+                                    text = { Text(zh("统计洞察")) },
+                                    leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onOpenStats()
+                                    }
+                                )
+                                Divider()
+                                DropdownMenuItem(
+                                    text = { Text(zh("导入提醒")) },
+                                    leadingIcon = { Icon(Icons.Default.FileDownload, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onImport()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(zh("导入分享卡片")) },
+                                    leadingIcon = { Icon(Icons.Default.FileDownload, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        showCardImportDialog = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(zh("导出提醒")) },
+                                    leadingIcon = { Icon(Icons.Default.FileUpload, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onExport()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(zh("导出日历(.ics)")) },
+                                    leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onExportICS()
+                                    }
+                                )
+                                Divider()
+                                DropdownMenuItem(
+                                    text = { Text(zh("附近传输")) },
+                                    leadingIcon = { Icon(Icons.Default.Wifi, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onNearbyShare()
+                                    }
+                                )
+                                Divider()
+                                DropdownMenuItem(
+                                    text = { Text(zh("检查更新")) },
+                                    leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onCheckUpdate()
+                                    }
+                                )
+                                Divider()
+                                DropdownMenuItem(
+                                    text = { Text(zh("设置")) },
+                                    leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onOpenSettings()
+                                    }
+                                )
+                            }
+                        }
+                    }
+                )
+            } else {
+                TopAppBar(
+                    title = {
                         Text(zhf("已选 %s 项", selectedIds.size), style = MaterialTheme.typography.headlineMedium)
-                    } else {
-                        Text(zh("提醒事项"), style = MaterialTheme.typography.headlineMedium)
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onAIChat) {
-                        Icon(
-                            Icons.Filled.AutoAwesome,
-                            contentDescription = zh("AI 助手"),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent
-                ),
-                actions = {
-                    if (selectionMode) {
-                        // v2.1.1: 批量操作（全选/完成/删除/退出）
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent
+                    ),
+                    actions = {
                         TextButton(onClick = {
                             val all = allReminders.map { it.id }.toSet()
                             selectedIds = if (selectedIds.size == all.size) emptySet() else all
@@ -246,7 +355,6 @@ fun HomeScreen(
                             },
                             enabled = selectedIds.isNotEmpty()
                         ) { Text(zh("删除"), color = MaterialTheme.colorScheme.error) }
-                        // v2.4.9: 批量改提醒时间
                         TextButton(
                             onClick = { showBatchTimeDialog = true },
                             enabled = selectedIds.isNotEmpty()
@@ -255,145 +363,11 @@ fun HomeScreen(
                             selectedIds = emptySet()
                             selectionMode = false
                         }) { Text(zh("取消")) }
-                    } else {
-                    IconButton(onClick = {
-                        searchOpen = !searchOpen
-                        if (!searchOpen) searchQuery = ""
-                    }) {
-                        Icon(
-                            if (searchOpen) Icons.Default.Close else Icons.Default.Search,
-                            contentDescription = zh("搜索")
-                        )
                     }
-                    Box {
-                        IconButton(onClick = { menuExpanded = true }) {
-                            Icon(
-                                Icons.Default.MoreVert,
-                                contentDescription = zh("更多")
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false }
-                        ) {
-                            // v2.1.1: 批量管理
-                            DropdownMenuItem(
-                                text = { Text(zh("批量管理")) },
-                                leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
-                                onClick = {
-                                    menuExpanded = false
-                                    selectionMode = true
-                                    selectedIds = emptySet()
-                                }
-                            )
-                            Divider()
-                            DropdownMenuItem(
-                                text = { Text(zh("立即同步")) },
-                                leadingIcon = { Icon(Icons.Default.Sync, contentDescription = null) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onSyncNow()
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(zh("同步设置")) },
-                                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onOpenSyncSettings()
-                                }
-                            )
-                            Divider()
-                            // v1.8.7 任务③: 统计洞察
-                            DropdownMenuItem(
-                                text = { Text(zh("统计洞察")) },
-                                leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onOpenStats()
-                                }
-                            )
-                            Divider()
-                            DropdownMenuItem(
-                                text = { Text(zh("导入提醒")) },
-                                leadingIcon = { Icon(Icons.Default.FileDownload, contentDescription = null) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onImport()
-                                }
-                            )
-                            // 批次3 功能6: 单条分享卡片粘贴导入（聊天里收到的 JSON 直接粘进来）
-                            DropdownMenuItem(
-                                text = { Text(zh("导入分享卡片")) },
-                                leadingIcon = { Icon(Icons.Default.FileDownload, contentDescription = null) },
-                                onClick = {
-                                    menuExpanded = false
-                                    showCardImportDialog = true
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(zh("导出提醒")) },
-                                leadingIcon = { Icon(Icons.Default.FileUpload, contentDescription = null) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onExport()
-                                }
-                            )
-                            // v1.8.7 任务④: 导出 .ics 日历
-                            DropdownMenuItem(
-                                text = { Text(zh("导出日历(.ics)")) },
-                                leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onExportICS()
-                                }
-                            )
-                            Divider()
-                            // 近场传输: 同一局域网互传提醒
-                            DropdownMenuItem(
-                                text = { Text(zh("附近传输")) },
-                                leadingIcon = { Icon(Icons.Default.Wifi, contentDescription = null) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onNearbyShare()
-                                }
-                            )
-                            Divider()
-                            // v1.9.0: 主动检查更新
-                            DropdownMenuItem(
-                                text = { Text(zh("检查更新")) },
-                                leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onCheckUpdate()
-                                }
-                            )
-                            Divider()
-                            // v1.9.2: 设置（版本号/更新日志/AI/同步）
-                            DropdownMenuItem(
-                                text = { Text(zh("设置")) },
-                                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onOpenSettings()
-                                }
-                            )
-                        }
-                    }
-                    }
-                }
-            )
-        },
-        floatingActionButton = {
-            // v2.1.0: 动态颜色下用 primaryContainer 保持主题一致（固定 Primary 会与壁纸色割裂）
-            FloatingActionButton(
-                onClick = onCreateReminder,
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-            ) {
-                Icon(Icons.Default.Add, contentDescription = zh("新建提醒"))
+                )
             }
-        }
+        },
+        floatingActionButton = {}
     ) { padding ->
         val now = System.currentTimeMillis()
         val due = allReminders.filter { r ->
@@ -414,28 +388,11 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            if (searchOpen) {
-                item {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text(zh("搜索提醒")) },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Close, contentDescription = zh("清除"))
-                                }
-                            }
-                        },
-                        singleLine = true,
-                        shape = RoundedCornerShape(24.dp)
-                    )
-                }
+            item {
+                SoftInsetSearch(value = searchQuery, onValueChange = { searchQuery = it })
             }
 
             item {
@@ -452,6 +409,7 @@ fun HomeScreen(
             }
 
             if (due.isNotEmpty()) {
+                item { SoftSectionHeader(zh("提醒中"), Tokens.StatusReminding, count = due.size) }
                 items(due, key = { "due-${it.id}" }) { reminder ->
                     SwipeableReminderCard(
                         reminder = reminder,
@@ -514,7 +472,7 @@ fun HomeScreen(
             } else {
                 val waitingRows = pairWaitingRows(waiting, selectionMode)
                 if (waitingRows.isNotEmpty()) {
-                    item { SectionHeader(zh("等待中"), StatusWaiting, count = waitingRows.size) }
+                    item { SoftSectionHeader(zh("等待中"), StatusWaiting, count = waitingRows.size) }
                     items(waitingRows, key = { it.key }) { row ->
                         when (row) {
                             is WaitingRow.BirthdayPair -> MergedBirthdayCard(
@@ -543,7 +501,7 @@ fun HomeScreen(
                 }
 
                 if (completed.isNotEmpty()) {
-                    item { SectionHeader(zh("已完成"), StatusCompleted, count = completed.size) }
+                    item { SoftSectionHeader(zh("已完成"), StatusCompleted, count = completed.size) }
                     items(completed, key = { it.id }) { reminder ->
                         SwipeableReminderCard(
                             reminder = reminder,
@@ -834,10 +792,10 @@ fun SmartListBar(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         visible.forEach { item ->
-            FilterChip(
+            SoftChip(
+                title = item.label,
                 selected = selected == item,
-                onClick = { onSelect(item) },
-                label = { Text(item.label) }
+                onClick = { onSelect(item) }
             )
         }
     }
@@ -945,43 +903,34 @@ fun SwipeableReminderCard(
 fun OverviewCard(
     unhandledCount: Int
 ) {
+    val progress = if (unhandledCount <= 0) 1f else 0.28f
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clayCard(radiusDp = Tokens.RadiusCard)
-            .padding(horizontal = 16.dp, vertical = 18.dp),
+            .softCard(SoftKind.Elevated)
+            .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 "${overviewDateTitle()} ${overviewWeekday()}",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                fontSize = Tokens.TitleSize,
+                lineHeight = Tokens.TitleLine,
+                fontWeight = FontWeight.SemiBold,
+                color = softText()
             )
             Spacer(modifier = Modifier.height(6.dp))
             com.reminderapp.service.LunarCalendar.solarToLunar(System.currentTimeMillis())
                 ?.let { lunar ->
                     Text(
                         zhf("农历%s", overviewLunar(lunar)),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontSize = 11.sp,
+                        lineHeight = 14.sp,
+                        color = softMuted()
                     )
                 }
         }
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                unhandledCount.toString(),
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Text(
-                zh("待处理"),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        PendingCountRing(count = unhandledCount, progress = progress)
     }
 }
 
@@ -1146,15 +1095,25 @@ private fun lunarMonthDayLabel(month: Int, day: Int): String {
 }
 
 @Composable
-private fun MetaTag(text: String, color: Color) {
+private fun MetaTag(text: String, color: Color, wash: Boolean = false) {
+    val dark = isSoftDark()
+    val bg = if (wash) {
+        if (dark) Tokens.BrandPrimary.copy(alpha = 0.22f) else Tokens.BrandPrimaryContainer.copy(alpha = 0.62f)
+    } else {
+        color.copy(alpha = if (dark) 0.22f else 0.14f)
+    }
+    val fg = if (wash) {
+        if (dark) Tokens.BrandGradientStart else Tokens.BrandPrimaryDark
+    } else color
     Text(
         text = text,
-        style = MaterialTheme.typography.labelSmall,
-        color = color,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Medium,
+        color = fg,
         modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(color.copy(alpha = 0.12f))
-            .padding(horizontal = 8.dp, vertical = 2.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(bg)
+            .padding(horizontal = 8.dp, vertical = 3.dp)
     )
 }
 
@@ -1182,7 +1141,7 @@ private fun ReminderTagRow(reminder: ReminderEntity) {
                 MetaTag(reminder.holidayName ?: zh("节假日"), Color(0xFFF39C12))
             }
             reminder.kind == "rule" -> {
-                MetaTag("${ruleLabel(reminder)} · $time", MaterialTheme.colorScheme.primary)
+                MetaTag("${ruleLabel(reminder)} · $time", MaterialTheme.colorScheme.primary, wash = true)
             }
             else -> {
                 val cycle = when (reminder.cycle) {
@@ -1196,7 +1155,7 @@ private fun ReminderTagRow(reminder: ReminderEntity) {
                     "custom" -> zhf("每%s天", reminder.customDays)
                     else -> reminder.cycle
                 }
-                MetaTag("$cycle · $time", MaterialTheme.colorScheme.primary)
+                MetaTag("$cycle · $time", MaterialTheme.colorScheme.primary, wash = true)
             }
         }
     }
@@ -1243,6 +1202,14 @@ fun reminderKindColor(reminder: ReminderEntity): Color = when {
     else -> Color(0xFF3498DB)
 }
 
+fun reminderWellTint(reminder: ReminderEntity): Color = when {
+    reminder.kind == "date" && reminder.dateType == "holiday" -> Color(0xFFFDE3CC)
+    reminder.kind == "date" && reminder.dateType == "lunar_birthday" -> Color(0xFFE1DDFC)
+    reminder.kind == "date" && reminder.dateType == "solar_birthday" -> Color(0xFFFCD3E1)
+    reminder.kind == "rule" -> Color(0xFFB8E0D6)
+    else -> Tokens.BrandPrimaryContainer
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ReminderCard(
@@ -1270,24 +1237,16 @@ fun ReminderCard(
     }
     val isDone = reminder.status == "confirmed"
 
-    // 液态玻璃卡片：半透明白 + 大圆角 + 高光描边 + 柔和阴影（对齐设计图）
-    Card(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
+            .softCard(SoftKind.Card)
             .combinedClickable(
                 onClick = { if (selectionMode) onToggleSelect?.invoke() else onClick() },
                 onLongClick = { if (selectionMode) onToggleSelect?.invoke() else onDelete() },
                 onClickLabel = zh("打开详情"),
                 onLongClickLabel = zh("长按删除")
-            ),
-        shape = RoundedCornerShape(Tokens.RadiusCell),
-        colors = CardDefaults.cardColors(
-            // v2.0.22: 深色模式下固定白色卡片突兀、层级错乱，改用主题 surface
-            //（浅色下仍是白色玻璃观感，深色下自动适配）
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            )
     ) {
         Row(
             modifier = Modifier
@@ -1305,16 +1264,15 @@ fun ReminderCard(
                 )
                 Spacer(modifier = Modifier.width(10.dp))
             }
-            // v2.2.1: 彩色渐变底图标容器（同色系由深到浅），emoji 更有层次
             Box(
                 modifier = Modifier
-                    .size(46.dp)
-                    .clip(RoundedCornerShape(14.dp))
+                    .size(Tokens.RowBadge)
+                    .clip(RoundedCornerShape(Tokens.RadiusShallow))
                     .background(
                         Brush.linearGradient(
                             colors = listOf(
-                                reminderKindColor(reminder).copy(alpha = 0.32f),
-                                reminderKindColor(reminder).copy(alpha = 0.12f)
+                                reminderWellTint(reminder).copy(alpha = if (isSoftDark()) 0.38f else 0.72f),
+                                reminderWellTint(reminder).copy(alpha = if (isSoftDark()) 0.16f else 0.38f)
                             )
                         )
                     ),
@@ -1342,39 +1300,37 @@ fun ReminderCard(
                 if (reminder.retryCount > 0 && !isDone) {
                     Text(
                         text = "还没确认 · ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(java.util.Date(reminder.nextTriggerAt))} 再响",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFF39C12)
+                        fontSize = 12.5.sp,
+                        lineHeight = 16.sp,
+                        color = softWarn()
                     )
                 }
-                // 状态胶囊：等待中不画；到期/逾期/已完成保留
-                if (statusText.isNotEmpty()) {
+                if (onConfirm == null && statusText.isNotEmpty() && reminder.status == "confirmed") {
                     Spacer(modifier = Modifier.height(5.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = statusText,
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = statusColor,
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(statusColor.copy(alpha = 0.12f))
-                                .padding(horizontal = 10.dp, vertical = 3.dp)
-                        )
-                        if (reminder.status == "overdue" && onMakeUp != null) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = zh("补打今天"),
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White,
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .background(StatusOverdue)
-                                    .clickable(
-                                        onClickLabel = zh("补打今天：按今天完成并推进到下一个周期")
-                                    ) { onMakeUp() }
-                                    .padding(horizontal = 10.dp, vertical = 3.dp)
-                            )
-                        }
-                    }
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = statusColor,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(statusColor.copy(alpha = 0.12f))
+                            .padding(horizontal = 10.dp, vertical = 3.dp)
+                    )
+                }
+                if (reminder.status == "overdue" && onMakeUp != null && onConfirm == null) {
+                    Spacer(modifier = Modifier.height(5.dp))
+                    Text(
+                        text = zh("补打今天"),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(StatusOverdue)
+                            .clickable(
+                                onClickLabel = zh("补打今天：按今天完成并推进到下一个周期")
+                            ) { onMakeUp() }
+                            .padding(horizontal = 10.dp, vertical = 3.dp)
+                    )
                 }
                 if (reminder.note.isNotEmpty()) {
                     Text(
@@ -1388,12 +1344,25 @@ fun ReminderCard(
                 }
             }
             if (onConfirm != null && !isDone && !selectionMode) {
-                Button(
-                    onClick = onConfirm,
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
-                    modifier = Modifier.height(32.dp)
-                ) {
-                    Text(zh("确认"), style = MaterialTheme.typography.labelLarge)
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = relativeDaysLabel(reminder.nextTriggerAt),
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = statusColor
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        zh("确认"),
+                        fontSize = 14.5.sp,
+                        lineHeight = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Tokens.OnStrong,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(Tokens.BrandPrimary)
+                            .clickable(onClick = onConfirm)
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                    )
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1474,16 +1443,11 @@ private fun pairWaitingRows(waiting: List<ReminderEntity>, selectionMode: Boolea
 @Composable
 private fun MergedBirthdayCard(solar: ReminderEntity, lunar: ReminderEntity, onClick: () -> Unit) {
     val nearest = if (solar.nextTriggerAt <= lunar.nextTriggerAt) solar else lunar
-    Card(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onClickLabel = zh("打开详情")),
-        shape = RoundedCornerShape(Tokens.RadiusCell),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            .softCard(SoftKind.Card)
+            .combinedClickable(onClick = onClick, onClickLabel = zh("打开详情"))
     ) {
         Row(
             modifier = Modifier
@@ -1493,19 +1457,19 @@ private fun MergedBirthdayCard(solar: ReminderEntity, lunar: ReminderEntity, onC
         ) {
             Box(
                 modifier = Modifier
-                    .size(46.dp)
-                    .clip(RoundedCornerShape(14.dp))
+                    .size(Tokens.RowBadge)
+                    .clip(RoundedCornerShape(Tokens.RadiusShallow))
                     .background(
                         Brush.linearGradient(
                             listOf(
-                                Color(0xFFE91E63).copy(alpha = 0.32f),
-                                Color(0xFF8E24AA).copy(alpha = 0.12f)
+                                Color(0xFFFCD3E1).copy(alpha = if (isSoftDark()) 0.38f else 0.72f),
+                                Color(0xFFE1DDFC).copy(alpha = if (isSoftDark()) 0.16f else 0.38f)
                             )
                         )
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(reminderEmoji(nearest), fontSize = 16.sp)
+                Text(reminderEmoji(nearest), fontSize = 22.sp)
             }
             Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {

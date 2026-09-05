@@ -1,16 +1,9 @@
 package com.reminderapp.ui.navigation
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -19,9 +12,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.unit.dp
+import com.reminderapp.ui.theme.SoftFab
+import com.reminderapp.ui.theme.SoftTabDock
+import com.reminderapp.ui.theme.softCanvas
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -76,72 +75,19 @@ fun NavGraph(
     val tabRoutes = listOf("home", "calendar", "stats", "settings")
     val showBottomBar = currentRoute in tabRoutes
 
-    Scaffold(
-        bottomBar = {
-            if (showBottomBar) {
-                NavigationBar(
-                    containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
-                ) {
-                    // 首页
-                    NavigationBarItem(
-                        selected = currentRoute == "home",
-                        onClick = {
-                            navController.navigate("home") {
-                                popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = { Icon(Icons.Filled.Home, contentDescription = null) },
-                        label = { Text(zh("首页")) }
-                    )
-                    // 日历
-                    NavigationBarItem(
-                        selected = currentRoute == "calendar",
-                        onClick = {
-                            navController.navigate("calendar") {
-                                popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = { Icon(Icons.Filled.CalendarMonth, contentDescription = null) },
-                        label = { Text(zh("日历")) }
-                    )
-                    // 统计
-                    NavigationBarItem(
-                        selected = currentRoute == "stats",
-                        onClick = {
-                            navController.navigate("stats") {
-                                popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = { Icon(Icons.Filled.BarChart, contentDescription = null) },
-                        label = { Text(zh("统计")) }
-                    )
-                    // 设置（AI 不是 Tab）
-                    NavigationBarItem(
-                        selected = currentRoute == "settings",
-                        onClick = {
-                            navController.navigate("settings") {
-                                popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
-                        label = { Text(zh("设置")) }
-                    )
-                }
-            }
+    fun goTab(route: String) {
+        navController.navigate(route) {
+            popUpTo(navController.graph.startDestinationId) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
         }
-    ) { innerPadding ->
+    }
+
+    Box(Modifier.fillMaxSize()) {
     NavHost(
         navController = navController,
         startDestination = "home",
-        modifier = Modifier.padding(innerPadding)
+        modifier = Modifier.fillMaxSize()
     ) {
 
         composable("home") {
@@ -366,9 +312,27 @@ fun NavGraph(
                     calendarPlayful = streak to com.reminderapp.ui.theme.weekDoneDays(records)
                 }
             }
+            val calendarScope = rememberCoroutineScope()
             CalendarScreen(
                 reminders = calendarReminders,
                 onReminderClick = { id -> navController.navigate("detail/$id") },
+                onConfirm = { reminder ->
+                    calendarScope.launch {
+                        val updated = ReminderEngine.confirm(reminder)
+                        database.reminderDao().update(updated)
+                        database.reminderRecordDao().insert(
+                            com.reminderapp.data.entity.ReminderRecordEntity(
+                                reminderId = reminder.id,
+                                action = com.reminderapp.data.entity.ReminderRecordEntity.ACTION_CONFIRMED
+                            )
+                        )
+                        notificationMgr.cancelReminderNotifications(reminder.id)
+                        if (!(updated.kind == "cycle" && updated.cycle == "once")) {
+                            scheduler.schedule(updated)
+                        }
+                        com.reminderapp.service.SyncStore.touchLocalChange()
+                    }
+                },
                 streak = calendarPlayful?.first,
                 weekDone = calendarPlayful?.second
             )
@@ -493,5 +457,19 @@ fun NavGraph(
             )
         }
     }
+
+        if (showBottomBar) {
+            androidx.compose.foundation.layout.Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding(),
+                horizontalAlignment = Alignment.End
+            ) {
+                if (currentRoute == "home") {
+                    SoftFab(onClick = { navController.navigate("create") })
+                }
+                SoftTabDock(currentRoute = currentRoute, onSelect = { goTab(it) })
+            }
+        }
     }
 }

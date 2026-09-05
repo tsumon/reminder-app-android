@@ -1,19 +1,31 @@
 package com.reminderapp.ui.screen
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.reminderapp.data.entity.ReminderEntity
 import com.reminderapp.service.ReminderEngine
+import com.reminderapp.ui.theme.SoftCircleButton
+import com.reminderapp.ui.theme.SoftScreenTitle
+import com.reminderapp.ui.theme.SoftSectionHeader
+import com.reminderapp.ui.theme.StatusOverdue
 import com.reminderapp.ui.theme.StatusReminding
 import com.reminderapp.ui.theme.StatusWaiting
+import com.reminderapp.ui.theme.Tokens
+import com.reminderapp.ui.theme.softCanvas
+import com.reminderapp.ui.theme.softMuted
+import com.reminderapp.ui.theme.softText
+import com.reminderapp.ui.theme.softSurface
 import java.util.*
 import com.reminderapp.i18n.zh
 import com.reminderapp.i18n.zhf
@@ -28,28 +40,50 @@ import com.reminderapp.i18n.zhf
 fun CalendarScreen(
     reminders: List<ReminderEntity>,
     onReminderClick: (Long) -> Unit,
+    onConfirm: (ReminderEntity) -> Unit = {},
     streak: Int? = null,
     weekDone: Int? = null
 ) {
     var selectedDate by remember { mutableStateOf<Long?>(null) }
+    val todayCal = remember { Calendar.getInstance() }
+    var displayYear by remember { mutableIntStateOf(todayCal.get(Calendar.YEAR)) }
+    var displayMonth by remember { mutableIntStateOf(todayCal.get(Calendar.MONTH)) }
 
+    fun shiftMonth(delta: Int) {
+        var m = displayMonth + delta
+        var y = displayYear
+        if (m < 0) { m = 11; y-- }
+        else if (m > 11) { m = 0; y++ }
+        displayYear = y
+        displayMonth = m
+    }
+
+    Box(Modifier.fillMaxSize().background(softCanvas())) {
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            SoftScreenTitle(
+                title = zh("日历"),
+                leading = {
+                    SoftCircleButton(onClick = { shiftMonth(-1) }, size = 40.dp, contentDescription = zh("上一月")) {
                         Icon(
-                            Icons.Default.CalendarMonth,
+                            Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = Tokens.BrandPrimary,
+                            modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(zh("日历"), style = MaterialTheme.typography.headlineMedium)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
+                trailing = {
+                    SoftCircleButton(onClick = { shiftMonth(1) }, size = 40.dp, contentDescription = zh("下一月")) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = Tokens.BrandPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
             )
         }
     ) { padding ->
@@ -57,16 +91,23 @@ fun CalendarScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // 整页月历
             item {
                 CalendarCard(
                     reminders = reminders,
+                    displayYear = displayYear,
+                    displayMonth = displayMonth,
+                    onYearMonthChange = { y, m ->
+                        displayYear = y
+                        displayMonth = m
+                    },
                     onDateClick = { selectedDate = it },
                     streak = streak,
-                    weekDone = weekDone
+                    weekDone = weekDone,
+                    showInCardNav = false
                 )
             }
 
@@ -74,12 +115,22 @@ fun CalendarScreen(
             val ts = selectedDate
             item {
                 if (ts == null) {
-                    SectionHeader(zh("点击日期查看当天任务"), StatusWaiting)
+                    SoftSectionHeader(zh("点击日期查看当天任务"), StatusWaiting)
                 } else {
                     val cal = Calendar.getInstance().apply { timeInMillis = ts }
-                    SectionHeader(
-                        zhf("%1\$s年%2\$s月%3\$s日 · 当天任务", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH)),
-                        StatusReminding
+                    val names = arrayOf("星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六")
+                    val weekday = names[cal.get(Calendar.DAY_OF_WEEK) - 1]
+                    SoftSectionHeader(
+                        zhf("%1\$s月%2\$s日 · %3\$s的任务", cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH), weekday),
+                        StatusReminding,
+                        count = reminders.count {
+                            it.isActive && ReminderEngine.occursOn(
+                                it,
+                                cal.get(Calendar.YEAR),
+                                cal.get(Calendar.MONTH) + 1,
+                                cal.get(Calendar.DAY_OF_MONTH)
+                            )
+                        }
                     )
                 }
             }
@@ -97,16 +148,27 @@ fun CalendarScreen(
                         Text(
                             zh("这一天没有提醒"),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 20.dp)
+                            color = softMuted(),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 30.dp)
                         )
                     }
                 } else {
                     items(dateReminders, key = { it.id }) { r ->
-                        ReminderCard(r, StatusReminding, onDelete = {}, onClick = { onReminderClick(r.id) })
+                        val now = System.currentTimeMillis()
+                        val due = r.isActive && r.status != "confirmed" &&
+                            (r.status == "notifying" || r.status == "overdue" || r.status == "snoozed" ||
+                                (r.status == "pending" && r.nextTriggerAt <= now))
+                        ReminderCard(
+                            r,
+                            if (r.status == "overdue") StatusOverdue else StatusReminding,
+                            onDelete = {},
+                            onClick = { onReminderClick(r.id) },
+                            onConfirm = if (due) ({ onConfirm(r) }) else null
+                        )
                     }
                 }
             }
         }
+    }
     }
 }

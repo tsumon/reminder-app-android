@@ -21,18 +21,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reminderapp.data.entity.ReminderEntity
 import com.reminderapp.service.HolidayRemoteService
 import com.reminderapp.service.LunarCalendar
 import com.reminderapp.service.ReminderEngine
-import com.reminderapp.ui.theme.MascotBadge
-import com.reminderapp.ui.theme.MascotMood
-import com.reminderapp.ui.theme.Playful
 import com.reminderapp.ui.theme.Primary
+import com.reminderapp.ui.theme.SoftKind
 import com.reminderapp.ui.theme.Tokens
-import com.reminderapp.ui.theme.clayCard
+import com.reminderapp.ui.theme.softCard
+import com.reminderapp.ui.theme.softMuted
+import com.reminderapp.ui.theme.softText
 import androidx.compose.ui.platform.LocalContext
 import java.text.SimpleDateFormat
 import java.util.*
@@ -47,26 +48,29 @@ import com.reminderapp.i18n.zhf
 @Composable
 fun CalendarCard(
     reminders: List<ReminderEntity>,
+    displayYear: Int,
+    displayMonth: Int,
+    onYearMonthChange: (year: Int, month: Int) -> Unit,
     modifier: Modifier = Modifier,
     onDateClick: (Long) -> Unit = {},
     /** v2.5.0: 连续打卡天数（预留口径，与 iOS 对齐） */
     streak: Int? = null,
     /** v2.5.0: 本周打卡天数（彩虹跑道/吉祥物心情），null 隐藏 */
-    weekDone: Int? = null
+    weekDone: Int? = null,
+    showInCardNav: Boolean = false
 ) {
-    // 吉祥物心情随本周完成度变化（weekDone=null 时 idle）
-    val mascotMood = when {
-        (weekDone ?: 0) >= 5 -> MascotMood.CHEER
-        (weekDone ?: 0) > 0 -> MascotMood.HAPPY
-        else -> MascotMood.IDLE
-    }
     val todayCal = remember { Calendar.getInstance() }
     val todayDate = remember {
         SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(todayCal.time)
     }
     val context = LocalContext.current
-    var displayYear by remember { mutableIntStateOf(todayCal.get(Calendar.YEAR)) }
-    var displayMonth by remember { mutableIntStateOf(todayCal.get(Calendar.MONTH)) } // 0-based
+    fun shiftMonth(delta: Int) {
+        var m = displayMonth + delta
+        var y = displayYear
+        if (m < 0) { m = 11; y-- }
+        else if (m > 11) { m = 0; y++ }
+        onYearMonthChange(y, m)
+    }
     var selectedDateKey by remember { mutableStateOf<String?>(todayDate) }
     LaunchedEffect(Unit) {
         val t0 = Calendar.getInstance().apply {
@@ -110,11 +114,10 @@ fun CalendarCard(
         todayCal.get(Calendar.DAY_OF_MONTH)
     )?.let { if (it.isHoliday) zhf(" · %s休", it.name) else zh(" · 调休上班") } ?: ""
 
-    // v2.5.0: 粘土卡底（替代 Material Card）
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clayCard(radiusDp = 22.dp)
+            .softCard(SoftKind.Elevated)
     ) {
         Column(
             modifier = Modifier
@@ -125,13 +128,8 @@ fun CalendarCard(
                     detectHorizontalDragGestures(
                         onDragStart = { totalDrag = 0f },
                         onDragEnd = {
-                            if (totalDrag > 80) {
-                                displayMonth--
-                                if (displayMonth < 0) { displayMonth = 11; displayYear-- }
-                            } else if (totalDrag < -80) {
-                                displayMonth++
-                                if (displayMonth > 11) { displayMonth = 0; displayYear++ }
-                            }
+                            if (totalDrag > 80) shiftMonth(-1)
+                            else if (totalDrag < -80) shiftMonth(1)
                         },
                         onHorizontalDrag = { change, amount ->
                             change.consume()
@@ -145,13 +143,10 @@ fun CalendarCard(
             val isCurrentMonth = displayYear == todayCal.get(Calendar.YEAR) &&
                 displayMonth == todayCal.get(Calendar.MONTH)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = {
-                        displayMonth--
-                        if (displayMonth < 0) { displayMonth = 11; displayYear-- }
+                if (showInCardNav) {
+                    IconButton(onClick = { shiftMonth(-1) }) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = zh("上一月"))
                     }
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = zh("上一月"))
                 }
                 // 月份标题：点击弹「月份选择器」（v1.8.7 UI 优化）
                 Column(
@@ -191,19 +186,15 @@ fun CalendarCard(
                 // 回到今天（非当月时显示，v1.8.7 UI 优化）
                 if (!isCurrentMonth) {
                     TextButton(onClick = {
-                        displayYear = todayCal.get(Calendar.YEAR)
-                        displayMonth = todayCal.get(Calendar.MONTH)
+                        onYearMonthChange(todayCal.get(Calendar.YEAR), todayCal.get(Calendar.MONTH))
                     }) {
                         Text(zh("今天"), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                     }
                 }
-                IconButton(
-                    onClick = {
-                        displayMonth++
-                        if (displayMonth > 11) { displayMonth = 0; displayYear++ }
+                if (showInCardNav) {
+                    IconButton(onClick = { shiftMonth(1) }) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = zh("下一月"))
                     }
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = zh("下一月"))
                 }
             }
 
@@ -224,56 +215,38 @@ fun CalendarCard(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // === 日期网格 ===
-            val cal = remember(displayYear, displayMonth) {
-                Calendar.getInstance().apply {
-                    set(displayYear, displayMonth, 1, 0, 0, 0)
-                }
-            }
-            val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-            // Calendar.DAY_OF_WEEK: 1=周日...7=周六 → 周一=1...周日=7
-            val firstDayWeek = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7 + 1
-            val leadingBlanks = firstDayWeek - 1
-
-            val totalCells = ((leadingBlanks + daysInMonth + 6) / 7) * 7
-            val cells = List(totalCells) { idx ->
-                val dayNum = idx - leadingBlanks + 1
-                if (dayNum in 1..daysInMonth) dayNum else null
+            // === 日期网格（含邻月日期，对齐 iOS / comps）===
+            val cells = remember(displayYear, displayMonth) {
+                paddedMonthCells(displayYear, displayMonth)
             }
 
             cells.chunked(7).forEach { weekRow ->
                 Row(modifier = Modifier.fillMaxWidth()) {
-                    weekRow.forEach { dayNum ->
+                    weekRow.forEach { cell ->
                         Box(modifier = Modifier.weight(1f)) {
-                            if (dayNum != null) {
-                                val key = dateKey(displayYear, displayMonth, dayNum)
-                                val isTodayCell = displayYear == todayCal.get(Calendar.YEAR) &&
-                                    displayMonth == todayCal.get(Calendar.MONTH) &&
-                                    dayNum == todayCal.get(Calendar.DAY_OF_MONTH)
-                                DayCell(
-                                    day = dayNum,
-                                    isToday = isTodayCell,
-                                    isSelected = selectedDateKey == key,
-                                    lunarText = lunarTextFor(displayYear, displayMonth, dayNum),
-                                    taskCount = taskDates[key] ?: 0,
-                                    isFutureMonth = false,
-                                    holidayStatus = HolidayRemoteService.status(
-                                        context, displayYear, displayMonth + 1, dayNum
-                                    ),
-                                    // v2.5.0: 今日格右上角小狐狸（心情随本周完成度）
-                                    mascotMood = if (isTodayCell) mascotMood else null,
-                                    onClick = {
-                                        selectedDateKey = key
-                                        val t = Calendar.getInstance().apply {
-                                            set(displayYear, displayMonth, dayNum, 0, 0, 0)
-                                            set(Calendar.MILLISECOND, 0)
-                                        }.timeInMillis
-                                        onDateClick(t)
-                                    }
-                                )
-                            } else {
-                                Spacer(modifier = Modifier.height(74.dp))
-                            }
+                            val key = dateKey(cell.year, cell.month, cell.day)
+                            val isTodayCell = cell.year == todayCal.get(Calendar.YEAR) &&
+                                cell.month == todayCal.get(Calendar.MONTH) &&
+                                cell.day == todayCal.get(Calendar.DAY_OF_MONTH)
+                            DayCell(
+                                day = cell.day,
+                                isToday = isTodayCell,
+                                isSelected = selectedDateKey == key,
+                                lunarText = lunarTextFor(cell.year, cell.month, cell.day),
+                                taskCount = if (cell.inMonth) taskDates[key] ?: 0 else 0,
+                                muted = !cell.inMonth,
+                                holidayStatus = HolidayRemoteService.status(
+                                    context, cell.year, cell.month + 1, cell.day
+                                ),
+                                onClick = {
+                                    selectedDateKey = key
+                                    val t = Calendar.getInstance().apply {
+                                        set(cell.year, cell.month, cell.day, 0, 0, 0)
+                                        set(Calendar.MILLISECOND, 0)
+                                    }.timeInMillis
+                                    onDateClick(t)
+                                }
+                            )
                         }
                     }
                 }
@@ -288,7 +261,7 @@ fun CalendarCard(
             onDismissRequest = { showMonthPicker = false },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { displayYear-- }) {
+                    IconButton(onClick = { onYearMonthChange(displayYear - 1, displayMonth) }) {
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = zh("上一年"))
                     }
                     Text(
@@ -298,7 +271,7 @@ fun CalendarCard(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    IconButton(onClick = { displayYear++ }) {
+                    IconButton(onClick = { onYearMonthChange(displayYear + 1, displayMonth) }) {
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = zh("下一年"))
                     }
                 }
@@ -314,7 +287,7 @@ fun CalendarCard(
                                 Box(modifier = Modifier.weight(1f)) {
                                     TextButton(
                                         onClick = {
-                                            displayMonth = idx
+                                            onYearMonthChange(displayYear, idx)
                                             showMonthPicker = false
                                         },
                                         modifier = Modifier.fillMaxWidth(),
@@ -341,12 +314,6 @@ fun CalendarCard(
     }
 }
 
-/**
- * 单个日期格子（v2.5.0 治愈游戏化）：
- * 顶部 14dp 吉祥物站立区 + 数字气泡（30dp 圆角 10dp，热力底色）+ 珊瑚任务圆点 + 农历 + 休/班。
- * 注意：格高 74dp 且吉祥物必须完全画在格内——外层 Row 会按格子实际高度排布，
- * 溢出格外的装饰会在滚动/复用中被裁剪或压盖（iOS LazyVGrid 同款教训）。
- */
 @Composable
 private fun DayCell(
     day: Int,
@@ -354,87 +321,76 @@ private fun DayCell(
     isSelected: Boolean,
     lunarText: String,
     taskCount: Int,
-    isFutureMonth: Boolean,
+    muted: Boolean,
     holidayStatus: HolidayRemoteService.DayStatus?,
-    mascotMood: MascotMood?,
     onClick: () -> Unit
 ) {
-    // 热力底色：任务数 0/1/2/3+ → 透明/primary14%/26%/40%；今日=品牌渐变白字
-    val bubbleBrush: Brush = when {
-        isToday -> Brush.linearGradient(listOf(Tokens.BrandGradientStart, Tokens.BrandPrimary))
-        taskCount <= 0 -> Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
-        taskCount == 1 -> Brush.linearGradient(listOf(Primary.copy(alpha = 0.14f), Primary.copy(alpha = 0.14f)))
-        taskCount == 2 -> Brush.linearGradient(listOf(Primary.copy(alpha = 0.26f), Primary.copy(alpha = 0.26f)))
-        else -> Brush.linearGradient(listOf(Primary.copy(alpha = 0.40f), Primary.copy(alpha = 0.40f)))
-    }
-    val bubbleShape = RoundedCornerShape(10.dp)
-    Box(
+    val holidayMark = holidayStatus?.let { if (it.isHoliday) zh("休") else zh("班") }
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(74.dp)
+            .height(56.dp)
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable(onClick = onClick),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // 顶部 14dp 空位：今日格小狐狸的站立区（完全在格内）
-            Spacer(modifier = Modifier.height(14.dp))
-            Box(
+        if (isToday) {
+            Column(
                 modifier = Modifier
-                    .size(30.dp)
-                    .clip(bubbleShape)
-                    .background(bubbleBrush)
-                    .then(
-                        if (isSelected && !isToday) Modifier.border(1.5.dp, Primary, bubbleShape)
-                        else Modifier
-                    ),
-                contentAlignment = Alignment.Center
+                    .width(32.dp)
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Tokens.BrandPrimary),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
+                Text("🦊", fontSize = 11.sp)
                 Text(
-                    text = day.toString(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
-                    color = when {
-                        isToday -> Color.White
-                        isSelected -> Primary
-                        isFutureMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                        else -> MaterialTheme.colorScheme.onSurface
-                    }
+                    "$day",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Tokens.OnStrong
+                )
+                Text(
+                    holidayMark ?: lunarText,
+                    fontSize = 9.sp,
+                    color = Tokens.OnStrong.copy(alpha = 0.9f),
+                    maxLines = 1
                 )
             }
-            // v2.4.5 fix（沿用）：任务圆点独立一行，数字正下方——贴色圈的小点不可见
+        } else {
+            Text(
+                text = day.toString(),
+                fontSize = 15.sp,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                color = when {
+                    muted -> softMuted().copy(alpha = 0.45f)
+                    isSelected -> Tokens.BrandPrimary
+                    else -> softText()
+                }
+            )
+            if (holidayMark != null) {
+                Text(
+                    holidayMark,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (holidayStatus?.isHoliday == true) Tokens.HolidayRest else Tokens.HolidayWork,
+                    maxLines = 1
+                )
+            } else {
+                Text(
+                    lunarText,
+                    fontSize = Tokens.FontTiny,
+                    color = softMuted().copy(alpha = if (muted) 0.45f else 1f),
+                    maxLines = 1
+                )
+            }
             Box(
-                modifier = Modifier
+                Modifier
                     .padding(top = 1.dp)
-                    .size(width = 6.dp, height = 6.dp)
+                    .size(5.dp)
                     .clip(CircleShape)
-                    .background(if (taskCount > 0) Playful.coral else Color.Transparent)
-            )
-            // 农历（初二~三十 简化显示）
-            Text(
-                text = lunarText,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = Tokens.FontTiny, lineHeight = Tokens.FontTiny * 1.2f),
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                maxLines = 1
-            )
-            // 休/班角标：放假红「休」、调休上班橙「班」；普通日占位保持对齐（v1.8.7 任务②）
-            Text(
-                text = holidayStatus?.let { if (it.isHoliday) zh("休") else zh("班") } ?: "",
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = Tokens.FontTiny, lineHeight = Tokens.FontTiny * 1.2f, fontWeight = FontWeight.Bold),
-                color = if (holidayStatus?.isHoliday == true) Tokens.HolidayRest else Tokens.HolidayWork,
-                maxLines = 1
-            )
-        }
-        // 今日格右上角小狐狸站在气泡上（完全在格内，不拦截点击）
-        if (mascotMood != null) {
-            MascotBadge(
-                mood = mascotMood,
-                sizeDp = 24.dp,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = 2.dp, y = 1.dp)
+                    .background(if (taskCount > 0) Tokens.BrandPrimary else Color.Transparent)
             )
         }
     }
@@ -465,4 +421,50 @@ private fun lunarTextFor(year: Int, month: Int, day: Int): String {
 /** 生成 yyyy-MM-dd 日期键 */
 private fun dateKey(year: Int, month: Int, day: Int): String {
     return String.format(Locale.getDefault(), "%04d-%02d-%02d", year, month + 1, day)
+}
+
+/** 月格单元：本月 + 前后邻月补齐整周（month 为 Calendar 0-based） */
+private data class MonthCell(
+    val year: Int,
+    val month: Int,
+    val day: Int,
+    val inMonth: Boolean
+)
+
+private fun paddedMonthCells(displayYear: Int, displayMonth: Int): List<MonthCell> {
+    val cal = Calendar.getInstance().apply {
+        set(displayYear, displayMonth, 1, 0, 0, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+    val firstDayWeek = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7 + 1
+    val leading = firstDayWeek - 1
+    val cells = mutableListOf<MonthCell>()
+    if (leading > 0) {
+        val prev = Calendar.getInstance().apply {
+            set(displayYear, displayMonth, 1, 0, 0, 0)
+            add(Calendar.MONTH, -1)
+        }
+        val prevDays = prev.getActualMaximum(Calendar.DAY_OF_MONTH)
+        val py = prev.get(Calendar.YEAR)
+        val pm = prev.get(Calendar.MONTH)
+        for (d in (prevDays - leading + 1)..prevDays) {
+            cells.add(MonthCell(py, pm, d, false))
+        }
+    }
+    for (d in 1..daysInMonth) {
+        cells.add(MonthCell(displayYear, displayMonth, d, true))
+    }
+    val next = Calendar.getInstance().apply {
+        set(displayYear, displayMonth, 1, 0, 0, 0)
+        add(Calendar.MONTH, 1)
+    }
+    val ny = next.get(Calendar.YEAR)
+    val nm = next.get(Calendar.MONTH)
+    var n = 1
+    while (cells.size % 7 != 0) {
+        cells.add(MonthCell(ny, nm, n, false))
+        n++
+    }
+    return cells
 }

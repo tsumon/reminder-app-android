@@ -1,45 +1,30 @@
 package com.reminderapp.ui.theme
 
 import android.app.Activity
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 
-/// 全局圆角（液态玻璃感：大圆角 + 圆润层次）
+val LocalIsSoftDark = staticCompositionLocalOf { false }
+
 private val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(8.dp),
     small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(18.dp),
-    large = RoundedCornerShape(24.dp),
-    extraLarge = RoundedCornerShape(28.dp)
-)
-
-private val LightColorScheme = lightColorScheme(
-    primary = Primary,
-    onPrimary = Color.White,
-    secondary = Secondary,
-    background = Background,
-    surface = Surface,
-    onSurface = OnSurface,
-    onSurfaceVariant = OnSurfaceVariant
-)
-
-private val DarkColorScheme = darkColorScheme(
-    primary = DarkPrimary,
-    onPrimary = Color.Black,
-    secondary = Secondary,
-    background = DarkBackground,
-    surface = DarkSurface,
-    onSurface = DarkOnSurface,
-    onSurfaceVariant = DarkOnSurfaceVariant
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(18.dp),
+    extraLarge = RoundedCornerShape(24.dp)
 )
 
 @Composable
@@ -47,31 +32,53 @@ fun ReminderAppTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    // v2.1.1: 手动主题优先（0=跟随系统 1=浅色 2=深色；ThemeStore 与 iOS 对齐）
     val context = androidx.compose.ui.platform.LocalContext.current
-    val manualMode = context.let { ThemeStore.mode(it) }
+    val manualMode = ThemeStore.mode(context)
     val effectiveDark = when (manualMode) {
         1 -> false
         2 -> true
         else -> darkTheme
     }
 
-    // v2.4.0: 应用所选主题色板（Tokens 品牌色动态切换，全局即时生效）
     val palette = Tokens.Palettes.getOrElse(ThemeStore.colorIndex(context)) { Tokens.Palettes.first() }
     Tokens.BrandPrimary = palette.primary
     Tokens.BrandPrimaryDark = palette.dark
     Tokens.BrandPrimaryContainer = palette.container
     Tokens.BrandGradientStart = palette.gradient
 
-    // v2.1.0: Material You 动态取色（Android 12+ 跟随壁纸主题；低版本回落品牌紫）
+    // 皮肤压过 Material You：不用 dynamicLight/DarkColorScheme
     val colorScheme = if (effectiveDark) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            dynamicDarkColorScheme(androidx.compose.ui.platform.LocalContext.current)
-        } else DarkColorScheme
+        darkColorScheme(
+            primary = palette.primary,
+            onPrimary = Color.White,
+            primaryContainer = palette.dark,
+            onPrimaryContainer = Color.White,
+            secondary = palette.primary,
+            background = Tokens.Dark.Canvas,
+            surface = Tokens.Dark.Surface,
+            surfaceVariant = Tokens.Dark.Elevated,
+            onBackground = Tokens.Dark.Text,
+            onSurface = Tokens.Dark.Text,
+            onSurfaceVariant = Tokens.Dark.Muted,
+            outline = Tokens.Dark.Track,
+            error = Tokens.Dark.Danger
+        )
     } else {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            dynamicLightColorScheme(androidx.compose.ui.platform.LocalContext.current)
-        } else LightColorScheme
+        lightColorScheme(
+            primary = palette.primary,
+            onPrimary = Color.White,
+            primaryContainer = palette.container,
+            onPrimaryContainer = palette.dark,
+            secondary = palette.primary,
+            background = Tokens.Light.Canvas,
+            surface = Tokens.Light.Surface,
+            surfaceVariant = Tokens.Light.Elevated,
+            onBackground = Tokens.Light.Text,
+            onSurface = Tokens.Light.Text,
+            onSurfaceVariant = Tokens.Light.Muted,
+            outline = Tokens.Light.Track,
+            error = Tokens.Light.Danger
+        )
     }
 
     val view = LocalView.current
@@ -83,10 +90,12 @@ fun ReminderAppTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        shapes = AppShapes,
-        content = content
-    )
+    CompositionLocalProvider(LocalIsSoftDark provides effectiveDark) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            shapes = AppShapes,
+            content = content
+        )
+    }
 }
