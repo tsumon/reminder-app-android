@@ -36,6 +36,9 @@ import com.reminderapp.i18n.zh
 import com.reminderapp.i18n.zhf
 import com.reminderapp.service.UpdateService
 import com.reminderapp.ui.theme.Tokens
+import com.reminderapp.ui.theme.softCard
+import com.reminderapp.ui.theme.softCanvas
+import com.reminderapp.ui.theme.softText
 import kotlinx.coroutines.launch
 
 /**
@@ -59,10 +62,22 @@ fun SettingsScreen(
     var icsBusy by remember { mutableStateOf(false) }
     var icsResult by remember { mutableStateOf<com.reminderapp.service.WebDavSync.IcsUploadResult?>(null) }
 
+    Box(Modifier.fillMaxSize().background(softCanvas())) {
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                title = { Text(zh("设置")) },
+            if (!showBack) {
+                com.reminderapp.ui.theme.SoftScreenTitle(title = zh("设置"))
+            } else TopAppBar(
+                title = {
+                    Text(
+                        zh("设置"),
+                        fontSize = Tokens.TitleSize,
+                        lineHeight = Tokens.TitleLine,
+                        fontWeight = FontWeight.SemiBold,
+                        color = softText()
+                    )
+                },
                 navigationIcon = {
                     if (showBack) {
                         IconButton(onClick = onBack) {
@@ -71,7 +86,7 @@ fun SettingsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
+                    containerColor = Color.Transparent
                 )
             )
         }
@@ -80,7 +95,7 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // === 语言（v2.0.4：手动切换，跟随系统为默认） ===
@@ -521,6 +536,7 @@ fun SettingsScreen(
             }
         )
     }
+    }
 }
 
 /** 更新日志数据（与 iOS 一致） */
@@ -551,16 +567,13 @@ private val changelog: List<Pair<String, List<String>>> = listOf(
 
 @Composable
 internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            content = content
-        )
-    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .softCard(com.reminderapp.ui.theme.SoftKind.Card)
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        content = content
+    )
 }
 
 @Composable

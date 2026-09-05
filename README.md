@@ -17,11 +17,11 @@ English subtitle: Recurring Reminder. Android 原生 App。支持循环提醒、
 
 ## 当前界面
 
-深色 UI，对齐 GitHub 2.5.1 方向；不是 Home A，也没有 QuietHome。底部四个 Tab。AI 在设置里配置，不是独立 Tab。
+锤子纸面 soft-shadow：浅纸底 / 深抬升面。卡片无描边，动作是软圆钮。底部四个 Tab。AI 在设置里配置，不是独立 Tab。Android FAB 44 正圆在 dock 上方。
 
-- **首页**（标题「提醒事项」）：筛选芯片只有 全部 / 今天 / 本周；列表分组 提醒中 / 等待中。到期行内「确认」，不再弹大确认框。
-- **日历**：公历 + 农历 + 今日狐狸 + 班/休；点选日期列出当天任务。没有本周进度条（进度在统计「本周花园」）。
-- **统计**：本月完成 / 连续天数 / 完成率 三数字 + 确认/漏掉；保留打卡城堡、本周花园、最常忘记时段。没有大圆环、没有热力图。
+- **首页**（标题「提醒事项」）：inset 搜索；筛选芯片 全部 / 今天 / 本周；今日卡 + soft 环「待处理」；列表分组 提醒中 / 等待中。到期行内「确认」，不再弹大确认框。重试行副文案「还没确认 · HH:MM 再响」。行首 44 emoji 井；浅蓝洗周期徽章。
+- **日历**：整月 elevated 卡；今天竖胶囊 + 🦊；公历 + 农历 + 班/休；点选日期列出当天任务。没有本周进度条。
+- **统计**：本月完成 / 连续天数 / 完成率 三砖 + 厚描边 soft donut（完成率 / 确认 / 漏掉）+ 本月打卡热力 + 打卡城堡 + 最常忘记时段。本周花园缩成热力卡说明行。
 - **设置**：主题皮肤等。
 
 ```mermaid
@@ -136,7 +136,7 @@ app/src/main/java/com/reminderapp/
 │   └── QrCodeUtils.kt           # 二维码生成与扫码
 ├── ui/
 │   ├── screen/                  # HomeScreen / CalendarScreen / StatsScreen / SettingsScreen / AIChatScreen / ...
-│   ├── theme/                   # 设计令牌（与 iOS 主题色一致）
+│   ├── theme/                   # 设计令牌 + SoftUI（纸面软影 / dock / 44 FAB）
 │   └── viewmodel/               # HomeViewModel / ReminderDetailViewModel / ...
 ├── receiver/
 │   ├── NotificationActionReceiver.kt  # 通知确认/稍后按钮处理
@@ -218,6 +218,7 @@ android {
 
 | 版本 | 日期 | 更新内容 |
 |------|------|----------|
+| v2.7.0 | 2026-09 | soft-ui 纸面软影：浅纸底/深抬升面、卡无描边、软圆钮；首页今日卡+待处理环；统计厚描边 donut + 本月打卡热力；README 按现状。签名/keystore/applicationId 未改 |
 | v2.6.0 | 2026-09 | 三屏优化：行内确认、统计去返回箭头、日历列出当天任务；README 按现状。签名/keystore/applicationId 未改 |
 | quiet-confirmation | 2026-09 | 首页/日历/统计三屏优化；重试副文案「还没确认 · HH:MM 再响」；统计 Tab 去掉返回箭头；日历默认列出当天任务；README 按现状。签名/keystore/applicationId 未改 |
 | v2.4.11 | 2026-08 | AI 提问优化：一次只问一个问题（禁止一段话连问多个），信息完备直接创建不再二次确认日期/追问提醒时间；等待中列表同一人的公历+农历生日合并显示一行（底层仍两条独立提醒） |

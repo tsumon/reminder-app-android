@@ -632,8 +632,7 @@ private fun dateDisplayOf(entity: ReminderEntity): String = when (entity.dateTyp
 }
 
 /**
- * 周期规则徽章：深灰底 + 🔁 + 精确重复规则（如「每周 · 08:00」），
- * 与暖色卡面对比形成「智能高效」的数据区。
+ * 周期规则徽章：`--strong` 浅容器洗色，圆角 8，无外描边。
  */
 @Composable
 fun RepeatRuleBadge(entity: ReminderEntity, modifier: Modifier = Modifier) {
@@ -646,25 +645,22 @@ fun RepeatRuleBadge(entity: ReminderEntity, modifier: Modifier = Modifier) {
         else -> cycleLabelOf(entity)
     }
     val ruleText = if (time.isEmpty()) base else "$base · $time"
-    Row(
+    val dark = isSoftDark()
+    Text(
+        ruleText,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Medium,
+        color = if (dark) Tokens.BrandGradientStart else Tokens.BrandPrimaryDark,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
         modifier = modifier
-            .clip(CircleShape)
-            .background(Playful.ink.copy(alpha = 0.88f))
-            .border(0.8.dp, Color.White.copy(alpha = 0.14f), CircleShape)
-            .padding(horizontal = 8.dp, vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Text("🔁", fontSize = 9.sp)
-        Text(
-            ruleText,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color.White.copy(alpha = 0.92f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                if (dark) Tokens.BrandPrimary.copy(alpha = 0.22f)
+                else Tokens.BrandPrimaryContainer.copy(alpha = 0.62f)
+            )
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    )
 }
 
 // MARK: - 里程碑宝箱
