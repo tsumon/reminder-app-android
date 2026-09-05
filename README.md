@@ -4,30 +4,51 @@
 
 # 循环提醒
 
-English subtitle: Recurring Reminder. Android 原生 App。支持循环提醒、日期提醒、农历生日、节假日提醒以及 **AI 语音助手**。
+Android 原生。到期你点确认，周期才往前走；滑掉就按 1 小时 → 4 小时 → 12 小时 → 24 小时再催，直到 overdue。
+
+<p align="center">
+  <img alt="循环提醒" src="https://img.shields.io/badge/v2.7.1-soft--ui-159A9C?style=flat-square" />
+</p>
+
+```svg
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="160" viewBox="0 0 880 160" role="img" aria-label="循环提醒">
+  <defs>
+    <filter id="soft" x="-20%" y="-40%" width="140%" height="180%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <rect width="880" height="160" rx="28" fill="#12121A"/>
+  <rect x="36" y="28" width="808" height="104" rx="22" fill="#2A2A36" filter="url(#soft)"/>
+  <rect x="36" y="28" width="808" height="18" rx="22" fill="#ffffff" opacity="0.06"/>
+  <text x="64" y="78" fill="#F5F5F3" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="34" font-weight="700">循环提醒</text>
+  <text x="64" y="112" fill="#9AA0AE" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="16">确认才进下一周期 · 没确认就 1h→4h→12h→24h 再响</text>
+  <circle cx="780" cy="80" r="28" fill="#159A9C"/>
+  <text x="780" y="88" text-anchor="middle" font-size="26">🦊</text>
+</svg>
+```
+
 
 [![Platform](https://img.shields.io/badge/Platform-Android-brightgreen.svg)](https://developer.android.com)
 [![Language](https://img.shields.io/badge/Language-Kotlin-purple.svg)](https://kotlinlang.org/)
 [![Min SDK](https://img.shields.io/badge/Min%20SDK-26-orange.svg)](https://developer.android.com/about/versions/oreo)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-| 首页 | 日历 | 统计 |
-|:---:|:---:|:---:|
-| ![首页](docs/screenshots/home.png) | ![日历](docs/screenshots/calendar.png) | ![统计](docs/screenshots/stats.png) |
+| 首页 | 日历 | 统计 | 设置 |
+|:---:|:---:|:---:|:---:|
+| ![首页](docs/screenshots/home.png) | ![日历](docs/screenshots/calendar.png) | ![统计](docs/screenshots/stats.png) | ![设置](docs/screenshots/settings.png) |
 
-## 当前界面
+## 当前界面（v2.7.1）
 
-锤子纸面 soft-shadow：浅纸底 / 深抬升面。卡片无描边，动作是软圆钮。底栏铺物理底（DockH 48），四个 Tab。设置行高 52。AI 在设置里配置，不是独立 Tab。Android FAB 44 正圆在 dock 上方。
+锤子纸面 soft-shadow：浅纸底 / 深抬升面 `#2A2A36`，卡无描边，动作是软圆钮。底栏 fill 铺满物理底（DockH 48，选中圆 32）。设置单行 52。四个 Tab。AI 在设置里配。Android FAB 44 正圆压在 dock 上方。
 
-- **首页**（标题「提醒事项」）：inset 搜索；筛选芯片 全部 / 今天 / 本周；今日卡 + soft 环「待处理」；列表分组 提醒中 / 等待中。到期行内「确认」，不再弹大确认框。重试行副文案「还没确认 · HH:MM 再响」。行首 44 emoji 井；浅蓝洗周期徽章。
-- **日历**：整月 elevated 卡；今天竖胶囊 + 🦊；公历 + 农历 + 班/休；点选日期列出当天任务。没有本周进度条。
-- **统计**：本月完成 / 连续天数 / 完成率 三砖 + 厚描边 soft donut（完成率 / 确认 / 漏掉）+ 本月打卡热力 + 打卡城堡 + 最常忘记时段。本周花园缩成热力卡说明行。
-- **设置**：主题皮肤等。
+- **首页**：inset 搜索；芯片 全部 / 今天 / 本周；今日卡 + soft 环待处理；提醒中 / 等待中。到期行内确认。重试行写「还没确认 · HH:MM 再响」。
+- **日历**：月卡；今天竖胶囊 + 🦊；公历 + 农历 + 班/休；点日期列当天任务。
+- **统计**：三砖 + soft donut + 本月打卡热力 + 打卡城堡 + 最常忘记。
+- **设置**：主题皮肤、同步、AI、更新。
 
 ```mermaid
 flowchart TB
   app[循环提醒]
-  app --> home[首页 · 提醒事项]
+  app --> home[首页]
   app --> cal[日历]
   app --> stats[统计]
   app --> set[设置]
@@ -35,7 +56,7 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-  waiting[等待中] --> due[到点提醒]
+  waiting[等待中] --> due[到点]
   due -->|确认| next[下个周期]
   due -->|未确认| retry[递增重试]
   retry -->|确认| next
@@ -43,234 +64,67 @@ flowchart LR
   overdue -->|手动确认| next
 ```
 
-递增重试引擎仍是 1 小时 → 4 小时 → 12 小时 → 24 小时 → 逾期（停止自动再响）。通知按钮是「确认」和「稍后」。
+## 功能
 
----
+- 周期提醒（分钟/小时/天/周/月/年）+ 锚点防漂移
+- 递增重试对齐 iOS：1h → 4h → 12h → 24h → overdue
+- 日期提醒、农历生日、节假日；可避开周末/假日
+- AI 语音助手（免费 API / 自定义 OpenAI 兼容）
+- WebDAV、近场互传、GitHub Releases 升级
+- Room + WorkManager，离线可用
 
-## 🌐 多语言支持 / Multi-language Support
+<details>
+<summary>多语言</summary>
 
-本应用（Android 与 iOS 双端）内置多语言支持，跟随系统语言自动切换。
+简 / 繁 / 英 / 日 / 韩。`values` / `values-en` / `values-zh-rTW` / `values-ja` / `values-ko`。缺译文回退简体。
 
-**Supported languages:**
-- 🇨🇳 简体中文（zh-Hans）— 默认语言 / 回退语言 (default & fallback)
-- 🇺🇸 English (en)
-- 🇹🇼 繁體中文 (zh-Hant)
-- 🇯🇵 日本語 (ja)
-- 🇰🇷 한국어 (ko)
+</details>
 
-**实现方式 / Implementation:**
-- **Android**：`res/values/strings.xml`（简体中文基准）+ `values-en` / `values-zh-rTW` / `values-ja` / `values-ko` 资源限定符；运行时代码统一通过 `zh()` / `zhf()`（`com.reminderapp.i18n`）查表，Service / Receiver 等非 Compose 场景亦可调用。
-- **iOS**：`Localizable.xcstrings` 多语言目录，SwiftUI 通过 `String(localized:)` 取多语言文案。
-- 两端共用「中文原串即 key」方案，新增 / 修改文案只需维护中文源串与译文表，降低重复命名成本。
+## 怎么跑
 
-> 多语言文案已覆盖全部用户可见界面（约 330 条），翻译缺失时自动回退为简体中文原串。
-> All user-visible strings (~330) are localized; missing translations gracefully fall back to Simplified Chinese.
+```bash
+cd reminder-app-android
+./gradlew :app:assembleDebug
+# 或 Android Studio 打开工程 Run
+```
 
----
+Min SDK 26。Release 包见 [Releases](https://github.com/tsumon/reminder-app-android/releases)（含 `app-release-2.7.1.apk`）。
 
-## ✨ 功能
-
-### 1. 循环提醒
-- 支持「每隔 N 分钟/小时/天/周/月/年」的周期提醒
-- **锚点法计算**：基于首次触发时间，避免日期漂移（月末对齐、闰年正确）
-- **递增重试**（对齐 iOS）：到点未确认 → 1h → 4h → 12h → 24h → 24h，达到上限标 `overdue` 停止轰炸，等用户手动处理
-- 可暂停/恢复/删除
-
-### 2. 日期提醒
-- 一次性日期提醒：设定具体日期，当天准时通知
-- **提前预告**：提前 N 天每日 9:00 推送预告通知
-- 支持农历生日、阳历生日
-- 内置 13 个中国法定节假日
-
-### 3. AI 语音助手 🤖
-- 自然语言创建提醒：「每天晚上 8 点提醒我遛狗」
-- 支持 3 种模式：
-
-| 模式 | 说明 |
-|------|------|
-| **免费 API** | 注册获取免费 Key，填入设置即可（含注册指引） |
-| **自定义 API** | 使用自己的 OpenAI 兼容 API |
-
-- 语音输入 (`SpeechRecognizer`)
-- Function Calling 自动解析创建/查询/删除/推迟提醒
-- 内置 5 个 API 模板（OpenAI / DeepSeek / 千问 / 豆包 / 通用）
-
----
-
-## 🏗️ 技术栈
+<details>
+<summary>技术栈 / 结构</summary>
 
 | 类别 | 技术 |
 |------|------|
-| UI | Jetpack Compose + Material 3 |
-| 数据持久化 | Room Database |
-| 后台调度 | WorkManager |
-| 通知 | NotificationCompat + NotificationChannel |
-| 网络 | OkHttp 4 + Gson |
-| 语音 | Android SpeechRecognizer |
-| 架构 | MVVM + Repository |
-
----
-
-## 📁 项目结构
+| UI | Jetpack Compose + Material 3 + SoftUI |
+| 数据 | Room |
+| 调度 | WorkManager |
+| 网络 | OkHttp + Gson |
 
 ```
 app/src/main/java/com/reminderapp/
-├── data/
-│   ├── entity/          # Room 实体 (ReminderEntity, ReminderRecordEntity)
-│   ├── dao/             # DAO 接口
-│   └── database/        # AppDatabase (含迁移)
-├── service/
-│   ├── ReminderEngine.kt        # 核心提醒引擎（周期/确认/递增重试/遗漏检查）
-│   ├── ReminderWorker.kt        # WorkManager 后台任务
-│   ├── ReminderScheduler.kt     # WorkManager 调度器
-│   ├── NotificationManager.kt   # 通知发送与渠道管理
-│   ├── LunarCalendar.kt         # 农历转换 (1900-2100)
-│   ├── HolidayService.kt        # 节假日服务
-│   ├── AIService.kt             # AI API 调用 + Function Calling
-│   ├── AITools.kt               # AI 工具定义
-│   ├── AISettings.kt            # AI 配置存储
-│   ├── VoiceService.kt          # 语音识别
-│   ├── BackupHelper.kt          # JSON 备份导入导出
-│   ├── WebDavSync.kt            # 坚果云/通用 WebDAV 双向同步
-│   ├── NearbyShareService.kt    # 局域网 TCP 互传（47823）
-│   └── QrCodeUtils.kt           # 二维码生成与扫码
-├── ui/
-│   ├── screen/                  # HomeScreen / CalendarScreen / StatsScreen / SettingsScreen / AIChatScreen / ...
-│   ├── theme/                   # 设计令牌 + SoftUI（纸面软影 / dock / 44 FAB）
-│   └── viewmodel/               # HomeViewModel / ReminderDetailViewModel / ...
-├── receiver/
-│   ├── NotificationActionReceiver.kt  # 通知确认/稍后按钮处理
-│   └── BootReceiver.kt               # 开机重注册 WorkManager 任务
-├── widget/                      # 桌面小部件
-├── MainActivity.kt
-└── ReminderApp.kt
+├── data/          # Room entity / dao / repo
+├── ui/screen/     # Home / Calendar / Stats / Settings
+├── ui/theme/      # Tokens / SoftUI
+└── worker/        # 通知与重试
 ```
 
----
+</details>
 
-## 🚀 构建 & 运行
-
-### 前提条件
-
-- [Android Studio](https://developer.android.com/studio) Hedgehog (2023.1.1) 或更新版本
-- Android SDK 34
-- JDK 17
-
-### 构建步骤
-
-```bash
-# 1. 克隆仓库
-git clone https://github.com/tsumon/reminder-app-android.git
-cd reminder-app-android
-
-# 2. 用 Android Studio 打开项目
-#    会自动下载 Gradle 和依赖
-
-# 3. 构建 APK
-./gradlew assembleDebug          # Debug APK
-./gradlew assembleRelease        # Release APK (需要签名配置)
-
-# 4. 安装到设备
-./gradlew installDebug
-```
-
-### 生成 Release APK
-
-在 `app/build.gradle.kts` 中配置签名：
-
-```kotlin
-android {
-    signingConfigs {
-        create("release") {
-            storeFile = file("keystore.jks")
-            storePassword = "your_password"
-            keyAlias = "your_alias"
-            keyPassword = "your_password"
-        }
-    }
-    buildTypes {
-        release {
-            signingConfig = signingConfigs.getByName("release")
-        }
-    }
-}
-```
-
-然后：
-
-```bash
-./gradlew assembleRelease
-# APK 路径: app/build/outputs/apk/release/app-release.apk
-```
-
----
-
-## 📱 系统要求
-
-- Android 8.0 (API 26) 及以上
-- 通知权限 (Android 13+ 需要手动授权)
-- 麦克风权限 (AI 语音功能)
-- 网络权限 (AI 功能)
-
----
-
-## 🔄 版本历史
+## 版本历史
 
 | 版本 | 日期 | 更新内容 |
 |------|------|----------|
-| v2.7.1 | 2026-09 | soft-ui chrome：锤子立体软影、底栏铺物理底收窄（DockH 48 / 选中圆 32）、设置行高 52。签名/keystore/applicationId 未改 |
-| v2.7.0 | 2026-09 | soft-ui 纸面软影：浅纸底/深抬升面、卡无描边、软圆钮；首页今日卡+待处理环；统计厚描边 donut + 本月打卡热力；README 按现状。签名/keystore/applicationId 未改 |
-| v2.6.0 | 2026-09 | 三屏优化：行内确认、统计去返回箭头、日历列出当天任务；README 按现状。签名/keystore/applicationId 未改 |
-| quiet-confirmation | 2026-09 | 首页/日历/统计三屏优化；重试副文案「还没确认 · HH:MM 再响」；统计 Tab 去掉返回箭头；日历默认列出当天任务；README 按现状。签名/keystore/applicationId 未改 |
-| v2.4.11 | 2026-08 | AI 提问优化：一次只问一个问题（禁止一段话连问多个），信息完备直接创建不再二次确认日期/追问提醒时间；等待中列表同一人的公历+农历生日合并显示一行（底层仍两条独立提醒） |
-| v2.4.10 | 2026-08 | AI 历法歧义澄清：输入「2.10」「211」等纯数字日期时不再瞎猜新历/农历——新增 ask_user 工具在聊天里渲染「新历/农历」按钮一点即选，同会话确认过后续默认沿用；手动创建支持 2.10/2-10/2/10 数字日期；农历 31 日兜底拦截 |
-| v2.4.9 | 2026-08 | AI 每周洞察（统计上下文工具生成周报）+ 遗漏补办卡（一键补确认/推到明天）+ 批量改时间 + 手动创建对齐 AI（一句话解析支持避开节假日/每季度/每两周/自动填星期/新历旧历拆两条） |
-| v2.4.8 | 2026-08 | 新增「避开节假日/周末」：报税/缴费等工作日事务触发日期落在周六日或法定节假日时自动顺延到下一个工作日；AI 创建时先询问用户再设置；手动创建可开关；修改提醒也支持 |
-| v2.4.7 | 2026-08 | 流式输出修复工具调用分片丢失（SSE 按 index 累积）+ R8 嵌套类混淆修复（AIService/AILogStore keep）+ API Key 解密失败回写修复 + 通知/小组件广播 goAsync 补 try/catch + 语音输入并发防重入 |
-| v2.4.6 | 2026-08 | 修复 AI 批量创建生日只建新历：提示词原写「优先取新历」导致旧历被忽略——改为新旧历并存时拆两条创建（公历/农历各一条，标题带后缀），兼容「旧历，12月18」逗号写法 |
-| v2.4.5 | 2026-08 | 修复小组件添加到桌面空白（布局裸 `<View>` 不在 RemoteViews 白名单，launcher 淫染即崩，v1.5.0 起存在）+ 日历任务标记重设计（数字下方 6dp 圆点，原数字右上 5dp 小点视觉不可感知，对齐 iOS） |
-| v2.4.4 | 2026-08 | 修复 release 版 AI 对话历史恒空（R8 剥离泛型 Signature → Gson TypeToken 抛异常被吞，logcat 实锤；proguard 补 Gson 官方规则）+ 用户消息上屏即持久化 + 「查看历史」改滚到最早记录 + 历史加载失败输出诊断日志 |
-| v2.4.3 | 2026-08 | 修复 AI 对话历史丢失（进入即恢复 + 更新即保存；流式/工具步骤气泡 upsert 不再重复）+ 历史数据防闪退加固（Gson 缺字段/重复 id 容错 + R8 keep）+ 欢迎语不再覆盖已有历史 |
-| v2.4.2 | 2026-08 | 根治每周错位（AI 工具 weekday 参数 + 锚点对齐）+ 锚点星期修正检测（启动提示一键修正）+ AI 对话历史（持久化 + 下拉查看/清空） |
-| v2.4.1 | 2026-08 | 修复「每周X」锚点错位（AI 创建丢弃 trigger_date + 模型不知今天日期 → prompt 注入；手动创建加星期选择） |
-| v2.4.0 | 2026-08 | 布局重设计（首页今日安排时间线）+ 主题色选择器（6 色板动态换肤）+ 闪退防御 |
-| v2.3.0 | 2026-08 | 视觉换肤：品牌紫 → 青碧 Teal（全局/小组件/图标）+ 首页 hero 今日完成率环 |
-| v2.2.1 | 2026-08 | UI 大改（首页 hero 日期大标题 + 农历徽章 + 光斑装饰 + 渐变图标容器）+ emoji 图标回归 + 在线更新修复（多候选 URL + 国内镜像） |
-| v2.2.0 | 2026-08 | AI 应用工程化：Agent 多步工具循环（调用可视化）+ 流式输出（SSE）+ 模型自动降级（备用/本地 Ollama）+ 输出校验自愈 + AI 调用日志（诊断页） |
-| v2.1.1 | 2026-08 | 自签友好功能包：手动主题（浅/深/跟随系统）+ 勿扰时段 + 未来触发预览 + 提醒诊断页 + 本地自动备份（下载目录）+ 批量完成/删除 |
-| v2.1.0 | 2026-08 | UI 现代化（Material You 动态取色 / 夜间主题启动无闪白）+ 图标统一（Material 图标替代 emoji）+ 统一稍后选项（15 分钟/1 小时/明天/自定义）+ 跨端协议 v2（syncId 同步不丢引用）+ AI 深色模式修复 |
-| v2.0.21 | 2026-08 | 数据与通知一致性 + UI 适配 + 回归测试（导入去重统一、一次性确认不重排、overdue 不唤醒、Worker 可重试、备份协议补齐字段） |
-| v2.0.18 | 2026-08 | 首页/详情/设置 UI 优化 + 新图标 + 记录字段扩展 |
-| v2.0.12 | 2026-08 | AI 聊天修正 |
-| v2.0.11 | 2026-08 | 农历引擎修正 |
-| v2.0.10 | 2026-08 | 农历引擎清理 |
-| v2.0.9 | 2026-08 | 构建修正 |
-| v2.0.8 | 2026-08 | 农历引擎大升级（权威历法）+ 回归测试扩充 |
-| v2.0.7 | 2026-08 | AI 设置项 |
-| v2.0.6 | 2026-08 | 数据库迁移 + AI 工具 |
-| v2.0.5 | 2026-08 | 首页清理 |
-| v2.0.4 | 2026-08 | 语言手动切换（跟随系统为默认）+ 设置页 |
-| v2.0.3 | 2026-08 | CI 构建重试 |
-| v2.0.2 | 2026-08 | 小组件/调度/多语言修正 |
-| v2.0.1 | 2026-08 | 构建修正 |
-| v2.0.0 | 2026-08 | 全面多语言（简/繁/英/日/韩）+ 模型/备份/小组件适配 |
-| v1.9.8.1 | 2026-08 | 构建修正 |
-| v1.9.8 | 2026-08 | 首页/日历/详情设计图风格 UI + AI 聊天完善 |
-| v1.9.7 | 2026-08 | Android 递增重试对齐 iOS（1h→4h→12h→24h→24h→overdue），UI 状态 overdue 高亮 |
-| v1.9.6 | 2026-08 | 五轮审查 70 项修复 + 近场传输 + 删除 AI 免 API 模式 |
-| v1.9.5 | 2026-08 | 检查更新改 `releases.atom` 防 API 限流 |
-| v1.9.4 | 2026-08 | WebDAV 同步 404 → 自动 MKCOL 建目录 |
-| v1.9.3 | 2026-08 | 设置页（版本号/检查更新/更新日志） |
-| v1.9.2 | 2026-08 | 更新检查超时重试 + WebDAV 友好提示 |
-| v1.9.1 | 2026-08 | AI 规则提醒 + 首页菜单「检查更新」 |
-| v1.9.0 | 2026-08 | UI 优化（液态玻璃）+ 在线升级 + App 图标 |
-| v1.8.7 | 2026-08 | 小组件增强 / 节假日联网 / 统计洞察 / .ics 导出 / 设计令牌 / 崩溃监控 |
-| v1.3.0 | 2026-08 | AI 语音助手 + Function Calling |
-| v1.2.0 | 2026-08 | 日期提醒、农历生日、节假日 |
-| v1.0.0 | 2026-08 | 初始版：循环提醒 + 递增轰炸 |
+| v2.7.1 | 2026-09 | soft-ui chrome：锤子立体软影、底栏铺物理底（DockH 48 / 选中圆 32）、设置行高 52 |
+| v2.7.0 | 2026-09 | soft-ui 纸面软影；首页今日卡+待处理环；统计 donut + 本月打卡热力 |
+| v2.6.0 | 2026-09 | 行内确认、日历当天任务、统计空完成率 0% |
+| v2.4.14 | 2026-08 | AI 一次只问一事；公历+农历生日合并显示 |
+| v2.4.10 | 2026-08 | 避开节假日/周末自动顺延到下一工作日 |
+| v2.4.0 | 2026-08 | 首页时间线 + 六色主题 |
+| v2.3.0 | 2026-08 | 品牌色改青碧 Teal |
 
----
 
-## 📄 License
+更早版本见 [Releases](https://github.com/tsumon/reminder-app-android/releases)。签名 / keystore / applicationId 未改。
+
+## License
 
 MIT
