@@ -61,6 +61,7 @@ fun CalendarScreen(
     Box(Modifier.fillMaxSize().background(softCanvas())) {
     Scaffold(
         containerColor = Color.Transparent,
+        contentWindowInsets = WindowInsets.statusBars,
         topBar = {
             SoftScreenTitle(
                 title = zh("日历"),

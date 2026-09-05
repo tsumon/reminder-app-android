@@ -2,7 +2,6 @@ package com.reminderapp.ui.screen
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -65,6 +64,7 @@ fun SettingsScreen(
     Box(Modifier.fillMaxSize().background(softCanvas())) {
     Scaffold(
         containerColor = Color.Transparent,
+        contentWindowInsets = WindowInsets.statusBars,
         topBar = {
             if (!showBack) {
                 com.reminderapp.ui.theme.SoftScreenTitle(title = zh("设置"))
@@ -96,15 +96,13 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(padding),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(Tokens.SettingsGroupGap)
         ) {
             // === 语言（v2.0.4：手动切换，跟随系统为默认） ===
             item {
                 SettingsCard {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
+                        modifier = Modifier.settingsSingleRow(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -124,9 +122,8 @@ fun SettingsScreen(
                     LocaleManager.options.forEach { code ->
                         Row(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .clickableItem { LocaleManager.setLanguage(context, code) }
-                                .padding(vertical = 12.dp),
+                                .settingsSingleRow()
+                                .clickableItem { LocaleManager.setLanguage(context, code) },
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
@@ -150,9 +147,7 @@ fun SettingsScreen(
                 var themeMode by remember { mutableStateOf(com.reminderapp.ui.theme.ThemeStore.mode(context)) }
                 SettingsCard {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
+                        modifier = Modifier.settingsSingleRow(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -175,9 +170,7 @@ fun SettingsScreen(
                     HorizontalDivider()
                     // v2.4.0: 主题色板（切换即全局换肤，Activity recreate 立即生效）
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 10.dp),
+                        modifier = Modifier.settingsSingleRow(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(zh("主题色"), style = MaterialTheme.typography.bodyLarge)
@@ -185,16 +178,9 @@ fun SettingsScreen(
                         com.reminderapp.ui.theme.Tokens.Palettes.forEachIndexed { index, palette ->
                             Box(
                                 modifier = Modifier
-                                    .size(30.dp)
-                                    .padding(3.dp)
+                                    .size(Tokens.SettingsThemeDot)
                                     .clip(CircleShape)
                                     .background(palette.primary)
-                                    .border(
-                                        width = 2.dp,
-                                        color = if (com.reminderapp.ui.theme.ThemeStore.colorIndex(context) == index)
-                                            MaterialTheme.colorScheme.onSurface else Color.Transparent,
-                                        shape = CircleShape
-                                    )
                                     .clickableItem {
                                         com.reminderapp.ui.theme.ThemeStore.setColorIndex(context, index)
                                         (context as? android.app.Activity)?.recreate()
@@ -204,23 +190,22 @@ fun SettingsScreen(
                                 if (com.reminderapp.ui.theme.ThemeStore.colorIndex(context) == index) {
                                     Icon(
                                         Icons.Filled.Check, contentDescription = null,
-                                        tint = Color.White, modifier = Modifier.size(16.dp)
+                                        tint = Color.White, modifier = Modifier.size(14.dp)
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                         }
                     }
                     HorizontalDivider()
                     listOf(0 to zh("跟随系统"), 1 to zh("浅色"), 2 to zh("深色")).forEach { (mode, label) ->
                         Row(
                             modifier = Modifier
-                                .fillMaxWidth()
+                                .settingsSingleRow()
                                 .clickableItem {
                                     com.reminderapp.ui.theme.ThemeStore.setMode(context, mode)
                                     themeMode = mode
-                                }
-                                .padding(vertical = 12.dp),
+                                },
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(label, style = MaterialTheme.typography.bodyLarge)
@@ -295,7 +280,7 @@ fun SettingsScreen(
                     // v2.1.1: 本地备份（自签无 iCloud 的兜底；写入「下载」目录，保留最近 5 份）
                     Row(
                         modifier = Modifier
-                            .fillMaxWidth()
+                            .settingsDualRow()
                             .clickableItem {
                                 val name = com.reminderapp.service.LocalBackupService.backupNow(context)
                                 android.widget.Toast.makeText(
@@ -304,8 +289,7 @@ fun SettingsScreen(
                                     else zh("备份失败"),
                                     android.widget.Toast.LENGTH_SHORT
                                 ).show()
-                            }
-                            .padding(vertical = 12.dp),
+                            },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -330,9 +314,7 @@ fun SettingsScreen(
                 SettingsCard {
                     // 版本号
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
+                        modifier = Modifier.settingsSingleRow(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -353,7 +335,7 @@ fun SettingsScreen(
                     // 检查更新
                     Row(
                         modifier = Modifier
-                            .fillMaxWidth()
+                            .settingsSingleRow()
                             .clickableItem {
                                 checking = true
                                 scope.launch {
@@ -372,8 +354,7 @@ fun SettingsScreen(
                                         ).show()
                                     }
                                 }
-                            }
-                            .padding(vertical = 12.dp),
+                            },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -392,9 +373,8 @@ fun SettingsScreen(
                     // 更新日志
                     Row(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clickableItem { showChangelog = true }
-                            .padding(vertical = 12.dp),
+                            .settingsSingleRow()
+                            .clickableItem { showChangelog = true },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -571,7 +551,7 @@ internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .softCard(com.reminderapp.ui.theme.SoftKind.Card)
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+            .padding(horizontal = Tokens.SettingsGroupPadX, vertical = Tokens.SettingsGroupPadY),
         content = content
     )
 }
@@ -585,9 +565,8 @@ private fun SettingRow(
 ) {
     Row(
         modifier = Modifier
-            .fillMaxWidth()
-            .clickableItem(onClick)
-            .padding(vertical = 12.dp),
+            .settingsDualRow()
+            .clickableItem(onClick),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(icon, contentDescription = null, tint = Tokens.BrandPrimary, modifier = Modifier.size(22.dp))
@@ -602,6 +581,16 @@ private fun SettingRow(
         )
     }
 }
+
+private fun Modifier.settingsSingleRow(): Modifier =
+    this
+        .fillMaxWidth()
+        .heightIn(min = Tokens.SettingsRowH)
+
+private fun Modifier.settingsDualRow(): Modifier =
+    this
+        .fillMaxWidth()
+        .heightIn(min = Tokens.SettingsRowH2)
 
 private fun Modifier.clickableItem(onClick: () -> Unit): Modifier =
     this.clickable(onClick = onClick)

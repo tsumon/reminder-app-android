@@ -17,7 +17,7 @@ English subtitle: Recurring Reminder. Android 原生 App。支持循环提醒、
 
 ## 当前界面
 
-锤子纸面 soft-shadow：浅纸底 / 深抬升面。卡片无描边，动作是软圆钮。底部四个 Tab。AI 在设置里配置，不是独立 Tab。Android FAB 44 正圆在 dock 上方。
+锤子纸面 soft-shadow：浅纸底 / 深抬升面。卡片无描边，动作是软圆钮。底栏铺物理底（DockH 48），四个 Tab。设置行高 52。AI 在设置里配置，不是独立 Tab。Android FAB 44 正圆在 dock 上方。
 
 - **首页**（标题「提醒事项」）：inset 搜索；筛选芯片 全部 / 今天 / 本周；今日卡 + soft 环「待处理」；列表分组 提醒中 / 等待中。到期行内「确认」，不再弹大确认框。重试行副文案「还没确认 · HH:MM 再响」。行首 44 emoji 井；浅蓝洗周期徽章。
 - **日历**：整月 elevated 卡；今天竖胶囊 + 🦊；公历 + 农历 + 班/休；点选日期列出当天任务。没有本周进度条。
@@ -218,6 +218,7 @@ android {
 
 | 版本 | 日期 | 更新内容 |
 |------|------|----------|
+| v2.7.1 | 2026-09 | soft-ui chrome：锤子立体软影、底栏铺物理底收窄（DockH 48 / 选中圆 32）、设置行高 52。签名/keystore/applicationId 未改 |
 | v2.7.0 | 2026-09 | soft-ui 纸面软影：浅纸底/深抬升面、卡无描边、软圆钮；首页今日卡+待处理环；统计厚描边 donut + 本月打卡热力；README 按现状。签名/keystore/applicationId 未改 |
 | v2.6.0 | 2026-09 | 三屏优化：行内确认、统计去返回箭头、日历列出当天任务；README 按现状。签名/keystore/applicationId 未改 |
 | quiet-confirmation | 2026-09 | 首页/日历/统计三屏优化；重试副文案「还没确认 · HH:MM 再响」；统计 Tab 去掉返回箭头；日历默认列出当天任务；README 按现状。签名/keystore/applicationId 未改 |
