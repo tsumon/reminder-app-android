@@ -40,6 +40,7 @@ fun StatsScreen(
     Box(modifier = Modifier.fillMaxSize().background(softCanvas())) {
         Scaffold(
             containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets.statusBars,
             topBar = {
                 SoftScreenTitle(title = zh("统计洞察"))
             }

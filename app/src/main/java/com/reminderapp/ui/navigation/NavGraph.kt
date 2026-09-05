@@ -2,7 +2,6 @@ package com.reminderapp.ui.navigation
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -460,11 +459,11 @@ fun NavGraph(
 
         if (showBottomBar) {
             androidx.compose.foundation.layout.Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding(),
+                modifier = Modifier.align(Alignment.BottomCenter),
                 horizontalAlignment = Alignment.End
             ) {
+                // Dock fill covers navigationBars; icon row pads once inside SoftTabDock.
+                // Scaffold contentWindowInsets = statusBars only — do not add nav padding here.
                 if (currentRoute == "home") {
                     SoftFab(onClick = { navController.navigate("create") })
                 }

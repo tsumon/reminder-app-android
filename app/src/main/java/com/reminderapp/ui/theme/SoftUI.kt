@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -44,11 +45,17 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -65,6 +72,55 @@ private val OutQuartMs = 180
 
 enum class SoftKind { Sm, Card, Elevated }
 
+private data class SoftDrop(val offsetY: Dp, val blur: Dp, val color: Color, val spread: Dp = 0.dp)
+
+private fun softDrops(kind: SoftKind, dark: Boolean): List<SoftDrop> {
+    val ink = Color(0xFF111111)
+    return if (dark) {
+        when (kind) {
+            SoftKind.Sm -> listOf(
+                SoftDrop(1.dp, 2.dp, Color.Black.copy(alpha = 0.40f)),
+                SoftDrop(0.dp, 0.dp, Color.White.copy(alpha = 0.05f), spread = 1.dp)
+            )
+            SoftKind.Card -> listOf(
+                SoftDrop(12.dp, 32.dp, Color.Black.copy(alpha = 0.50f)),
+                SoftDrop(4.dp, 8.dp, Color.Black.copy(alpha = 0.45f)),
+                SoftDrop(0.dp, 0.dp, Color.White.copy(alpha = 0.08f), spread = 1.dp)
+            )
+            SoftKind.Elevated -> listOf(
+                SoftDrop(16.dp, 40.dp, Color.Black.copy(alpha = 0.55f)),
+                SoftDrop(6.dp, 12.dp, Color.Black.copy(alpha = 0.50f)),
+                SoftDrop(0.dp, 0.dp, Color.White.copy(alpha = 0.10f), spread = 1.dp)
+            )
+        }
+    } else {
+        when (kind) {
+            SoftKind.Sm -> listOf(
+                SoftDrop(2.dp, 4.dp, ink.copy(alpha = 0.05f)),
+                SoftDrop(1.dp, 1.dp, ink.copy(alpha = 0.05f))
+            )
+            SoftKind.Card -> listOf(
+                SoftDrop(14.dp, 32.dp, ink.copy(alpha = 0.08f)),
+                SoftDrop(6.dp, 12.dp, ink.copy(alpha = 0.06f)),
+                SoftDrop(1.dp, 2.dp, ink.copy(alpha = 0.06f))
+            )
+            SoftKind.Elevated -> listOf(
+                SoftDrop(16.dp, 40.dp, ink.copy(alpha = 0.08f)),
+                SoftDrop(8.dp, 16.dp, ink.copy(alpha = 0.07f)),
+                SoftDrop(2.dp, 4.dp, ink.copy(alpha = 0.06f))
+            )
+        }
+    }
+}
+
+private fun insetAlpha(kind: SoftKind, dark: Boolean): Float = when {
+    kind == SoftKind.Sm -> 0f
+    dark && kind == SoftKind.Elevated -> 0.14f
+    dark -> 0.10f
+    kind == SoftKind.Elevated -> 0.95f
+    else -> 0.85f
+}
+
 @Composable
 fun Modifier.softCard(
     kind: SoftKind = SoftKind.Card,
@@ -73,58 +129,104 @@ fun Modifier.softCard(
         SoftKind.Card -> Tokens.RadiusCard
         SoftKind.Elevated -> Tokens.RadiusElevated
     },
+    bottomRadius: Dp = radius,
     fill: Color = when (kind) {
         SoftKind.Elevated -> softElevated()
         else -> softSurface()
     }
 ): Modifier {
     val dark = isSoftDark()
-    val shape = RoundedCornerShape(radius)
-    val hairline = when (kind) {
-        SoftKind.Sm -> 0.04f
-        SoftKind.Card -> 0.06f
-        SoftKind.Elevated -> 0.07f
-    }
+    val shape = RoundedCornerShape(
+        topStart = radius,
+        topEnd = radius,
+        bottomStart = bottomRadius,
+        bottomEnd = bottomRadius
+    )
+    val drops = softDrops(kind, dark)
+    val highlight = insetAlpha(kind, dark)
     return this
         .drawBehind {
-            val cr = radius.toPx()
-            if (dark) {
-                drawRoundRect(
-                    color = Color.Black.copy(alpha = if (kind == SoftKind.Elevated) 0.50f else 0.46f),
-                    topLeft = Offset(0f, 10.dp.toPx()),
-                    size = Size(size.width, size.height),
-                    cornerRadius = CornerRadius(cr, cr),
-                    alpha = 0.62f
-                )
-            } else {
-                val y1 = if (kind == SoftKind.Sm) 1.dp.toPx() else 1.dp.toPx()
-                val blurHint = if (kind == SoftKind.Elevated) 8.dp.toPx() else 10.dp.toPx()
-                drawRoundRect(
-                    color = Color(0xFF111111).copy(alpha = 0.05f),
-                    topLeft = Offset(0f, y1),
-                    size = Size(size.width, size.height),
-                    cornerRadius = CornerRadius(cr, cr)
-                )
-                drawRoundRect(
-                    color = Color(0xFF111111).copy(alpha = if (kind == SoftKind.Card) 0.08f else 0.05f),
-                    topLeft = Offset(0f, blurHint * 0.35f),
-                    size = Size(size.width, size.height),
-                    cornerRadius = CornerRadius(cr, cr)
-                )
+            val topCr = radius.toPx()
+            val botCr = bottomRadius.toPx()
+            drops.forEach { drop ->
+                val spread = drop.spread.toPx()
+                if (drop.blur == 0.dp && drop.offsetY == 0.dp) {
+                    drawPath(
+                        path = softRoundPath(
+                            width = size.width,
+                            height = size.height,
+                            topRadius = topCr + spread,
+                            bottomRadius = botCr + spread,
+                            inset = -spread
+                        ),
+                        color = drop.color
+                    )
+                } else {
+                    val paint = Paint()
+                    val fp = paint.asFrameworkPaint()
+                    fp.isAntiAlias = true
+                    fp.color = android.graphics.Color.TRANSPARENT
+                    fp.setShadowLayer(
+                        drop.blur.toPx(),
+                        0f,
+                        drop.offsetY.toPx(),
+                        drop.color.toArgb()
+                    )
+                    val path = softRoundPath(
+                        width = size.width,
+                        height = size.height,
+                        topRadius = topCr,
+                        bottomRadius = botCr
+                    )
+                    drawIntoCanvas { canvas ->
+                        canvas.drawPath(path, paint)
+                    }
+                }
             }
         }
         .background(fill, shape)
-        .then(
-            if (dark) Modifier.drawWithContent {
-                drawContent()
-                drawRoundRect(
-                    color = Color.White.copy(alpha = hairline),
-                    cornerRadius = CornerRadius(radius.toPx(), radius.toPx()),
-                    style = Stroke(width = 1.dp.toPx())
+        .drawWithContent {
+            drawContent()
+            if (highlight > 0f) {
+                val topCr = radius.toPx()
+                val botCr = bottomRadius.toPx()
+                val clip = softRoundPath(
+                    width = size.width,
+                    height = size.height,
+                    topRadius = topCr,
+                    bottomRadius = botCr
                 )
-            } else Modifier
-        )
+                clipPath(clip) {
+                    drawRect(
+                        color = Color.White.copy(alpha = highlight),
+                        topLeft = Offset(0f, 0f),
+                        size = Size(size.width, 1.dp.toPx())
+                    )
+                }
+            }
+        }
         .clip(shape)
+}
+
+private fun softRoundPath(
+    width: Float,
+    height: Float,
+    topRadius: Float,
+    bottomRadius: Float,
+    inset: Float = 0f
+): Path = Path().apply {
+    addRoundRect(
+        RoundRect(
+            left = inset,
+            top = inset,
+            right = width - inset,
+            bottom = height - inset,
+            topLeftCornerRadius = CornerRadius(topRadius),
+            topRightCornerRadius = CornerRadius(topRadius),
+            bottomRightCornerRadius = CornerRadius(bottomRadius),
+            bottomLeftCornerRadius = CornerRadius(bottomRadius)
+        )
+    )
 }
 
 @Composable
@@ -157,11 +259,28 @@ fun SoftCircleButton(
         modifier = modifier
             .size(size)
             .drawBehind {
+                val r = size.toPx() / 2f
                 if (dark) {
-                    drawCircle(Color.Black.copy(alpha = 0.50f), radius = size.toPx() / 2f, center = center + Offset(0f, 6.dp.toPx()))
+                    drawCircle(Color.White.copy(alpha = 0.10f), radius = r + 1.dp.toPx())
+                    val paint = Paint()
+                    val fp = paint.asFrameworkPaint()
+                    fp.isAntiAlias = true
+                    fp.color = android.graphics.Color.TRANSPARENT
+                    fp.setShadowLayer(20.dp.toPx(), 0f, 8.dp.toPx(), Color.Black.copy(alpha = 0.50f).toArgb())
+                    drawIntoCanvas { it.drawCircle(center, r, paint) }
                 } else {
-                    drawCircle(Color(0xFF111111).copy(alpha = 0.05f), radius = size.toPx() / 2f, center = center + Offset(0f, 1.dp.toPx()))
-                    drawCircle(Color(0xFF111111).copy(alpha = 0.08f), radius = size.toPx() / 2f, center = center + Offset(0f, 4.dp.toPx()))
+                    val ink = Color(0xFF111111)
+                    listOf(
+                        Triple(16.dp.toPx(), 6.dp.toPx(), ink.copy(alpha = 0.10f)),
+                        Triple(2.dp.toPx(), 1.dp.toPx(), ink.copy(alpha = 0.06f))
+                    ).forEach { (blur, y, color) ->
+                        val paint = Paint()
+                        val fp = paint.asFrameworkPaint()
+                        fp.isAntiAlias = true
+                        fp.color = android.graphics.Color.TRANSPARENT
+                        fp.setShadowLayer(blur, 0f, y, color.toArgb())
+                        drawIntoCanvas { it.drawCircle(center, r, paint) }
+                    }
                 }
             }
             .clip(CircleShape)
@@ -171,26 +290,26 @@ fun SoftCircleButton(
                 drawCircle(
                     brush = Brush.verticalGradient(
                         if (dark) listOf(
-                            Color.White.copy(alpha = 0.28f),
+                            Color.White.copy(alpha = 0.16f),
                             Color.White.copy(alpha = 0.06f),
                             Color.Transparent
                         )
-                        else listOf(Color.White.copy(alpha = 0.92f), Color.White.copy(alpha = 0.18f))
+                        else listOf(
+                            Color.White.copy(alpha = 0.95f),
+                            Color.White.copy(alpha = 0.50f),
+                            Color.Transparent
+                        )
                     )
                 )
-                if (dark) {
-                    val canvas = this.size
-                    drawOval(
-                        color = Color.White.copy(alpha = 0.16f),
-                        topLeft = Offset(canvas.width * 0.19f, canvas.height * 0.08f),
-                        size = androidx.compose.ui.geometry.Size(canvas.width * 0.62f, canvas.height * 0.22f)
-                    )
-                }
                 if (pressed) {
-                    drawCircle(Color(0xFF111111).copy(alpha = if (dark) 0.35f else 0.08f))
-                }
-                if (dark) {
-                    drawCircle(Color.White.copy(alpha = 0.10f), style = Stroke(1.dp.toPx()))
+                    drawCircle(
+                        brush = Brush.verticalGradient(
+                            listOf(
+                                Color.Transparent,
+                                Color(0xFF111111).copy(alpha = if (dark) 0.35f else 0.08f)
+                            )
+                        )
+                    )
                 }
             }
             .clickable(
@@ -547,44 +666,53 @@ fun SoftTabDock(
         SoftTabSpec("stats", zh("统计"), Icons.Filled.BarChart),
         SoftTabSpec("settings", zh("设置"), Icons.Filled.Settings)
     )
-    Row(
+    // Fill is full-width to the physical bottom (background before nav padding).
+    // Icon row: small top pad + 4.dp above the gesture bar — not centered in the thick fill.
+    Column(
         modifier = modifier
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .softCard(SoftKind.Elevated)
-            .padding(horizontal = 10.dp, vertical = 8.dp)
-            .fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
+            .fillMaxWidth()
+            .softCard(kind = SoftKind.Elevated, bottomRadius = 0.dp)
+            .navigationBarsPadding()
     ) {
-        items.forEach { item ->
-            val selected = currentRoute == item.route
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { onSelect(item.route) }
-                    .padding(vertical = 2.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(if (selected) Tokens.BrandPrimary else Color.Transparent),
-                    contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Tokens.Gutter)
+                .padding(top = Tokens.DockPadTop)
+                .padding(bottom = Tokens.DockPadBottom),
+            verticalAlignment = Alignment.Top
+        ) {
+            items.forEach { item ->
+                val selected = currentRoute == item.route
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onSelect(item.route) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Top
                 ) {
-                    Icon(
-                        item.icon,
-                        contentDescription = item.title,
-                        tint = if (selected) Tokens.OnStrong else softMuted(),
-                        modifier = Modifier.size(18.dp)
+                    Box(
+                        Modifier
+                            .size(Tokens.DockSelected)
+                            .clip(CircleShape)
+                            .background(if (selected) Tokens.BrandPrimary else Color.Transparent),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            item.icon,
+                            contentDescription = item.title,
+                            tint = if (selected) Tokens.OnStrong else softMuted(),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Text(
+                        item.title,
+                        fontSize = 10.sp,
+                        lineHeight = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = if (selected) Tokens.BrandPrimary else softMuted()
                     )
                 }
-                Text(
-                    item.title,
-                    fontSize = 10.sp,
-                    lineHeight = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (selected) Tokens.BrandPrimary else softMuted()
-                )
             }
         }
     }
@@ -600,11 +728,18 @@ fun SoftFab(onClick: () -> Unit, modifier: Modifier = Modifier) {
             .padding(end = 16.dp, bottom = 8.dp)
             .size(Tokens.BtnCircle)
             .drawBehind {
-                drawCircle(
-                    Color.Black.copy(alpha = if (dark) 0.45f else 0.12f),
-                    radius = size.minDimension / 2f,
-                    center = center + Offset(0f, 6.dp.toPx())
+                val r = min(this.size.width, this.size.height) / 2f
+                val paint = Paint()
+                val fp = paint.asFrameworkPaint()
+                fp.isAntiAlias = true
+                fp.color = android.graphics.Color.TRANSPARENT
+                fp.setShadowLayer(
+                    if (dark) 20.dp.toPx() else 16.dp.toPx(),
+                    0f,
+                    if (dark) 8.dp.toPx() else 6.dp.toPx(),
+                    Color.Black.copy(alpha = if (dark) 0.50f else 0.12f).toArgb()
                 )
+                drawIntoCanvas { it.drawCircle(center, r, paint) }
             }
             .clip(CircleShape)
             .background(Tokens.BrandPrimary)
@@ -615,7 +750,9 @@ fun SoftFab(onClick: () -> Unit, modifier: Modifier = Modifier) {
                         listOf(Color.White.copy(alpha = 0.45f), Color.Transparent)
                     )
                 )
-                if (pressed) drawCircle(Color.Black.copy(alpha = 0.18f))
+                if (pressed) {
+                    drawCircle(Color.Black.copy(alpha = if (dark) 0.35f else 0.08f))
+                }
             }
             .clickable(
                 interactionSource = interaction,

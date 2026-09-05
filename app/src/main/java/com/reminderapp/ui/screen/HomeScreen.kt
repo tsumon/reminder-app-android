@@ -199,6 +199,7 @@ fun HomeScreen(
     Box(modifier = Modifier.fillMaxSize().background(softCanvas())) {
         Scaffold(
             containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets.statusBars,
         topBar = {
             if (!selectionMode) {
                 SoftScreenTitle(

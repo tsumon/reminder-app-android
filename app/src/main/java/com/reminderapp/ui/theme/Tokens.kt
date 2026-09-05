@@ -73,6 +73,21 @@ object Tokens {
     val SpaceL = 16.dp
     val SpaceXL = 24.dp
 
+    val DockH = 48.dp
+    val DockSelected = 32.dp
+    val DockPadTop = 3.dp
+    val DockPadBottom = 4.dp
+    val DockBottomGap = 0.dp
+    val SettingsGroupPadX = 16.dp
+    val SettingsGroupPadY = 4.dp
+    val SettingsRowH = 52.dp
+    val SettingsRowH2 = 64.dp
+    val SettingsRowPadX = 16.dp
+    val SettingsRowPadY = 14.dp
+    val SettingsRowPadY2 = 12.dp
+    val SettingsGroupGap = 16.dp
+    val SettingsThemeDot = 28.dp
+
     object Light {
         val Canvas = Color(0xFFF5F5F3)
         val Surface = Color(0xFFFBFBFA)
@@ -92,7 +107,7 @@ object Tokens {
     object Dark {
         val Canvas = Color(0xFF12121A)
         val Surface = Color(0xFF1C1C26)
-        val Elevated = Color(0xFF23232E)
+        val Elevated = Color(0xFF2A2A36)
         val Text = Color(0xFFEDEDF0)
         val Muted = Color(0xFF8E8E9A)
         val Track = Color(0x14FFFFFF)
