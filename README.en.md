@@ -11,11 +11,11 @@ A full-featured native Android reminder app supporting recurring reminders, date
 [![Min SDK](https://img.shields.io/badge/Min%20SDK-26-orange.svg)](https://developer.android.com/about/versions/oreo)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-| Home | Calendar | Stats |
-|:---:|:---:|:---:|
-| ![Home](docs/screenshots/home.png) | ![Calendar](docs/screenshots/calendar.png) | ![Stats](docs/screenshots/stats.png) |
+| Home | Calendar | Stats | Settings |
+|:---:|:---:|:---:|:---:|
+| ![Home](docs/screenshots/home.png) | ![Calendar](docs/screenshots/calendar.png) | ![Stats](docs/screenshots/stats.png) | ![Settings](docs/screenshots/settings.png) |
 
-## Current UI
+## Current UI (v2.7.1)
 
 Hammer-paper soft-shadow: light paper canvas / dark elevated surfaces. Cards have no stroke; actions are soft round buttons. Dock fills to the physical bottom (48dp). Four bottom tabs. Settings rows 52dp. AI lives in Settings, not as its own tab. Android has a 44dp FAB sitting on the dock.
 
@@ -217,20 +217,16 @@ Then:
 
 | Version | Date | Changes |
 |---------|------|---------|
-| v1.9.7 | 2026-08 | Android escalating retry aligned with iOS (1h→4h→12h→24h→24h→overdue), UI `overdue` state highlight |
-| v1.9.6 | 2026-08 | Five review rounds with 70 fixes + nearby share + removed AI no-API mode |
-| v1.9.5 | 2026-08 | Update check switched to `releases.atom` to avoid API rate limiting |
-| v1.9.4 | 2026-08 | WebDAV sync 404 → auto `MKCOL` directory creation |
-| v1.9.3 | 2026-08 | Settings page (version / check update / changelog) |
-| v1.9.2 | 2026-08 | Update check timeout retry + friendly WebDAV hints |
-| v1.9.1 | 2026-08 | AI rule reminders + home menu "Check Update" |
-| v1.9.0 | 2026-08 | UI optimization (liquid glass) + OTA upgrade + app icon |
-| v1.8.7 | 2026-08 | Widget enhancement / online holidays / stats insight / .ics export / design tokens / crash monitoring |
-| v1.3.0 | 2026-08 | AI voice assistant + Function Calling |
-| v1.2.0 | 2026-08 | Date reminders, lunar birthdays, holidays |
-| v1.0.0 | 2026-08 | Initial: recurring reminders + escalating nag |
+| v2.7.1 | 2026-09 | soft-ui chrome: hammer 3D soft-shadow, dock fill to physical bottom (DockH 48 / selected 32), settings row 52 |
+| v2.7.0 | 2026-09 | soft-ui paper elevation; today card + pending ring; stats donut + monthly heatmap |
+| v2.6.0 | 2026-09 | In-row confirm, calendar day tasks, empty completion rate shows 0% |
+| v2.4.14 | 2026-08 | AI asks one question at a time; solar+lunar birthday rows merged |
+| v2.4.10 | 2026-08 | Skip weekends/holidays to next workday |
+| v2.4.0 | 2026-08 | Home timeline + 6-color themes |
+| v2.3.0 | 2026-08 | Brand color → teal |
 
----
+
+Earlier releases: [https://github.com/tsumon/reminder-app-android/releases](https://github.com/tsumon/reminder-app-android/releases).
 
 ## 📄 License
 
