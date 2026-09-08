@@ -2,13 +2,17 @@ package com.reminderapp.ui.screen
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -16,15 +20,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
+import com.reminderapp.ReminderApp
 import com.reminderapp.service.AISettings
 import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 import com.reminderapp.ui.theme.Tokens
+import kotlinx.coroutines.launch
 
 data class NoApiProvider(val id: String, val name: String, val apiKeyUrl: String, val freeInfo: String, val apiEndpoint: String, val apiModel: String)
 
@@ -41,6 +49,8 @@ fun AISettingsScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val aiService = remember { ReminderApp.instance.aiService }
     var endpoint by remember { mutableStateOf(settings.apiEndpoint) }
     var apiKey by remember { mutableStateOf(settings.apiKey) }
     var model by remember { mutableStateOf(settings.model) }
@@ -52,6 +62,13 @@ fun AISettingsScreen(
     var fallbackKey by remember { mutableStateOf(settings.fallbackApiKey) }
     var fallbackModel by remember { mutableStateOf(settings.fallbackModel) }
     var showFallbackKey by remember { mutableStateOf(false) }
+    var fetchingPrimary by remember { mutableStateOf(false) }
+    var fetchingFallback by remember { mutableStateOf(false) }
+    var pingingPrimary by remember { mutableStateOf(false) }
+    var pingingFallback by remember { mutableStateOf(false) }
+    var modelChoices by remember { mutableStateOf<List<String>?>(null) }
+    var pickingFallback by remember { mutableStateOf(false) }
+    var modelSearch by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = {
@@ -97,7 +114,7 @@ fun AISettingsScreen(
                 onValueChange = { endpoint = it },
                 label = { Text(zh("接口地址")) },
                 placeholder = { Text("https://api.openai.com/v1") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("ai-endpoint"),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
             )
@@ -125,8 +142,46 @@ fun AISettingsScreen(
                 onValueChange = { model = it },
                 label = { Text(zh("模型")) },
                 placeholder = { Text("gpt-4o-mini") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("ai-model"),
                 singleLine = true
+            )
+
+            FetchModelsButton(
+                fetching = fetchingPrimary,
+                testTag = "fetch-models-primary",
+                onClick = {
+                    fetchModelList(
+                        scope = scope,
+                        context = context,
+                        aiService = aiService,
+                        base = endpoint,
+                        key = apiKey,
+                        fetching = fetchingPrimary,
+                        setFetching = { fetchingPrimary = it },
+                        onModels = {
+                            pickingFallback = false
+                            modelSearch = ""
+                            modelChoices = com.reminderapp.service.AIService.orderedModels(
+                                it, settings.lastSelectedModel
+                            )
+                        }
+                    )
+                }
+            )
+            PingModelsButton(
+                pinging = pingingPrimary,
+                testTag = "ping-models-primary",
+                onClick = {
+                    pingModels(
+                        scope = scope,
+                        context = context,
+                        aiService = aiService,
+                        base = endpoint,
+                        key = apiKey,
+                        pinging = pingingPrimary,
+                        setPinging = { pingingPrimary = it }
+                    )
+                }
             )
 
             // v2.2.0: 本地模型（Ollama）——无需 API Key
@@ -203,6 +258,43 @@ fun AISettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
+                FetchModelsButton(
+                    fetching = fetchingFallback,
+                    testTag = "fetch-models-fallback",
+                    onClick = {
+                        fetchModelList(
+                            scope = scope,
+                            context = context,
+                            aiService = aiService,
+                            base = fallbackEndpoint,
+                            key = fallbackKey,
+                            fetching = fetchingFallback,
+                            setFetching = { fetchingFallback = it },
+                            onModels = {
+                                pickingFallback = true
+                                modelSearch = ""
+                                modelChoices = com.reminderapp.service.AIService.orderedModels(
+                                    it, settings.lastSelectedFallbackModel
+                                )
+                            }
+                        )
+                    }
+                )
+                PingModelsButton(
+                    pinging = pingingFallback,
+                    testTag = "ping-models-fallback",
+                    onClick = {
+                        pingModels(
+                            scope = scope,
+                            context = context,
+                            aiService = aiService,
+                            base = fallbackEndpoint,
+                            key = fallbackKey,
+                            pinging = pingingFallback,
+                            setPinging = { pingingFallback = it }
+                        )
+                    }
+                )
             }
 
             Text(
@@ -275,6 +367,171 @@ fun AISettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+    }
+
+    val choices = modelChoices
+    if (choices != null) {
+        val current = if (pickingFallback) fallbackModel else model
+        val filtered = remember(choices, modelSearch) {
+            val q = modelSearch.trim()
+            if (q.isEmpty()) choices else choices.filter { it.contains(q, ignoreCase = true) }
+        }
+        AlertDialog(
+            onDismissRequest = { modelChoices = null; modelSearch = "" },
+            title = { Text(zh("选择模型")) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = modelSearch,
+                        onValueChange = { modelSearch = it },
+                        label = { Text(zh("搜索模型")) },
+                        modifier = Modifier.fillMaxWidth().testTag("model-search"),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
+                        items(filtered) { name ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        if (pickingFallback) {
+                                            fallbackModel = name
+                                            settings.lastSelectedFallbackModel = name
+                                        } else {
+                                            model = name
+                                            settings.lastSelectedModel = name
+                                        }
+                                        modelChoices = null
+                                        modelSearch = ""
+                                    }
+                                    .padding(vertical = 10.dp)
+                                    .testTag("model-choice-$name"),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    name,
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                if (name == current) {
+                                    Icon(
+                                        Icons.Filled.Check,
+                                        contentDescription = zh("已选"),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { modelChoices = null; modelSearch = "" }) { Text(zh("取消")) }
+            }
+        )
+    }
+}
+
+@Composable
+private fun FetchModelsButton(fetching: Boolean, testTag: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = !fetching,
+        modifier = Modifier.fillMaxWidth().testTag(testTag)
+    ) {
+        if (fetching) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+        Text(zh("获取模型列表"))
+    }
+}
+
+@Composable
+private fun PingModelsButton(pinging: Boolean, testTag: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = !pinging,
+        modifier = Modifier.fillMaxWidth().testTag(testTag)
+    ) {
+        if (pinging) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+        Text(zh("测连通"))
+    }
+}
+
+private fun fetchModelList(
+    scope: kotlinx.coroutines.CoroutineScope,
+    context: android.content.Context,
+    aiService: com.reminderapp.service.AIService,
+    base: String,
+    key: String,
+    fetching: Boolean,
+    setFetching: (Boolean) -> Unit,
+    onModels: (List<String>) -> Unit
+) {
+    if (fetching) return
+    if (base.trim().isEmpty()) {
+        Toast.makeText(context, zh("请先填写接口地址"), Toast.LENGTH_SHORT).show()
+        return
+    }
+    setFetching(true)
+    scope.launch {
+        try {
+            onModels(aiService.fetchModels(base, key))
+        } catch (e: Exception) {
+            Toast.makeText(
+                context,
+                e.message?.ifBlank { null } ?: zh("获取模型列表失败"),
+                Toast.LENGTH_LONG
+            ).show()
+        } finally {
+            setFetching(false)
+        }
+    }
+}
+
+private fun pingModels(
+    scope: kotlinx.coroutines.CoroutineScope,
+    context: android.content.Context,
+    aiService: com.reminderapp.service.AIService,
+    base: String,
+    key: String,
+    pinging: Boolean,
+    setPinging: (Boolean) -> Unit
+) {
+    if (pinging) return
+    if (base.trim().isEmpty()) {
+        Toast.makeText(context, zh("请先填写接口地址"), Toast.LENGTH_SHORT).show()
+        return
+    }
+    setPinging(true)
+    scope.launch {
+        try {
+            val ids = aiService.fetchModels(base, key)
+            Toast.makeText(
+                context,
+                zhf("连通成功，共 %1\$s 个模型", ids.size),
+                Toast.LENGTH_LONG
+            ).show()
+        } catch (e: Exception) {
+            Toast.makeText(
+                context,
+                e.message?.ifBlank { null } ?: zh("测连通失败"),
+                Toast.LENGTH_LONG
+            ).show()
+        } finally {
+            setPinging(false)
         }
     }
 }

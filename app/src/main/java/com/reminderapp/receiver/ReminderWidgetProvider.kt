@@ -84,15 +84,24 @@ class ReminderWidgetProvider : AppWidgetProvider() {
     private fun buildViews(context: Context, data: WidgetData): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.widget_reminder)
 
-        // 点击打开 App
-        val intent = Intent(context, MainActivity::class.java)
+        // 点击打开 App；有最近提醒时直达详情并高亮确认
+        val openIntent = Intent(context, MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            data.completeReminderId?.let { id ->
+                putExtra(com.reminderapp.service.NotificationManager.EXTRA_REMINDER_ID, id)
+                putExtra(com.reminderapp.service.NotificationManager.EXTRA_HIGHLIGHT_CONFIRM, true)
+            }
+        }
         val pendingIntent = PendingIntent.getActivity(
-            context, 0, intent,
+            context, 0, openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         views.setOnClickPendingIntent(R.id.widget_icon, pendingIntent)
         views.setOnClickPendingIntent(R.id.widget_unhandled_title, pendingIntent)
         views.setOnClickPendingIntent(R.id.widget_next_label, pendingIntent)
+        views.setOnClickPendingIntent(R.id.widget_next_title, pendingIntent)
+        views.setOnClickPendingIntent(R.id.widget_next_time, pendingIntent)
 
         views.setTextViewText(R.id.widget_unhandled_count, data.unhandledCount.toString())
         views.setTextViewText(R.id.widget_lunar, data.lunarText)

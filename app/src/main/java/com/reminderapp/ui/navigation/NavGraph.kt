@@ -57,22 +57,28 @@ fun NavGraph(
     aiService: AIService,
     aiSettings: AISettings,
     deepLinkReminderId: Long? = null,
+    deepLinkHighlightConfirm: Boolean = false,
     onDeepLinkConsumed: () -> Unit = {}
 ) {
+    var highlightConfirm by remember { mutableStateOf(false) }
     // 批次2 功能1: 通知点击直达确认面板 —— 冷启动(onCreate)与热启动(onNewIntent)都走这里。
     // 每次 deepLinkReminderId 变化（首次 set 或 onNewIntent 更新）导航一次，
     // 导航后回调清空，避免「同 id 再次点击不触发 / 重组重复导航」。
     LaunchedEffect(deepLinkReminderId) {
         val id = deepLinkReminderId ?: return@LaunchedEffect
+        highlightConfirm = deepLinkHighlightConfirm
         navController.navigate("detail/$id")
         onDeepLinkConsumed()
     }
 
-    // 安静确认：底部导航 4 Tab（首页 / 日历 / 统计 / 设置）；AI 从首页入口进入，不是 Tab
+    // 安静确认：底部导航 4 Tab（首页 / 日历 / 统计 / 设置）；AI 从首页入口进入，不是 Tab。
+    // chat / ai_settings / detail / create 必须全屏，否则 SoftTabDock 会盖住 AI 输入栏。
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val tabRoutes = listOf("home", "calendar", "stats", "settings")
-    val showBottomBar = currentRoute in tabRoutes
+    val showBottomBar = when (currentRoute) {
+        "home", "calendar", "stats", "settings" -> true
+        else -> false
+    }
 
     fun goTab(route: String) {
         navController.navigate(route) {
@@ -452,7 +458,8 @@ fun NavGraph(
 
             ReminderDetailScreen(
                 viewModel = viewModel,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                highlightConfirm = highlightConfirm
             )
         }
     }

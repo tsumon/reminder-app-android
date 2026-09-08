@@ -28,6 +28,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reminderapp.data.entity.ReminderEntity
@@ -174,6 +175,34 @@ fun CreateReminderScreen(
         return cal.timeInMillis
     }
 
+    fun applyTemplate(tpl: com.reminderapp.service.ReminderTemplate) {
+        title = tpl.title
+        note = tpl.note
+        holidayAware = tpl.holidayAware
+        when (tpl.kind) {
+            com.reminderapp.service.ReminderTemplate.Kind.CYCLE -> {
+                isDateMode = false
+                isRuleMode = false
+                selectedCycle = if (tpl.cycle == com.reminderapp.service.ReminderTemplate.Cycle.YEARLY) {
+                    Cycle.YEARLY
+                } else {
+                    Cycle.MONTHLY
+                }
+            }
+            com.reminderapp.service.ReminderTemplate.Kind.DATE -> {
+                isDateMode = true
+                isRuleMode = false
+                selectedDateType = if (tpl.dateType == com.reminderapp.service.ReminderTemplate.DateKind.LUNAR_BIRTHDAY) {
+                    DateReminderType.LUNAR_BIRTHDAY
+                } else {
+                    DateReminderType.SOLAR_BIRTHDAY
+                }
+                selectedCycle = Cycle.YEARLY
+                advanceDays = tpl.advanceDays
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -311,6 +340,26 @@ fun CreateReminderScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // === 模板 ===
+            Text(zh("从模板开始"), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                com.reminderapp.service.ReminderTemplate.all.forEach { tpl ->
+                    AssistChip(
+                        onClick = { applyTemplate(tpl) },
+                        label = { Text(tpl.title) },
+                        modifier = Modifier.testTag("reminder-template-${tpl.id}")
+                    )
+                }
+            }
+            Text(
+                zh("一键填入标题和周期，保存前仍可改。"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
             // === 自然语言快速创建 ===
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -780,7 +829,7 @@ fun CreateReminderScreen(
                 // 提前提醒天数
                 Text(zh("提前提醒"), style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(1, 3, 7, 14).forEach { days ->
+                    listOf(1, 3, 7, 14, 30).forEach { days ->
                         FilterChip(
                             selected = advanceDays == days,
                             onClick = { advanceDays = days },

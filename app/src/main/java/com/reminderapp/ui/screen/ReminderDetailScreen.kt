@@ -2,6 +2,7 @@ package com.reminderapp.ui.screen
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -48,7 +49,8 @@ import com.reminderapp.i18n.zhf
 @Composable
 fun ReminderDetailScreen(
     viewModel: ReminderDetailViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    highlightConfirm: Boolean = false
 ) {
     val context = LocalContext.current
     val reminder by viewModel.reminder.collectAsState()
@@ -175,17 +177,11 @@ fun ReminderDetailScreen(
                     val context = LocalContext.current
                     // 批次3 功能6: 分享单条提醒卡片（导出 JSON 经系统分享面板发出）
                     IconButton(onClick = {
-                        val json = com.reminderapp.service.BackupService.exportSingle(currentReminder)
-                        val sendIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(android.content.Intent.EXTRA_TITLE, currentReminder.title)
-                            putExtra(android.content.Intent.EXTRA_TEXT, json)
-                        }
-                        context.startActivity(android.content.Intent.createChooser(sendIntent, zh("分享提醒卡片")))
+                        com.reminderapp.service.ReminderShare.share(context, currentReminder)
                     }) {
                         Icon(
                             Icons.Default.Share,
-                            contentDescription = zh("分享提醒卡片"),
+                            contentDescription = zh("分享提醒"),
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -281,7 +277,15 @@ fun ReminderDetailScreen(
             ) {
                 Button(
                     onClick = { viewModel.confirm() },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .then(
+                            if (highlightConfirm) Modifier.border(
+                                3.dp,
+                                MaterialTheme.colorScheme.primary,
+                                RoundedCornerShape(12.dp)
+                            ) else Modifier
+                        ),
                     colors = ButtonDefaults.buttonColors(containerColor = StatusCompleted)
                 ) {
                     Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))

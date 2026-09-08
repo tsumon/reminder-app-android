@@ -85,6 +85,16 @@ class AISettings(context: Context) {
         get() = prefs.getString("fallback_model", "deepseek-chat") ?: "deepseek-chat"
         set(value) = prefs.edit().putString("fallback_model", value).apply()
 
+    /** 上次从列表选中的主模型 id（未点保存也保留）。 */
+    var lastSelectedModel: String
+        get() = prefs.getString("last_selected_model", "") ?: ""
+        set(value) = prefs.edit().putString("last_selected_model", value).apply()
+
+    /** 上次从列表选中的备用模型 id。 */
+    var lastSelectedFallbackModel: String
+        get() = prefs.getString("last_selected_fallback_model", "") ?: ""
+        set(value) = prefs.edit().putString("last_selected_fallback_model", value).apply()
+
     /** 主配置是否可用：本地模型（Ollama）无需 key；API 模式需 key */
     val isConfigured: Boolean
         get() = apiEndpoint.isNotBlank() && (isLocal || apiKey.isNotBlank())
