@@ -289,7 +289,10 @@ fun AIChatScreen(
             )
         },
         bottomBar = {
-            Surface(tonalElevation = 2.dp) {
+            Surface(
+                tonalElevation = 2.dp,
+                modifier = Modifier.navigationBarsPadding()
+            ) {
                 Column {
                     AnimatedVisibility(visible = isListening) {
                         LinearProgressIndicator(modifier = Modifier.fillMaxWidth())

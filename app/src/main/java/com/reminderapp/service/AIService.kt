@@ -165,6 +165,74 @@ class AIService {
         apiKey: String
     ): String = send(model, messages, endpoint, apiKey, useTools = false, onStream = null).content.orEmpty().trim()
 
+    /**
+     * OpenAI 兼容 `GET {base}/models`。base 已含 `/v1` 时只拼 `/models`，不重复 `/v1`。
+     * 无 API Key（本地 Ollama）时省略 Authorization。
+     */
+    suspend fun fetchModels(base: String, key: String): List<String> = withContext(Dispatchers.IO) {
+        val url = modelsUrl(base) ?: throw Exception(zh("请先填写接口地址"))
+        val builder = Request.Builder()
+            .url(url)
+            .get()
+            .header("Accept", "application/json")
+        if (key.isNotBlank()) builder.header("Authorization", "Bearer $key")
+        client.newCall(builder.build()).execute().use { response ->
+            val body = response.body?.string() ?: throw Exception(zh("空响应"))
+            if (!response.isSuccessful) {
+                throw Exception(formatHttpError(response.code, body))
+            }
+            val ids = try {
+                parseModelIds(body)
+            } catch (_: Exception) {
+                val summary = summarizeBody(body)
+                throw Exception(
+                    if (summary.isEmpty()) zh("响应格式错误")
+                    else "HTTP ${response.code}: ${zh("响应格式错误")} $summary"
+                )
+            }
+            if (ids.isEmpty()) throw Exception(zh("未返回模型列表"))
+            ids
+        }
+    }
+
+    companion object {
+        /** `{base}/models`；去掉尾斜杠。base 已是 `.../v1` 时得到 `.../v1/models`。 */
+        fun modelsUrl(base: String): String? {
+            var s = base.trim()
+            while (s.endsWith("/")) s = s.dropLast(1)
+            if (s.isEmpty()) return null
+            return "$s/models"
+        }
+
+        fun parseModelIds(json: String): List<String> {
+            val parsed = Gson().fromJson(json, OpenAIModelsResponse::class.java) ?: return emptyList()
+            val ids = LinkedHashSet<String>()
+            parsed.data.orEmpty().forEach { item ->
+                val id = item.id?.trim().orEmpty()
+                if (id.isNotEmpty()) ids.add(id)
+            }
+            return ids.toList()
+        }
+
+        /** 原始 HTTP 状态 + body 摘要（CPA / 兼容端点 401/404 排查）。 */
+        fun formatHttpError(status: Int, body: String): String {
+            val summary = summarizeBody(body)
+            return if (summary.isEmpty()) "HTTP $status" else "HTTP $status: $summary"
+        }
+
+        fun summarizeBody(body: String, limit: Int = 240): String {
+            val collapsed = body.replace("\r", " ").replace("\n", " ")
+                .replace(Regex("\\s+"), " ").trim()
+            return if (collapsed.length <= limit) collapsed else collapsed.take(limit)
+        }
+
+        fun orderedModels(ids: List<String>, lastSelected: String?): List<String> {
+            val last = lastSelected?.trim().orEmpty()
+            if (last.isEmpty() || last !in ids) return ids
+            return listOf(last) + ids.filter { it != last }
+        }
+    }
+
     // ── 非流式请求 ──
 
     private suspend fun send(
@@ -299,6 +367,14 @@ class AIService {
             .apply { if (apiKey.isNotBlank()) header("Authorization", "Bearer $apiKey") }
             .build()
     }
+
+    data class OpenAIModelsResponse(
+        val data: List<OpenAIModelItem>? = null
+    )
+
+    data class OpenAIModelItem(
+        val id: String? = null
+    )
 
     private fun parseResponse(responseBody: String): ChatResult {
         val result = gson.fromJson(responseBody, ChatResponse::class.java)

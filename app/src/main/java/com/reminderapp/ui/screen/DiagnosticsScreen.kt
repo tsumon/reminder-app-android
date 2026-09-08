@@ -121,6 +121,58 @@ fun DiagnosticsScreen(
 
             item {
                 SettingsCard {
+                    Text(zh("调试：模拟通知动作"), style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    val target = upcoming.firstOrNull()
+                    if (target == null) {
+                        Text(zh("没有可模拟的未完成提醒"), style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        Text(
+                            zh("走与通知按钮相同的 Broadcast → ReminderEngine.confirm / snooze。真机通知仍需在系统通知里点。"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                val intent = android.content.Intent(context, com.reminderapp.receiver.NotificationActionReceiver::class.java).apply {
+                                    action = com.reminderapp.service.NotificationManager.ACTION_CONFIRM
+                                    putExtra(com.reminderapp.service.NotificationManager.EXTRA_REMINDER_ID, target.id)
+                                }
+                                context.sendBroadcast(intent)
+                                android.widget.Toast.makeText(
+                                    context,
+                                    zhf("已模拟确认：%s", target.title),
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                                refreshKey++
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(zhf("模拟确认：%s", target.title)) }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                val intent = android.content.Intent(context, com.reminderapp.receiver.NotificationActionReceiver::class.java).apply {
+                                    action = com.reminderapp.service.NotificationManager.ACTION_SNOOZE
+                                    putExtra(com.reminderapp.service.NotificationManager.EXTRA_REMINDER_ID, target.id)
+                                }
+                                context.sendBroadcast(intent)
+                                android.widget.Toast.makeText(
+                                    context,
+                                    zhf("已模拟稍后：%s", target.title),
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                                refreshKey++
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(zhf("模拟稍后：%s", target.title)) }
+                    }
+                }
+            }
+
+            item {
+                SettingsCard {
                     Text(zh("最近触发"), style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                     Spacer(modifier = Modifier.height(8.dp))
                     if (upcoming.isEmpty()) {

@@ -35,6 +35,7 @@ class MainActivity : ComponentActivity() {
 
     // 批次2 功能1: 通知点击直达确认面板 —— 冷启动(onCreate)与热启动(onNewIntent)统一经由该状态下发
     private var deepLinkReminderId by mutableStateOf<Long?>(null)
+    private var deepLinkHighlightConfirm by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,13 +88,18 @@ class MainActivity : ComponentActivity() {
                         aiService = app.aiService,
                         aiSettings = app.aiSettings,
                         deepLinkReminderId = deepLinkReminderId,
+                        deepLinkHighlightConfirm = deepLinkHighlightConfirm,
                         onDeepLinkConsumed = {
                             deepLinkReminderId = null
+                            deepLinkHighlightConfirm = false
                             // v2.0.21 G6: 同时清掉 intent 里的 extra——否则配置变更（旋转屏幕、
                             // 深色模式切换）导致 Activity 重建时 onCreate 会重读同一个 intent，
                             // 又跳一次详情页
                             intent?.removeExtra(
                                 com.reminderapp.service.NotificationManager.EXTRA_REMINDER_ID
+                            )
+                            intent?.removeExtra(
+                                com.reminderapp.service.NotificationManager.EXTRA_HIGHLIGHT_CONFIRM
                             )
                         }
                     )
@@ -115,6 +121,10 @@ class MainActivity : ComponentActivity() {
             0L
         ) ?: 0L
         deepLinkReminderId = id.takeIf { it > 0L }
+        deepLinkHighlightConfirm = intent?.getBooleanExtra(
+            com.reminderapp.service.NotificationManager.EXTRA_HIGHLIGHT_CONFIRM,
+            false
+        ) == true
     }
 
     private fun requestNotificationPermissionIfNeeded() {

@@ -28,6 +28,7 @@ class NotificationManager(private val context: Context) {
 
         const val EXTRA_REMINDER_ID = "reminder_id"
         const val EXTRA_NOTIFICATION_ID = "notification_id"
+        const val EXTRA_HIGHLIGHT_CONFIRM = "highlight_confirm"
         // I7: 关键提醒全屏弹窗意图专属标记——MainActivity 据此标记锁屏可见，避免锁屏下全屏 Intent 被系统丢弃
         const val EXTRA_CRITICAL_FULLSCREEN = "critical_fullscreen"
     }
