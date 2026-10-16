@@ -342,7 +342,9 @@ fun CreateReminderScreen(
                                 isCritical=policy.reminderStyle=="important",retryIntervalsMinutes=policy.retryIntervalsMinutes,
                                 maxReminderAttempts=policy.maxReminderAttempts,quietStartMinute=policy.quietStartMinute,quietEndMinute=policy.quietEndMinute)
                             onSave(com.reminderapp.service.ReminderEditorMapper.map(initial,proposed,
-                                scheduleValues()!=originalSchedule,System.currentTimeMillis()))
+                                scheduleValues()!=originalSchedule,System.currentTimeMillis()) { reminder, from ->
+                                com.reminderapp.service.ReminderEngine.calculateNextTrigger(reminder,context,from)
+                            })
                             nlExtraLunar?.let { extra -> onSave(extra); nlExtraLunar = null }
                         },
                         enabled = title.isNotBlank() && !saving && policyValid

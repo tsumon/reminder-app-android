@@ -11,9 +11,14 @@ object ReminderEditorMapper {
         return r.copy(reminderHour=anchor.get(Calendar.HOUR_OF_DAY),reminderMinute=anchor.get(Calendar.MINUTE),
             targetDay=if(r.cycle=="monthly") anchor.get(Calendar.DAY_OF_MONTH) else r.targetDay)
     }
-    fun map(original: ReminderEntity?, proposed: ReminderEntity, scheduleChanged: Boolean, now: Long): ReminderEntity {
+    // The form supplies the context-aware resolver for new occurrences; existing runtime
+    // state returns above schedule resolution so metadata edits never move an occurrence.
+    fun map(
+        original: ReminderEntity?, proposed: ReminderEntity, scheduleChanged: Boolean, now: Long,
+        resolveNextTrigger: (ReminderEntity, Long) -> Long = { r, from -> ReminderEngine.calculateNextTrigger(r, from) }
+    ): ReminderEntity {
         val old=original?.takeIf { it.id>0 }
-        if(old==null) return proposed.copy(nextTriggerAt=if(proposed.kind=="cycle") proposed.firstTriggerAt else ReminderEngine.calculateNextTrigger(proposed,now))
+        if(old==null) return proposed.copy(nextTriggerAt=if(proposed.kind=="cycle") proposed.firstTriggerAt else resolveNextTrigger(proposed,now))
         val edited=old.copy(title=proposed.title,note=proposed.note,priority=proposed.priority,
             recurrenceMode=proposed.recurrenceMode,reminderStyle=proposed.reminderStyle,isCritical=proposed.isCritical,
             retryIntervalsMinutes=proposed.retryIntervalsMinutes,maxReminderAttempts=proposed.maxReminderAttempts,
@@ -26,7 +31,7 @@ object ReminderEditorMapper {
             rulePeriod=proposed.rulePeriod,ruleWeek=proposed.ruleWeek,ruleWeekday=proposed.ruleWeekday,
             weeklyWeekday=proposed.weeklyWeekday,reminderHour=proposed.reminderHour,reminderMinute=proposed.reminderMinute,
             firstTriggerAt=proposed.firstTriggerAt,status="pending",retryCount=0,holidayAdjustNote=null)
-        val next=if(configured.kind=="cycle" && configured.firstTriggerAt>now && configured.recurrenceMode!="afterCompletion") configured.firstTriggerAt else ReminderEngine.calculateNextTrigger(configured,now)
+        val next=if(configured.kind=="cycle" && configured.firstTriggerAt>now && configured.recurrenceMode!="afterCompletion") configured.firstTriggerAt else resolveNextTrigger(configured,now)
         return configured.copy(nextTriggerAt=next)
     }
 }
