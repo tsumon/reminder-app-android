@@ -50,7 +50,8 @@ import com.reminderapp.i18n.zhf
 fun ReminderDetailScreen(
     viewModel: ReminderDetailViewModel,
     onBack: () -> Unit,
-    highlightConfirm: Boolean = false
+    highlightConfirm: Boolean = false,
+    onEdit: (ReminderEntity) -> Unit = {}
 ) {
     val context = LocalContext.current
     val reminder by viewModel.reminder.collectAsState()
@@ -154,8 +155,8 @@ fun ReminderDetailScreen(
         // v2.1.1: 从 QuietHoursStore 恢复勿扰时段
         val r = viewModel.reminder.value
         if (r != null) {
-            val start = com.reminderapp.service.QuietHoursStore.startMinute(context, r.id)
-            val end = com.reminderapp.service.QuietHoursStore.endMinute(context, r.id)
+            val start = r.quietStartMinute ?: com.reminderapp.service.QuietHoursStore.startMinute(context, r.id)
+            val end = r.quietEndMinute ?: com.reminderapp.service.QuietHoursStore.endMinute(context, r.id)
             if (start != null && end != null) {
                 quietHoursEnabled = true
                 quietStartMinute = start
@@ -204,6 +205,12 @@ fun ReminderDetailScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            Row {
+                TextButton(onClick={onEdit(currentReminder)}) { Text(zh("编辑提醒")) }
+                if(!(currentReminder.kind=="cycle" && currentReminder.cycle=="once") && currentReminder.status!="confirmed") TextButton(onClick={viewModel.skip()}) { Text(zh("跳过本次")) }
+                val undo by viewModel.undo.collectAsState()
+                if(undo!=null) TextButton(onClick={viewModel.undoCompletion()}) { Text(zh("撤销完成")) }
+            }
             // 状态大卡片（v1.9.8 设计图风格：状态色渐变 + 大图标 + 阴影，入场动画）
             AnimatedVisibility(
                 visible = appeared,

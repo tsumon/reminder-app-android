@@ -1064,13 +1064,7 @@ private suspend fun handleConfirm(args: Map<String, Any?>, database: AppDatabase
     if (keyword.isEmpty()) return zh("请指定要确认的提醒标题（如：确认「交房租」）。")
     val list = database.reminderDao().getAllSync()
     val match = list.find { it.title.lowercase().contains(keyword) } ?: return zhf("未找到包含「%s」的提醒", keyword)
-    val updated = ReminderEngine.confirm(match)
-    database.reminderDao().update(updated)
-    // v1.9.6 fix: 确认后取消已显示的通知，避免通知栏残留可反复点击
-    notificationMgr.cancelReminderNotifications(match.id)
-    scheduler.schedule(updated)
-    com.reminderapp.service.SyncStore.touchLocalChange()
-    com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+    com.reminderapp.service.ReminderActions(com.reminderapp.ReminderApp.instance).apply(match,com.reminderapp.service.ReminderActions.Action.COMPLETE) ?: return zh("提醒已有新变更，请重试")
     return zhf("已确认「%s」，下次提醒时间已更新。", match.title)
 }
 
@@ -1079,11 +1073,7 @@ private suspend fun handleSnooze(args: Map<String, Any?>, database: AppDatabase,
     if (keyword.isEmpty()) return zh("请指定要推迟的提醒标题（如：推迟「交房租」）。")
     val list = database.reminderDao().getAllSync()
     val match = list.find { it.title.lowercase().contains(keyword) } ?: return zhf("未找到包含「%s」的提醒", keyword)
-    val updated = ReminderEngine.snooze(match)
-    database.reminderDao().update(updated)
-    scheduler.schedule(updated)
-    com.reminderapp.service.SyncStore.touchLocalChange()
-    com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+    com.reminderapp.service.ReminderActions(com.reminderapp.ReminderApp.instance).apply(match,com.reminderapp.service.ReminderActions.Action.SNOOZE) ?: return zh("提醒已有新变更，请重试")
     return zhf("已推迟「%s」，15 分钟后再次提醒。", match.title)
 }
 

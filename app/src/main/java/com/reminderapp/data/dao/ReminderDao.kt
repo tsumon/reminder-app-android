@@ -34,6 +34,9 @@ interface ReminderDao {
     @Query("SELECT * FROM reminders WHERE is_active = 1 ORDER BY CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END, next_trigger_at ASC")
     suspend fun getAllSync(): List<ReminderEntity>
 
+    @Query("SELECT * FROM reminders ORDER BY id")
+    suspend fun getAllIncludingInactive(): List<ReminderEntity>
+
     /** 同步查询（小组件/后台线程使用，不挂起） */
     @Query("SELECT * FROM reminders WHERE is_active = 1 ORDER BY CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END, next_trigger_at ASC")
     fun getAllSyncBlocking(): List<ReminderEntity>

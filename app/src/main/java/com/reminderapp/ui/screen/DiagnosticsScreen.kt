@@ -17,6 +17,7 @@ import com.reminderapp.data.database.AppDatabase
 import com.reminderapp.i18n.zh
 import com.reminderapp.i18n.zhf
 import com.reminderapp.ui.theme.Tokens
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -32,6 +33,8 @@ fun DiagnosticsScreen(
 ) {
     val context = LocalContext.current
     val db = AppDatabase.getInstance(context)
+    val scope=rememberCoroutineScope()
+    var testMessage by remember { mutableStateOf("") }
     val dateFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
 
     var refreshKey by remember { mutableStateOf(0) }
@@ -42,7 +45,7 @@ fun DiagnosticsScreen(
     var upcoming by remember { mutableStateOf<List<com.reminderapp.data.entity.ReminderEntity>>(emptyList()) }
 
     LaunchedEffect(refreshKey) {
-        val all = db.reminderDao().getAllSyncBlocking()
+        val all = db.reminderDao().getAllSync()
         total = all.size
         unconfirmed = all.count { it.status != "confirmed" }
         disabled = all.count { !it.isActive }
@@ -80,6 +83,35 @@ fun DiagnosticsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item {
+                SettingsCard {
+                    val exact=com.reminderapp.service.ReminderScheduler(context).canScheduleExact()
+                    Text(zh("提醒能力自检"),style=MaterialTheme.typography.titleMedium)
+                    Text(if(exact) zh("精确闹钟已允许") else zh("精确闹钟未允许：目前使用非精确排期，可能延迟"))
+                    Text(zh("普通通知受系统权限、通知渠道、静音及勿扰影响。重要提醒也需要相应系统授权。"),style=MaterialTheme.typography.bodySmall)
+                    TextButton(onClick={
+                        val intent=if(android.os.Build.VERSION.SDK_INT>=31) android.content.Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,android.net.Uri.parse("package:${context.packageName}")) else android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,android.net.Uri.parse("package:${context.packageName}"))
+                        context.startActivity(intent)
+                    }) { Text(zh("设置精确闹钟权限")) }
+                    TextButton(onClick={ context.startActivity(android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE,context.packageName)) }) { Text(zh("设置通知权限与渠道")) }
+                    Button(onClick={scope.launch {
+                        val at=System.currentTimeMillis()+60_000
+                        val r=com.reminderapp.data.entity.ReminderEntity(title=zh("提醒自检（1 分钟）"),cycle="once",firstTriggerAt=at,nextTriggerAt=at,reminderStyle="gentle")
+                        val id=db.reminderDao().insert(r)
+                        com.reminderapp.service.ReminderScheduler(context).schedule(r.copy(id=id))
+                        com.reminderapp.service.SyncStore.touchLocalChange()
+                        testMessage=zh("测试提醒已安排，请锁屏等待约 1 分钟；可在首页完成或删除。")
+                    }}) { Text(zh("创建测试提醒")) }
+                    if(testMessage.isNotEmpty()) Text(testMessage)
+                }
+            }
+            item {
+                SettingsCard {
+                    Text(zh("隐私与数据"),style=MaterialTheme.typography.titleMedium)
+                    Text(zh("提醒与完成记录保存在本机。使用 AI 时，对话及相关提醒内容会发往你配置的模型服务地址。启用 WebDAV 后，提醒备份上传至你配置的服务器。本地备份也可能出现在下载目录，请妥善保管。"))
+                    Text(zh("同步冲突会停止并等待你选择。WebDAV 快照保存在应用私有目录；同步不会传播删除。"))
+                }
+            }
             item {
                 SettingsCard {
                     Text(zh("通知"), style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
@@ -139,6 +171,7 @@ fun DiagnosticsScreen(
                                 val intent = android.content.Intent(context, com.reminderapp.receiver.NotificationActionReceiver::class.java).apply {
                                     action = com.reminderapp.service.NotificationManager.ACTION_CONFIRM
                                     putExtra(com.reminderapp.service.NotificationManager.EXTRA_REMINDER_ID, target.id)
+                                    putExtra("expected_at",target.nextTriggerAt);putExtra("revision",target.revision);putExtra("expected_state",target.toString())
                                 }
                                 context.sendBroadcast(intent)
                                 android.widget.Toast.makeText(
@@ -156,6 +189,7 @@ fun DiagnosticsScreen(
                                 val intent = android.content.Intent(context, com.reminderapp.receiver.NotificationActionReceiver::class.java).apply {
                                     action = com.reminderapp.service.NotificationManager.ACTION_SNOOZE
                                     putExtra(com.reminderapp.service.NotificationManager.EXTRA_REMINDER_ID, target.id)
+                                    putExtra("expected_at",target.nextTriggerAt);putExtra("revision",target.revision);putExtra("expected_state",target.toString())
                                 }
                                 context.sendBroadcast(intent)
                                 android.widget.Toast.makeText(

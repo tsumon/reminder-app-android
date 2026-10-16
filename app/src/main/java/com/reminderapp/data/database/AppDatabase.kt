@@ -13,7 +13,7 @@ import com.reminderapp.data.entity.ReminderRecordEntity
 
 @Database(
     entities = [ReminderEntity::class, ReminderRecordEntity::class],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -90,6 +90,20 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE reminders ADD COLUMN recurrence_mode TEXT NOT NULL DEFAULT 'fixed'")
+                db.execSQL("ALTER TABLE reminders ADD COLUMN reminder_style TEXT NOT NULL DEFAULT 'persistent'")
+                db.execSQL("ALTER TABLE reminders ADD COLUMN retry_intervals_minutes TEXT NOT NULL DEFAULT '60,240,720,1440'")
+                db.execSQL("ALTER TABLE reminders ADD COLUMN max_reminder_attempts INTEGER NOT NULL DEFAULT 5")
+                db.execSQL("ALTER TABLE reminders ADD COLUMN quiet_start_minute INTEGER")
+                db.execSQL("ALTER TABLE reminders ADD COLUMN quiet_end_minute INTEGER")
+                db.execSQL("ALTER TABLE reminders ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("UPDATE reminders SET reminder_style = 'important' WHERE is_critical = 1")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_reminders_sync_id ON reminders(sync_id) WHERE sync_id IS NOT NULL")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -100,7 +114,7 @@ abstract class AppDatabase : RoomDatabase() {
                     // v1.9.6 fix: 原来靠 fallbackToDestructiveMigration 兜底，
                     // 老用户(v1.1/v1.2/v1.5)升级会整库 DROP 重建 → 全部提醒清空。
                     // 补 Migration 后 schema 不匹配时明确报错，绝不静默清库。
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .build()
                     .also { INSTANCE = it }
             }

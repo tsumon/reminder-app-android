@@ -87,9 +87,11 @@ object SyncStore {
         get() = !hasSyncedOnce && lastSyncVersion <= 0L
 
     /** 标记本地数据发生了变更（墙钟时间戳 + 单调版本同时推进） */
-    fun touchLocalChange() {
+    @Synchronized
+    fun touchLocalChange(): Long {
         lastLocalChange = System.currentTimeMillis()
         localVersion = localVersion + 1
+        return localVersion
     }
 
     var lastSyncAt: Long

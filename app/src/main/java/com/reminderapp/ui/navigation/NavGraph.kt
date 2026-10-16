@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.room.withTransaction
 import androidx.compose.ui.unit.dp
 import com.reminderapp.ui.theme.SoftFab
 import com.reminderapp.ui.theme.SoftTabDock
@@ -60,6 +61,15 @@ fun NavGraph(
     deepLinkHighlightConfirm: Boolean = false,
     onDeepLinkConsumed: () -> Unit = {}
 ) {
+    val pendingSyncConflict by com.reminderapp.service.WebDavSync.pendingConflict.collectAsState()
+    if(pendingSyncConflict!=null && navController.currentDestination?.route!="sync_settings") {
+        AlertDialog(onDismissRequest={com.reminderapp.service.WebDavSync.pendingConflict.value=null},title={Text(zh("同步冲突"))},
+            text={Text(zh("双端都有修改，同步已停止。请到同步设置选择要保留的数据。"))},
+            confirmButton={TextButton(onClick={navController.navigate("sync_settings");com.reminderapp.service.WebDavSync.pendingConflict.value=null}) { Text(zh("选择数据")) }},
+            dismissButton={TextButton(onClick={com.reminderapp.service.WebDavSync.pendingConflict.value=null}) { Text(zh("稍后处理")) }})
+    }
+    var createdUndo by remember { mutableStateOf<Pair<com.reminderapp.data.entity.ReminderEntity,Long>?>(null) }
+    var draft by remember { mutableStateOf<com.reminderapp.data.entity.ReminderEntity?>(null) }
     var highlightConfirm by remember { mutableStateOf(false) }
     // 批次2 功能1: 通知点击直达确认面板 —— 冷启动(onCreate)与热启动(onNewIntent)都走这里。
     // 每次 deepLinkReminderId 变化（首次 set 或 onNewIntent 更新）导航一次，
@@ -146,7 +156,7 @@ fun NavGraph(
                                 id = 0,
                                 // I10: 导入时重算下次触发时间（对齐 WebDAV 合并），
                                 //     避免备份里的过期 nextTriggerAt 导致立即触发或永不触发
-                                nextTriggerAt = com.reminderapp.service.ReminderEngine.calculateNextTrigger(r, com.reminderapp.ReminderApp.instance)
+                                nextTriggerAt = r.nextTriggerAt
                             )
                             // 阶段2: 按 syncId 匹配——同一条提醒（用户编辑过、指纹已变）更新现有行，
                             // 本地自增 id 不变，通知/小组件/操作记录引用不失效
@@ -209,7 +219,15 @@ fun NavGraph(
 
             HomeScreen(
                 viewModel = viewModel,
-                onCreateReminder = { navController.navigate("create") },
+                onCreateReminder = { draft=null;navController.navigate("create") },
+                onQuickCreate = { draft=it;navController.navigate("create") },
+                canUndoCreate = createdUndo!=null,
+                onUndoCreate = { scope.launch {
+                    val token=createdUndo ?: return@launch
+                    val ok=com.reminderapp.service.ReminderActions(context).undoCreation(token.first,token.second)
+                    createdUndo=null
+                    android.widget.Toast.makeText(context,if(ok) zh("已撤销创建") else zh("提醒已有新变更，无法撤销"),android.widget.Toast.LENGTH_LONG).show()
+                } },
                 onReminderClick = { id -> navController.navigate("detail/$id") },
                 onAIChat = { navController.navigate("chat") },
                 onDeleteReminder = { id ->
@@ -248,6 +266,7 @@ fun NavGraph(
                             // v2.0.16: 双端都改过 → 提示已按版本覆盖
                             is com.reminderapp.service.WebDavSync.SyncResult.Success ->
                                 if (result.conflict) zh("已用最新版本覆盖（检测到双端都有修改，未合并）") else zh("同步完成")
+                            is com.reminderapp.service.WebDavSync.SyncResult.Conflict -> { navController.navigate("sync_settings"); zh("检测到同步冲突，请选择保留的数据") }
                             is com.reminderapp.service.WebDavSync.SyncResult.Error -> result.message
                         }
                         android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
@@ -323,19 +342,7 @@ fun NavGraph(
                 onReminderClick = { id -> navController.navigate("detail/$id") },
                 onConfirm = { reminder ->
                     calendarScope.launch {
-                        val updated = ReminderEngine.confirm(reminder)
-                        database.reminderDao().update(updated)
-                        database.reminderRecordDao().insert(
-                            com.reminderapp.data.entity.ReminderRecordEntity(
-                                reminderId = reminder.id,
-                                action = com.reminderapp.data.entity.ReminderRecordEntity.ACTION_CONFIRMED
-                            )
-                        )
-                        notificationMgr.cancelReminderNotifications(reminder.id)
-                        if (!(updated.kind == "cycle" && updated.cycle == "once")) {
-                            scheduler.schedule(updated)
-                        }
-                        com.reminderapp.service.SyncStore.touchLocalChange()
+                        com.reminderapp.service.ReminderActions(com.reminderapp.ReminderApp.instance).apply(reminder,com.reminderapp.service.ReminderActions.Action.COMPLETE)
                     }
                 },
                 streak = calendarPlayful?.first,
@@ -414,6 +421,7 @@ fun NavGraph(
             val scope = rememberCoroutineScope()
             val context = androidx.compose.ui.platform.LocalContext.current
             CreateReminderScreen(
+                initial = draft,
                 onSave = { entity ->
                     scope.launch {
                         // P0 修复：手动创建路径之前直接 insert + schedule，
@@ -426,12 +434,25 @@ fun NavGraph(
                         } else {
                             entity.copy(nextTriggerAt = ReminderEngine.calculateNextTrigger(entity, com.reminderapp.ReminderApp.instance))
                         }
-                        val id = database.reminderDao().insert(finalEntity)
+                        val id = if(finalEntity.id > 0) {
+                            val updated=database.withTransaction {
+                                val current=database.reminderDao().getById(finalEntity.id)
+                                if(current != draft) false else { database.reminderDao().update(finalEntity);true }
+                            }
+                            if(!updated) {
+                                android.widget.Toast.makeText(context,zh("提醒已有新变更，请重新打开编辑"),android.widget.Toast.LENGTH_LONG).show()
+                                navController.popBackStack();return@launch
+                            }
+                            notificationMgr.cancelReminderNotifications(finalEntity.id)
+                            finalEntity.id
+                        } else database.reminderDao().insert(finalEntity)
                         val saved = finalEntity.copy(id = id)
+                        com.reminderapp.service.QuietHoursStore.set(context,id,saved.quietStartMinute,saved.quietEndMinute)
                         scheduler.schedule(saved)
                         com.reminderapp.service.TelemetryService.logEvent("reminder.create", mapOf("kind" to entity.kind))
-                        com.reminderapp.service.SyncStore.touchLocalChange()
+                        val savedVersion=com.reminderapp.service.SyncStore.touchLocalChange()
                         com.reminderapp.receiver.ReminderWidgetProvider.refresh(context)
+                        if(entity.id==0L) createdUndo=saved to savedVersion
                         navController.popBackStack()
                     }
                 },
@@ -459,7 +480,8 @@ fun NavGraph(
             ReminderDetailScreen(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() },
-                highlightConfirm = highlightConfirm
+                highlightConfirm = highlightConfirm,
+                onEdit = { draft=it;navController.navigate("create") }
             )
         }
     }
@@ -472,7 +494,7 @@ fun NavGraph(
                 // Dock fill covers navigationBars; icon row pads once inside SoftTabDock.
                 // Scaffold contentWindowInsets = statusBars only — do not add nav padding here.
                 if (currentRoute == "home") {
-                    SoftFab(onClick = { navController.navigate("create") })
+                    SoftFab(onClick = { draft=null;navController.navigate("create") })
                 }
                 SoftTabDock(currentRoute = currentRoute, onSelect = { goTab(it) })
             }

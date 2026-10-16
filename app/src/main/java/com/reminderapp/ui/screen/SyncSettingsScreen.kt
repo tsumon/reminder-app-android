@@ -28,6 +28,7 @@ fun SyncSettingsScreen(
     var username by remember { mutableStateOf(SyncStore.username) }
     var password by remember { mutableStateOf(SyncStore.password) }
     var autoSync by remember { mutableStateOf(SyncStore.autoSync) }
+    var conflict by remember { mutableStateOf<WebDavSync.SyncResult.Conflict?>(null) }
     var syncing by remember { mutableStateOf(false) }
     var testing by remember { mutableStateOf(false) }
     var resultMsg by remember { mutableStateOf("") }
@@ -56,7 +57,7 @@ fun SyncSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                zh("通过 WebDAV 同步提醒数据（支持甲骨文 VPS 自建、坚果云等）。同步以最后修改时间为准，较新的覆盖较旧的。"),
+                zh("通过 WebDAV 同步提醒数据。双端都有修改时请明确选择。选择前自动保存本地快照；远端缺少的本地提醒继续保留。旧协议无法同步删除。"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -122,6 +123,7 @@ fun SyncSettingsScreen(
                                 resultMsg = zh("连接成功 ✓ 账号与路径可用，可以开始同步。")
                                 resultIsError = false
                             }
+                            is WebDavSync.SyncResult.Conflict -> { conflict=result;resultMsg=zh("双端都有修改，同步已停止，请选择保留本地或远程。") }
                             is WebDavSync.SyncResult.Error -> {
                                 resultMsg = result.message
                                 resultIsError = true
@@ -152,6 +154,7 @@ fun SyncSettingsScreen(
                                 resultMsg = if (result.conflict) zh("已用最新版本覆盖（检测到双端都有修改，未合并）") else zh("同步完成")
                                 resultIsError = false
                             }
+                            is WebDavSync.SyncResult.Conflict -> { conflict=result;resultMsg=zh("双端都有修改，同步已停止，请选择保留本地或远程。") }
                             is WebDavSync.SyncResult.Error -> {
                                 resultMsg = result.message
                                 resultIsError = true
@@ -165,6 +168,21 @@ fun SyncSettingsScreen(
                 Text(if (syncing) zh("同步中...") else zh("立即同步"))
             }
 
+            conflict?.let { pending ->
+                Text(zh("同步冲突：选择后会先保存本地快照。远程选择合并同 ID 内容，本地独有提醒仍保留。"))
+                listOf(true to "保留本地并上传", false to "使用远程并合并").forEach { (useLocal,label) ->
+                    OutlinedButton(enabled=!syncing,onClick={ scope.launch {
+                        syncing=true
+                        when(val resolved=WebDavSync.syncNow(ReminderApp_instance(),WebDavSync.Resolution(pending,useLocal))) {
+                            is WebDavSync.SyncResult.Success -> { conflict=null;resultMsg=zh("同步完成，本地快照已保留") }
+                            is WebDavSync.SyncResult.Error -> { conflict=null;resultMsg=resolved.message }
+                            is WebDavSync.SyncResult.Conflict -> conflict=resolved
+                        }
+                        syncing=false
+                    } }) { Text(zh(label)) }
+                }
+                TextButton(onClick={conflict=null}) { Text(zh("取消，保留双方数据")) }
+            }
             if (resultMsg.isNotEmpty()) {
                 Text(
                     resultMsg,

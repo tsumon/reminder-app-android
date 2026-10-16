@@ -136,7 +136,7 @@ class BackupServiceTest {
     fun `导出包含 schemaVersion 与 syncId`() {
         val r = reminder("吃药", 1_000L).copy(syncId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
         val json = BackupService.exportToJson(listOf(r), dataVersion = 0)
-        assertTrue(json.contains("\"schemaVersion\": 2"))
+        assertTrue(json.contains("\"schemaVersion\": 3"))
         assertTrue(json.contains("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"))
         // 双写：新旧字段都在
         assertTrue(json.contains("\"isCritical\": false"))

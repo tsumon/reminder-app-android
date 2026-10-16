@@ -178,7 +178,7 @@ object ReminderEngine {
      * 闰月、闰年下逐渐漂移（例如「每月 31 号」在 2 月不会错位成月初）。
      */
     private fun calculateCycleNextTrigger(reminder: ReminderEntity, now: Long): Long {
-        val anchor = reminder.firstTriggerAt
+        val anchor = if (reminder.recurrenceMode == "afterCompletion" && reminder.lastConfirmedAt != null) reminder.lastConfirmedAt else reminder.firstTriggerAt
         val interval = getCycleIntervalMs(reminder.cycle, reminder.customDays)
 
         // 一次性提醒（或非法周期）：不前进，直接返回锚点，避免死循环
@@ -187,11 +187,14 @@ object ReminderEngine {
         return when (reminder.cycle) {
             "monthly", "quarterly", "yearly" -> advanceByCalendarMonths(reminder.cycle, anchor, now)
             else -> {
-                var nextTime = anchor
-                while (nextTime <= now) {
-                    nextTime += interval
-                }
-                nextTime
+                val days = when(reminder.cycle) { "daily" -> 1; "weekly" -> 7; "biweekly" -> 14; "custom" -> reminder.customDays.coerceAtLeast(1); else -> 7 }
+                val zone=java.time.ZoneId.systemDefault()
+                val start=java.time.Instant.ofEpochMilli(anchor).atZone(zone)
+                val current=java.time.Instant.ofEpochMilli(now).atZone(zone)
+                val elapsed=java.time.temporal.ChronoUnit.DAYS.between(start.toLocalDate(),current.toLocalDate()).coerceAtLeast(0)
+                var candidate=start.plusDays((elapsed/days)*days)
+                if(candidate.toInstant().toEpochMilli()<=now) candidate=candidate.plusDays(days.toLong())
+                candidate.toInstant().toEpochMilli()
             }
         }
     }
@@ -260,7 +263,7 @@ object ReminderEngine {
      * 日期提醒：根据类型计算当年触发时间
      */
     private fun calculateDateNextTrigger(reminder: ReminderEntity, now: Long): Long {
-        val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+        val currentYear = Calendar.getInstance().apply { timeInMillis = now }.get(Calendar.YEAR)
         return computeDateForYear(reminder, currentYear, now)
             ?: computeDateForYear(reminder, currentYear + 1, now)
             ?: (now + 31536000_000L)
@@ -343,42 +346,39 @@ object ReminderEngine {
     /**
      * 确认完成 → 周期前进
      */
-    fun confirm(reminder: ReminderEntity): ReminderEntity {
-        // 一次性提醒：确认后直接归档为「已完成」，不再前进周期
-        if (reminder.kind == "cycle" && reminder.cycle == "once") {
-            return reminder.copy(
-                status = ReminderStatus.CONFIRMED.name.lowercase(),
-                lastConfirmedAt = System.currentTimeMillis(),
-                retryCount = 0,
-                holidayAdjustNote = null
-            )
-        }
-        val nextTrigger = calculateNextTrigger(reminder)
-        return reminder.copy(
-            status = ReminderStatus.PENDING.name.lowercase(),
-            nextTriggerAt = nextTrigger,
-            lastConfirmedAt = System.currentTimeMillis(),
-            retryCount = 0,
-            holidayAdjustNote = null
-        )
+    fun confirm(reminder: ReminderEntity, now: Long = System.currentTimeMillis()): ReminderEntity {
+        if (reminder.kind == "cycle" && reminder.cycle == "once") return reminder.copy(
+            status = "confirmed", lastConfirmedAt = now, retryCount = 0, holidayAdjustNote = null, revision = reminder.revision + 1)
+        val completed = reminder.copy(lastConfirmedAt = now)
+        val next = calculateNextTrigger(completed, now)
+        return completed.copy(status = "pending", nextTriggerAt = next, retryCount = 0,
+            holidayAdjustNote = null, revision = reminder.revision + 1)
+    }
+
+    fun skip(reminder: ReminderEntity, now: Long = System.currentTimeMillis()): ReminderEntity? {
+        if (reminder.kind == "cycle" && reminder.cycle == "once") return null
+        // Skipping advances the current schedule without a completion or a new completion anchor.
+        val next = calculateNextTrigger(reminder, maxOf(now, reminder.nextTriggerAt))
+        return reminder.copy(status = "pending", nextTriggerAt = next, retryCount = 0,
+            holidayAdjustNote = null, revision = reminder.revision + 1)
     }
 
     /**
      * 稍后提醒 → N 分钟后重推（v1.9.7 对齐 iOS：不动 retryCount，
      * 避免用户反复点稍后导致 escalate 间隔被跳过；v2.1.0 支持任意分钟数）
      */
-    fun snooze(reminder: ReminderEntity, minutes: Long = 15): ReminderEntity {
+    fun snooze(reminder: ReminderEntity, minutes: Long = 15, now: Long = System.currentTimeMillis()): ReminderEntity {
         return reminder.copy(
             status = ReminderStatus.NOTIFYING.name.lowercase(),
-            nextTriggerAt = System.currentTimeMillis() + minutes * 60_000L,
+            nextTriggerAt = ReminderPolicy.adjustQuiet(reminder, now + minutes.coerceIn(1, 10080) * 60_000L),
+            revision = reminder.revision + 1,
             retryCount = reminder.retryCount
         )
     }
 
     /** 稍后到明天提醒时刻（reminderHour:reminderMinute；已过则顺延一天） */
-    fun snoozeTomorrow(reminder: ReminderEntity): ReminderEntity {
-        val cal = Calendar.getInstance()
-        val now = System.currentTimeMillis()
+    fun snoozeTomorrow(reminder: ReminderEntity, now: Long = System.currentTimeMillis()): ReminderEntity {
+        val cal = Calendar.getInstance().apply { timeInMillis=now }
         cal.set(Calendar.HOUR_OF_DAY, reminder.reminderHour)
         cal.set(Calendar.MINUTE, reminder.reminderMinute)
         cal.set(Calendar.SECOND, 0)
@@ -390,7 +390,8 @@ object ReminderEngine {
         }
         return reminder.copy(
             status = ReminderStatus.NOTIFYING.name.lowercase(),
-            nextTriggerAt = t,
+            nextTriggerAt = ReminderPolicy.adjustQuiet(reminder, t),
+            revision = reminder.revision + 1,
             retryCount = reminder.retryCount
         )
     }
@@ -402,15 +403,14 @@ object ReminderEngine {
      * retryCount 达到 MAX_ESCALATION(5) 时标为 overdue（停止轰炸，等用户手动确认/重新打开）。
      * 注意：重试期间【不推进周期】，周期只在「确认完成 / 重新打开」时前进（与 iOS 一致）。
      */
-    fun escalate(reminder: ReminderEntity): ReminderEntity {
-        val newCount = minOf(reminder.retryCount + 1, MAX_ESCALATION)
-        val idx = minOf(reminder.retryCount, retryIntervals.size - 1)
-        val isOverdue = newCount >= MAX_ESCALATION
-        return reminder.copy(
-            status = if (isOverdue) "overdue" else ReminderStatus.NOTIFYING.name.lowercase(),
-            nextTriggerAt = System.currentTimeMillis() + retryIntervals[idx],
-            retryCount = newCount
-        )
+    fun escalate(reminder: ReminderEntity, now: Long = System.currentTimeMillis()): ReminderEntity {
+        val cap = if (reminder.reminderStyle == "gentle") 1 else reminder.maxReminderAttempts.coerceIn(1, 10)
+        val count = minOf(reminder.retryCount + 1, cap)
+        val intervals = ReminderPolicy.intervals(reminder)
+        val interval = intervals[minOf(reminder.retryCount, intervals.lastIndex)] * 60_000L
+        return reminder.copy(status = if (count >= cap) "overdue" else "notifying",
+            nextTriggerAt = ReminderPolicy.adjustQuiet(reminder, now + interval), retryCount = count,
+            revision = reminder.revision + 1)
     }
 
     /**
@@ -454,7 +454,7 @@ object ReminderEngine {
         return (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7 + 1 // 1=周一..7=周日
     }
 
-    private fun occursOnCycle(reminder: ReminderEntity, year: Int, month: Int, day: Int): Boolean {        val anchor = Calendar.getInstance().apply { timeInMillis = reminder.firstTriggerAt }
+    private fun occursOnCycle(reminder: ReminderEntity, year: Int, month: Int, day: Int): Boolean {        val anchor = Calendar.getInstance().apply { timeInMillis = if(reminder.recurrenceMode=="afterCompletion" && reminder.lastConfirmedAt!=null) reminder.lastConfirmedAt else reminder.firstTriggerAt }
         val aY = anchor.get(Calendar.YEAR)
         val aM = anchor.get(Calendar.MONTH) + 1
         val aD = anchor.get(Calendar.DAY_OF_MONTH)
