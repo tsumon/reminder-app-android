@@ -2,12 +2,13 @@ package com.reminderapp.data.entity
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
  * 提醒实体 — 镜像 iOS Reminder.swift
  */
-@Entity(tableName = "reminders")
+@Entity(tableName = "reminders", indices = [Index(value = ["sync_id"], name = "idx_reminders_sync_id", unique = true)])
 data class ReminderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
 
@@ -63,6 +64,14 @@ data class ReminderEntity(
     // v2.4.8: 避开节假日/周末自动顺延（报税、缴费等工作日事务）
     // true = 触发时间落在周六日或法定节假日时，顺延到下一个工作日再提醒
     @ColumnInfo(name = "holiday_aware") val holidayAware: Boolean = false,
+
+    @ColumnInfo(name = "recurrence_mode", defaultValue = "'fixed'") val recurrenceMode: String = "fixed",
+    @ColumnInfo(name = "reminder_style", defaultValue = "'persistent'") val reminderStyle: String = if (isCritical) "important" else "persistent",
+    @ColumnInfo(name = "retry_intervals_minutes", defaultValue = "'60,240,720,1440'") val retryIntervalsMinutes: String = "60,240,720,1440",
+    @ColumnInfo(name = "max_reminder_attempts", defaultValue = "5") val maxReminderAttempts: Int = 5,
+    @ColumnInfo(name = "quiet_start_minute") val quietStartMinute: Int? = null,
+    @ColumnInfo(name = "quiet_end_minute") val quietEndMinute: Int? = null,
+    @ColumnInfo(name = "revision", defaultValue = "0") val revision: Long = 0,
 
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "is_active") val isActive: Boolean = true

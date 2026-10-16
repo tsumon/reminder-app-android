@@ -3,11 +3,8 @@ package com.reminderapp.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import com.reminderapp.data.database.AppDatabase
-import com.reminderapp.service.ReminderScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -16,18 +13,15 @@ import kotlinx.coroutines.launch
 class BootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
-
-        val db = AppDatabase.getInstance(context)
-        val scheduler = ReminderScheduler(context)
+        if (intent.action !in setOf(Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_MY_PACKAGE_REPLACED, android.app.AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED)) return
 
         // v1.9.6 fix: goAsync() 保活——开机广播返回后进程可被立即回收，
         // 不加保活重排常来不及完成（用户不开 App 时开机恢复只靠这里）
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val allActive = db.reminderDao().getAllActive().first()
-                scheduler.rescheduleAll(allActive)
+                com.reminderapp.service.QuietHoursStore.migrateLegacy(context)
+                com.reminderapp.service.ReminderSyncCoordinator(context).restoreSchedules()
             } finally {
                 pendingResult.finish()
             }

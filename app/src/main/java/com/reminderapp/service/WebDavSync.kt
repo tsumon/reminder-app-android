@@ -1,7 +1,8 @@
 package com.reminderapp.service
 
 import android.content.Context
-import androidx.room.withTransaction
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import com.reminderapp.ReminderApp
 import com.reminderapp.data.database.AppDatabase
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +26,9 @@ import com.reminderapp.i18n.zhf
  * - 远程新 → 下载并覆盖本地；本地新 → 上传覆盖远程；相同 → 跳过
  */
 object WebDavSync {
+    private val syncMutex=Mutex()
+    val pendingConflict=kotlinx.coroutines.flow.MutableStateFlow<SyncResult.Conflict?>(null)
+
 
     private const val REMOTE_FILE = "reminder_backup.json"
     private const val CONTENT_TYPE = "application/json; charset=utf-8"
@@ -45,170 +49,66 @@ object WebDavSync {
     sealed class SyncResult {
         /** conflict=true：检测到上次同步后双端都有修改，已按版本覆盖（UI 提示用户） */
         data class Success(val conflict: Boolean = false) : SyncResult()
+        data class Conflict(val remoteJson: String, val localVersion: Long, val remoteEtag: String?) : SyncResult()
         data class Error(val message: String) : SyncResult()
     }
 
     /**
      * 执行同步。result 返回上传/下载/无变更的描述
      */
-    suspend fun syncNow(context: Context): SyncResult = withContext(Dispatchers.IO) {
-        if (!SyncStore.isConfigured) {
-            return@withContext SyncResult.Error(zh("请先配置 WebDAV 服务器"))
-        }
-
-        val db = AppDatabase.getInstance(context)
-        val dao = db.reminderDao()
-        // v2.0.17: 单调版本（localVer）为判新主依据；墙钟（localChange）仅兜底（旧文件/升级前本地无版本）
-        val localChange = SyncStore.lastLocalChange
-        val localVer = SyncStore.localVersion
-        // v2.0.21 F1: 首次同步 + 上次同步版本必须在分支改写前快照，否则冲突判定会拿到刚写入的新值恒 false
-        val firstSync = SyncStore.isFirstSync
-        val lastSyncVer = SyncStore.lastSyncVersion
-        val localItems = dao.getAllSync()
-
+    suspend fun syncNow(context: Context, resolution: Resolution? = null): SyncResult = syncMutex.withLock {
+        withContext(Dispatchers.IO) { syncLocked(context,resolution) }
+    }
+    private suspend fun syncLocked(context: Context,resolution: Resolution?): SyncResult {
+        if(!SyncStore.isConfigured) return SyncResult.Error(zh("请先配置 WebDAV 服务器"))
+        QuietHoursStore.migrateLegacy(context)
+        val coordinator=ReminderSyncCoordinator(context)
+        val captured=coordinator.capture()
+        val localVer=captured.generation
+        val localChange=captured.lastChange
+        val localItems=captured.items
         try {
-            val remoteJson = download(remoteUrl())
-
-            if (remoteJson == null) {
-                // 远程无文件 → 上传本地
-                // I11: 构建上传 JSON 失败（如序列化异常）必须上报错误，不能静默当 Success 让用户以为已备份
-                val uploadJson = buildUploadJson(localItems, localChange)
-                    ?: return@withContext SyncResult.Error(zh("备份上传失败：本地数据序列化出错，未上传到云端"))
-                upload(uploadJson)
-                // v2.0.17: 记录已同步版本，防下轮误判（上传 dataVersion = 当前本地版本）
-                SyncStore.lastSyncVersion = SyncStore.localVersion
-                SyncStore.lastSyncAt = System.currentTimeMillis()
-                SyncStore.hasSyncedOnce = true
-                return@withContext SyncResult.Success(conflict = false)
+            val remote=downloadSnapshot(remoteUrl())
+            val remoteJson=remote?.json
+            suspend fun uploadCaptured(selected: ReminderSyncCoordinator.Snapshot = captured): SyncResult {
+                val json=coordinator.uploadJson(selected)
+                upload(json,remote?.etag)
+                coordinator.acknowledgeUpload(selected,JSONObject(json).getLong("exportedAt"))
+                pendingConflict.value=null
+                return SyncResult.Success()
             }
-
-            val remoteVersion = try {
-                val obj = JSONObject(remoteJson)
-                val raw = obj.optLong("exportedAt", 0L)
-                if (raw <= 0L) {
-                    // E4: 合法 JSON 但缺 exportedAt → 视为损坏，不能当「版本 0」走本地覆盖分支
-                    return@withContext SyncResult.Error(zh("远程文件解析失败：缺少 exportedAt（文件可能已损坏），未覆盖本地数据"))
-                }
-                // 统一时间戳单位：iOS 导出的是「秒」，Android 内部用「毫秒」。
-                // 秒级时间戳远小于 1e12（约 33658 年之前都成立），据此归一化为毫秒。
-                if (raw < 1_000_000_000_000L) raw * 1000 else raw
-            } catch (e: Exception) {
-                // E4: 坏 JSON 不能静默当 0——否则本地会覆盖远程唯一备份（丢数据链）
-                return@withContext SyncResult.Error(zh("远程文件解析失败：不是有效的 JSON（文件可能已损坏），未覆盖本地数据"))
+            if(remoteJson==null) {
+                if(resolution!=null) return SyncResult.Error(zh("数据已有新变更，请重新同步后选择"))
+                return uploadCaptured()
             }
-
-            // v2.0.17: 远程单调版本（旧文件无 dataVersion → 0，判新回退时间戳）
-            val remoteDataVersion = BackupService.dataVersionOf(remoteJson)
-            // v2.0.21 F1: 首次同步的冲突判定依据「两边都有数据」（版本不可比，无法用版本差判断）
-            val remoteHasData = BackupService.remindersCountOf(remoteJson) > 0
-            val localHasData = localItems.isNotEmpty()
-
-            return@withContext when {
-                // v2.0.17 判新：双方都有单调版本 → 版本比较；任一为 0（旧文件/升级前）→ 时间戳兜底
-                remoteNewer(remoteDataVersion, remoteVersion, localVer, localChange, firstSync) -> {
-                    // 远程新 → 覆盖本地
-                    val items = BackupService.importFromJson(remoteJson)
-                    if (items == null) {
-                        SyncResult.Error(zh("远程文件解析失败"))
-                    } else {
-                        mergeRemote(db, items)
-                        SyncStore.lastLocalChange = remoteVersion
-                        // v2.0.17: 下载后本地数据 = 远程数据 → 单调版本对齐远程
-                        // （旧文件 dataVersion=0 时保持本地版本，兼容路径下次仍会上传）
-                        if (remoteDataVersion > 0L) {
-                            SyncStore.localVersion = remoteDataVersion
-                        }
-                        // v2.0.16/17 冲突提示：上次同步后本地也改过（版本化判定；旧文件回退不提示）
-                        val conflict = isConflict(
-                            firstSync, localHasData, remoteHasData,
-                            localVer, remoteDataVersion, lastSyncVer
-                        )
-                        if (remoteDataVersion > 0L) SyncStore.lastSyncVersion = remoteDataVersion
-                        SyncStore.lastSyncAt = System.currentTimeMillis()
-                        SyncStore.hasSyncedOnce = true
-                        SyncResult.Success(conflict = conflict)
-                    }
-                }
-                localNewer(remoteDataVersion, remoteVersion, localVer, localChange, firstSync) -> {
-                    // 本地新 → 上传
-                    // I11: 构建上传 JSON 失败必须上报错误，同「远程无文件」分支
-                    val uploadJson = buildUploadJson(localItems, localChange)
-                        ?: return@withContext SyncResult.Error(zh("备份上传失败：本地数据序列化出错，未上传到云端"))
-                    upload(uploadJson)
-                    // E1: 上传后必须推进 lastLocalChange（对齐 iOS setLastLocalChange(max(...))）——
-                    // 否则无编辑时下轮误判「远程新」→ 全量 replaceLocal 重建
-                    val uploadedAt = runCatching { JSONObject(uploadJson).optLong("exportedAt", 0L) }.getOrDefault(0L)
-                    if (uploadedAt > SyncStore.lastLocalChange) SyncStore.lastLocalChange = uploadedAt
-                    // v2.0.16/17 冲突提示：上次同步后远程也改过（版本化判定）
-                    val conflict = isConflict(
-                        firstSync, localHasData, remoteHasData,
-                        localVer, remoteDataVersion, lastSyncVer
-                    )
-                    SyncStore.lastSyncVersion = localVer
-                    SyncStore.lastSyncAt = System.currentTimeMillis()
-                    SyncStore.hasSyncedOnce = true
-                    SyncResult.Success(conflict = conflict)
-                }
-                else -> {
-                    // 版本与时间戳都相等 → 两边确为同一份数据，无变更
-                    // （F2：版本相等但时间戳不同的情况已在 remoteNewer/localNewer 里用时间戳决胜，不会落到这里）
-                    SyncStore.lastSyncAt = System.currentTimeMillis()
-                    SyncStore.hasSyncedOnce = true
-                    SyncResult.Success(conflict = false)
-                }
+            val raw=JSONObject(remoteJson).optLong("exportedAt",0)
+            if(raw<=0) return SyncResult.Error(zh("远程文件解析失败：缺少 exportedAt（文件可能已损坏），未覆盖本地数据"))
+            val remoteTimestamp=if(raw<1_000_000_000_000L) raw*1000 else raw
+            val remoteGeneration=BackupService.dataVersionOf(remoteJson)
+            val decision=ReminderSyncCoordinator.decide(captured,remoteGeneration,remoteTimestamp,BackupService.remindersCountOf(remoteJson)>0)
+            if(resolution!=null && (resolution.conflict.localVersion!=localVer || resolution.conflict.remoteJson!=remoteJson))
+                return SyncResult.Error(zh("数据已有新变更，请重新同步后选择"))
+            if(SyncStore.localVersion!=localVer) return SyncResult.Error(zh("本地数据已变更，请重试"))
+            if(decision==ReminderSyncCoordinator.Decision.CONFLICT && resolution==null) return SyncResult.Conflict(remoteJson,localVer,remote?.etag).also { pendingConflict.value=it }
+            if(resolution!=null) {
+                snapshotLocal(localItems,localVer)
+                if(resolution.useLocal) return uploadCaptured(coordinator.prepareLocalResolution(captured,remoteGeneration))
             }
-        } catch (e: Exception) {
-            SyncResult.Error(friendlyMessage(e))
-        }
-    }
-
-    // MARK: - v2.0.17 单调版本判新（v2.0.21 修正 F1/F2）
-    // 双端都有 dataVersion 时用单调版本比较（防墙钟回拨/时钟偏差）；
-    // 任一为 0（旧版远程文件 / 升级前本地从未计数）回退 exportedAt 时间戳比较。
-    //
-    // F1：首次同步（firstSync）时两边版本不同源——远程是该账号历史累计值、本地从 0 起，
-    //     版本比较必然判「远程新」→ 本机新建数据被静默覆盖。此时一律回退时间戳。
-    // F2：版本相等（双端自同一基线各改相同次数）时，若仍按 rdv > lv / lv > rdv 判定，
-    //     两者皆 false → 落入「无变更」分支 → 双方改动都不同步且不提示，数据永久分叉。
-    //     故版本相等时用时间戳决胜。
-
-    /** 远程是否更新 */
-    private fun remoteNewer(rdv: Long, rts: Long, lv: Long, lts: Long, firstSync: Boolean): Boolean {
-        if (firstSync) return rts > lts
-        if (rdv > 0L && lv > 0L) {
-            if (rdv == lv) return rts > lts
-            return rdv > lv
-        }
-        return rts > lts
-    }
-
-    /** 本地是否更新 */
-    private fun localNewer(rdv: Long, rts: Long, lv: Long, lts: Long, firstSync: Boolean): Boolean {
-        if (firstSync) return lts > rts
-        if (rdv > 0L && lv > 0L) {
-            if (rdv == lv) return lts > rts
-            return lv > rdv
-        }
-        return lts > rts
-    }
-
-    /**
-     * 冲突判定（是否需要提示「已按版本覆盖」）。
-     *
-     * - 首次同步：无 lastSyncVersion 基线可比，只要两边都有数据就意味着一方内容会被整体覆盖 → 提示
-     * - 后续同步：自上次同步后双端都推进过版本 → 提示
-     */
-    private fun isConflict(
-        firstSync: Boolean,
-        localHasData: Boolean,
-        remoteHasData: Boolean,
-        localVer: Long,
-        remoteDataVersion: Long,
-        lastSyncVer: Long
-    ): Boolean = if (firstSync) {
-        localHasData && remoteHasData
-    } else {
-        lastSyncVer > 0L && localVer > lastSyncVer && remoteDataVersion > lastSyncVer
+            if(resolution!=null || decision==ReminderSyncCoordinator.Decision.DOWNLOAD) {
+                val items=BackupService.importFromJson(remoteJson) ?: return SyncResult.Error(zh("远程文件解析失败"))
+                if(resolution==null) snapshotLocal(localItems,localVer)
+                coordinator.merge(captured,items,remoteGeneration,remoteTimestamp,publishSelected=resolution!=null)
+                // Generation acknowledgement is already committed. A later completion stays dirty during restoration.
+                coordinator.restoreSchedules()
+                val merged=coordinator.capture()
+                if(merged.generation>merged.lastSyncGeneration) return uploadCaptured(merged)
+                pendingConflict.value=null
+                return SyncResult.Success()
+            }
+            if(decision==ReminderSyncCoordinator.Decision.UPLOAD) return uploadCaptured()
+            coordinator.acknowledgeUpload(captured,localChange)
+            return SyncResult.Success()
+        } catch(e: Exception) { return SyncResult.Error(friendlyMessage(e)) }
     }
 
     /** 远程文件完整 URL（WebDAV 目录 + 文件名） */
@@ -274,83 +174,23 @@ object WebDavSync {
         }
     }
 
-    /** 构建上传 JSON，exportedAt 保证比远程版本新 */
-    private suspend fun buildUploadJson(
-        reminders: List<com.reminderapp.data.entity.ReminderEntity>,
-        localVersion: Long
-    ): String? {
-        val json = BackupService.exportToJson(reminders)
-        return try {
-            val obj = JSONObject(json)
-            obj.put("exportedAt", maxOf(System.currentTimeMillis(), localVersion + 1))
-            obj.toString(2)
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    /** 用远程数据合并本地（阶段2：按 syncId upsert，不再整库 delete/reinsert） */
-    private suspend fun mergeRemote(
-        db: AppDatabase,
-        items: List<com.reminderapp.data.entity.ReminderEntity>
-    ) {
-        val dao = db.reminderDao()
-        // 阶段2: 覆盖前自动存本地快照（可恢复；保留最近 5 份）
-        snapshotLocal(dao.getAllSync())
-
-        db.withTransaction {
-            val localItems = dao.getAllSync()
-            val localBySync = localItems.mapNotNull { it.syncId?.let { s -> s to it } }.toMap()
-            val localByFp = localItems.associateBy { BackupService.fingerprint(it) }
-            val upserted = mutableListOf<com.reminderapp.data.entity.ReminderEntity>()
-
-            items.forEach { remote ->
-                // 匹配优先级：syncId（协议 v2）→ 指纹（旧协议文件无 syncId 时，识别上轮已导入的条目）
-                val match = remote.syncId?.let { localBySync[it] }
-                    ?: localByFp[BackupService.fingerprint(remote)]
-
-                if (match != null) {
-                    // 已存在：保留本地自增 id（通知/小组件/操作记录引用不失效）和本地 syncId
-                    val updated = remote.copy(
-                        id = match.id,
-                        syncId = match.syncId ?: remote.syncId,
-                        nextTriggerAt = ReminderEngine.calculateNextTrigger(remote, com.reminderapp.ReminderApp.instance),
-                        // 阶段2: 状态随同步保留（iOS 同样保留 overdue/snoozed/notifying；未知值回落 pending）
-                        status = if (remote.status in KEPT_STATUS) remote.status else "pending",
-                        retryCount = 0
-                    )
-                    dao.update(updated)
-                    upserted.add(updated)
-                } else {
-                    // 新条目：id=0 自增，syncId 缺失补 UUID
-                    val fresh = BackupService.ensureSyncId(remote).copy(
-                        id = 0,
-                        nextTriggerAt = ReminderEngine.calculateNextTrigger(remote, com.reminderapp.ReminderApp.instance),
-                        status = if (remote.status in KEPT_STATUS) remote.status else "pending",
-                        retryCount = 0
-                    )
-                    val newId = dao.insert(fresh)
-                    upserted.add(fresh.copy(id = newId))
-                }
-            }
-
-            // 本地有而远程没有的条目保留（无 tombstone，无法区分「远端已删」与「远端从未有过」，保守不删）
-            // 关键：合并后必须重新调度，否则提醒不再响，直到重启。
-            ReminderScheduler(ReminderApp.instance).rescheduleAll(upserted)
-        }
-        com.reminderapp.receiver.ReminderWidgetProvider.refresh(ReminderApp.instance)
-    }
-
     /** 阶段2: 合并前把当前本地全量导出为 JSON 快照（可恢复；保留最近 5 份） */
-    private fun snapshotLocal(localItems: List<com.reminderapp.data.entity.ReminderEntity>) {
-        try {
-            val dir = java.io.File(ReminderApp.instance.filesDir, "webdav_snapshots").apply { mkdirs() }
-            val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
-            java.io.File(dir, "before_$stamp.json").writeText(BackupService.exportToJson(localItems))
-            // 只保留最近 5 份
-            dir.listFiles()?.sortedByDescending { it.name }?.drop(5)?.forEach { it.delete() }
-        } catch (e: Exception) {
-            android.util.Log.w("WebDavSync", "本地快照写入失败（不影响同步）: ${e.message}")
+    private fun snapshotLocal(localItems: List<com.reminderapp.data.entity.ReminderEntity>, generation: Long) {
+        val dir=java.io.File(ReminderApp.instance.filesDir,"webdav_snapshots").apply { mkdirs() }
+        val file=java.io.File(dir,"before_${System.currentTimeMillis()}_${java.util.UUID.randomUUID()}.json")
+        file.writeText(BackupService.exportToJson(localItems,generation))
+        check(file.length()>0) { "本地快照写入失败，同步已停止" }
+        dir.listFiles()?.sortedByDescending { it.lastModified() }?.drop(5)?.forEach { it.delete() }
+    }
+
+    data class Resolution(val conflict: SyncResult.Conflict, val useLocal: Boolean)
+    private data class RemoteSnapshot(val json: String,val etag: String?)
+    private fun downloadSnapshot(url: String): RemoteSnapshot? {
+        val request=Request.Builder().url(url).header("Authorization",Credentials.basic(SyncStore.username,SyncStore.password)).get().build()
+        client.newCall(request).execute().use { response ->
+            if(response.code==404) return null
+            check(response.isSuccessful) { "HTTP ${response.code}" }
+            return RemoteSnapshot(response.body?.string() ?: error("远程文件为空"),response.header("ETag"))
         }
     }
 
@@ -369,11 +209,12 @@ object WebDavSync {
         }
     }
 
-    private fun upload(json: String) {
+    private fun upload(json: String, expectedEtag: String? = null) {
         val body = json.toRequestBody(CONTENT_TYPE.toMediaType())
         val request = Request.Builder()
             .url(remoteUrl())
             .header("Authorization", Credentials.basic(SyncStore.username, SyncStore.password))
+            .apply { if(expectedEtag != null) header("If-Match",expectedEtag) else header("If-None-Match","*") }
             .put(body)
             .build()
         client.newCall(request).execute().use { response ->
@@ -473,6 +314,7 @@ object WebDavSync {
         404 -> zh("目录不存在（HTTP 404）：请确认 WebDAV 地址指向已存在的目录，坚果云请填 https://dav.jianguoyun.com/dav/（根目录），不要带不存在的子路径。")
         405 -> zh("服务器不支持该操作（HTTP 405）：请确认填的是 WebDAV 地址（如 …/dav/），不是网盘网页地址。")
         409 -> zh("资源冲突（HTTP 409）。")
+        412 -> zh("远程版本已变更，或服务器不支持安全版本更新。同步已停止，请重新下载检查；未覆盖远程文件。")
         423 -> zh("资源被锁定（HTTP 423）。")
         507 -> zh("存储空间不足（HTTP 507）。")
         else -> zhf("HTTP %s：请检查服务器地址/账号，或稍后重试。", code)

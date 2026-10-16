@@ -363,39 +363,11 @@ private fun receive(
             setResult(zh("数据解析失败"), true)
             return@launch
         }
-        // 导入去重：⚠️ 不能用 id——发送方的 id 是它本地自增的，
-        // 接收端已有 id 1..N 时会把对方同 id 的提醒误跳过（丢数据）。
-        // 指纹（title|nextTriggerAt|kind|cycle|note，加 note 防「同名同时间同类型但备注不同的两条」误判漏导入）
-        val existingFp = database.reminderDao().getAllSync()
-            .map { "${it.title}|${it.nextTriggerAt}|${it.kind}|${it.cycle}|${it.note ?: ""}" }
-            .toSet()
-        var imported = 0
-        var skipped = 0
-        for (r in entities) {
-            val fp = "${r.title}|${r.nextTriggerAt}|${r.kind}|${r.cycle}|${r.note ?: ""}"
-            if (existingFp.contains(fp)) {
-                skipped++
-                continue
-            }
-            // 阶段2: syncId 缺失补 UUID；按 syncId 匹配——同一条（编辑过、指纹已变）更新现有行，
-            // 本地自增 id 不变，通知/小组件/操作记录引用不失效
-            val prepared = BackupService.ensureSyncId(r).copy(id = 0)
-            val existing = prepared.syncId?.let { database.reminderDao().getBySyncId(it) }
-            val finalEntity = if (existing != null) {
-                prepared.copy(id = existing.id).also { database.reminderDao().update(it) }
-            } else {
-                try {
-                    prepared.copy(id = database.reminderDao().insert(prepared))
-                } catch (e: Exception) {
-                    skipped++
-                    continue
-                }
-            }
-            scheduler.schedule(finalEntity)
-            imported++
+        val result=runCatching { com.reminderapp.service.ReminderActions(context,database).importItems(entities) }.getOrElse {
+            setResult(zh("数据解析失败"),true);return@launch
         }
-        SyncStore.touchLocalChange()
-        com.reminderapp.receiver.ReminderWidgetProvider.refresh(context)
+        val imported=result.saved.size
+        val skipped=result.skipped
         setResult(zhf("导入完成：新增 %1\$s 条，跳过重复 %2\$s 条", imported, skipped), false)
     }
 }

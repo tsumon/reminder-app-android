@@ -61,37 +61,42 @@ import android.provider.Settings
 @Composable
 fun CreateReminderScreen(
     onSave: (ReminderEntity) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    initial: ReminderEntity? = null
 ) {
     val scrollState = rememberScrollState()
+    var saving by remember { mutableStateOf(false) }
+    var policyValid by remember { mutableStateOf(true) }
+    val seeded=remember(initial) { initial?.let(com.reminderapp.service.ReminderEditorMapper::seed) }
+    var policy by remember { mutableStateOf(initial ?: ReminderEntity(title="",firstTriggerAt=0,nextTriggerAt=0)) }
 
     // 表单状态
-    var title by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
-    var isDateMode by remember { mutableStateOf(false) }
-    var isRuleMode by remember { mutableStateOf(false) }
-    var selectedCycle by remember { mutableStateOf(Cycle.WEEKLY) }
+    var title by remember { mutableStateOf(seeded?.title ?: "") }
+    var note by remember { mutableStateOf(seeded?.note ?: "") }
+    var isDateMode by remember { mutableStateOf(seeded?.kind == "date") }
+    var isRuleMode by remember { mutableStateOf(seeded?.kind == "rule") }
+    var selectedCycle by remember { mutableStateOf(Cycle.values().find { it.name.lowercase()==seeded?.cycle } ?: Cycle.WEEKLY) }
     // v2.4.1: 每周提醒的星期选择（0=今天，1-7=周一..周日）——修复「每周日」锚点错位
-    var weeklyWeekday by remember { mutableStateOf(0) }
+    var weeklyWeekday by remember { mutableStateOf(seeded?.weeklyWeekday ?: 0) }
     var weeklyWeekdayExpanded by remember { mutableStateOf(false) }
-    var customDays by remember { mutableIntStateOf(1) }
-    var selectedDateType by remember { mutableStateOf<DateReminderType?>(null) }
-    var targetMonth by remember { mutableIntStateOf(1) }
-    var targetDay by remember { mutableIntStateOf(1) }
-    var selectedHolidayName by remember { mutableStateOf<String?>(null) }
-    var advanceDays by remember { mutableIntStateOf(3) }
+    var customDays by remember { mutableIntStateOf(seeded?.customDays?.coerceAtLeast(1) ?: 1) }
+    var selectedDateType by remember { mutableStateOf<DateReminderType?>(DateReminderType.values().find { it.name.lowercase()==seeded?.dateType }) }
+    var targetMonth by remember { mutableIntStateOf(seeded?.targetMonth ?: 1) }
+    var targetDay by remember { mutableIntStateOf(seeded?.targetDay ?: 1) }
+    var selectedHolidayName by remember { mutableStateOf<String?>(seeded?.holidayName) }
+    var advanceDays by remember { mutableIntStateOf(seeded?.advanceDays ?: 3) }
     // 规则提醒字段
-    var rulePeriod by remember { mutableStateOf(RulePeriod.QUARTERLY) }
-    var ruleWeek by remember { mutableIntStateOf(2) }
-    var ruleWeekday by remember { mutableIntStateOf(2) } // 周二
+    var rulePeriod by remember { mutableStateOf(RulePeriod.values().find { it.name.lowercase()==seeded?.rulePeriod } ?: RulePeriod.QUARTERLY) }
+    var ruleWeek by remember { mutableIntStateOf(seeded?.ruleWeek ?: 2) }
+    var ruleWeekday by remember { mutableIntStateOf(seeded?.ruleWeekday ?: 2) } // 周二
 
     // 优先级
-    var priority by remember { mutableStateOf("normal") } // high / normal / low
+    var priority by remember { mutableStateOf(seeded?.priority ?: "normal") } // high / normal / low
 
     // 批次3 功能5: 关键提醒开关（触发更高优先级渠道 + 全屏弹窗）
-    var isCritical by remember { mutableStateOf(false) }
+    var isCritical by remember { mutableStateOf(seeded?.isCritical ?: false) }
     // v2.4.8: 避开节假日/周末自动顺延
-    var holidayAware by remember { mutableStateOf(false) }
+    var holidayAware by remember { mutableStateOf(seeded?.holidayAware ?: false) }
 
     // H2: 关键提醒全屏权限引导对话框（Android 14+ 未授予时弹出）
     var showFullScreenPermissionDialog by remember { mutableStateOf(false) }
@@ -108,12 +113,12 @@ fun CreateReminderScreen(
     var nlExtraLunar by remember { mutableStateOf<ReminderEntity?>(null) }
 
     // 日期时间选择
-    val now = Calendar.getInstance()
+    val now = Calendar.getInstance().apply { if(initial!=null) { timeInMillis=initial.firstTriggerAt;set(Calendar.HOUR_OF_DAY,seeded!!.reminderHour);set(Calendar.MINUTE,seeded.reminderMinute) } else { set(Calendar.HOUR_OF_DAY,9);set(Calendar.MINUTE,0) } }
     var triggerYear by remember { mutableIntStateOf(now.get(Calendar.YEAR)) }
     var triggerMonth by remember { mutableIntStateOf(now.get(Calendar.MONTH) + 1) }
     var triggerDay by remember { mutableIntStateOf(now.get(Calendar.DAY_OF_MONTH)) }
-    var triggerHour by remember { mutableIntStateOf(9) }
-    var triggerMinute by remember { mutableIntStateOf(0) }
+    var triggerHour by remember { mutableIntStateOf(now.get(Calendar.HOUR_OF_DAY)) }
+    var triggerMinute by remember { mutableIntStateOf(now.get(Calendar.MINUTE)) }
 
     // 下拉展开状态
     var dateTypeExpanded by remember { mutableStateOf(false) }
@@ -124,6 +129,16 @@ fun CreateReminderScreen(
     // 日期/时间选择弹窗状态
     var showDateDialog by remember { mutableStateOf(false) }
     var showTimeDialog by remember { mutableStateOf(false) }
+
+    fun scheduleValues(): List<Any?> = listOf(
+        isDateMode,isRuleMode,if(!isDateMode && !isRuleMode) selectedCycle else null,
+        if(selectedCycle==Cycle.CUSTOM) customDays else 0,weeklyWeekday,
+        if(isDateMode) selectedDateType else null,if(isDateMode) targetMonth else null,
+        if(isDateMode || selectedCycle==Cycle.MONTHLY) targetDay else null,if(isDateMode) selectedHolidayName else null,
+        if(isRuleMode) rulePeriod else null,if(isRuleMode) ruleWeek else null,if(isRuleMode) ruleWeekday else null,
+        if(!isDateMode && !isRuleMode) triggerYear else 0,if(!isDateMode && !isRuleMode) triggerMonth else 0,
+        if(!isDateMode && !isRuleMode) triggerDay else 0,triggerHour,triggerMinute,holidayAware)
+    val originalSchedule=remember { scheduleValues() }
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
@@ -321,10 +336,18 @@ fun CreateReminderScreen(
                                     )
                                 }
                             }
-                            onSave(entity)
+                            saving = true
+                            val proposed=entity.copy(reminderHour=triggerHour,reminderMinute=triggerMinute,
+                                recurrenceMode=policy.recurrenceMode,reminderStyle=policy.reminderStyle,
+                                isCritical=policy.reminderStyle=="important",retryIntervalsMinutes=policy.retryIntervalsMinutes,
+                                maxReminderAttempts=policy.maxReminderAttempts,quietStartMinute=policy.quietStartMinute,quietEndMinute=policy.quietEndMinute)
+                            onSave(com.reminderapp.service.ReminderEditorMapper.map(initial,proposed,
+                                scheduleValues()!=originalSchedule,System.currentTimeMillis()) { reminder, from ->
+                                com.reminderapp.service.ReminderEngine.calculateNextTrigger(reminder,context,from)
+                            })
                             nlExtraLunar?.let { extra -> onSave(extra); nlExtraLunar = null }
                         },
-                        enabled = title.isNotBlank()
+                        enabled = title.isNotBlank() && !saving && policyValid
                     ) {
                         Text(zh("保存"), color = MaterialTheme.colorScheme.primary)
                     }
@@ -340,6 +363,10 @@ fun CreateReminderScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if(!com.reminderapp.service.ReminderScheduler(context).canScheduleExact()) Text(zh("当前为非精确提醒，可能延迟。可在设置 → 提醒诊断中授权精确闹钟。"),style=MaterialTheme.typography.bodySmall)
+            if(!androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()) Text(zh("通知未开启。保存后请到设置 → 提醒诊断中开启通知并测试。"),style=MaterialTheme.typography.bodySmall)
+            Text(if(initial?.id != null && initial.id > 0) zh("编辑提醒") else zh("检查规则后保存"),style=MaterialTheme.typography.titleMedium)
+            com.reminderapp.ui.component.ReminderPolicyEditor(policy.copy(kind=if(isDateMode) "date" else if(isRuleMode) "rule" else "cycle",cycle=selectedCycle.name.lowercase()),onChange={policy=it;isCritical=it.isCritical;if(it.isCritical) ensureCriticalPermissions()},onValidityChange={policyValid=it})
             // === 模板 ===
             Text(zh("从模板开始"), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             Row(
@@ -861,38 +888,6 @@ fun CreateReminderScreen(
                 )
             }
 
-            // 批次3 功能5: 关键提醒开关
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(zh("关键提醒"), style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            zh("重要事项，触发时全屏弹出并不穿透勿扰，确保不被漏看"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = isCritical,
-                        onCheckedChange = {
-                            isCritical = it
-                            if (it) ensureCriticalPermissions()
-                        },
-                        modifier = Modifier.semantics {
-                            contentDescription = zh("关键提醒开关：开启后触发时全屏弹出，确保不被漏看")
-                        }
-                    )
-                }
-            }
-
             // v2.4.8: 避开节假日/周末自动顺延（报税/缴费等工作日事务）
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -987,6 +982,7 @@ fun CreateReminderScreen(
                             triggerYear = cal.get(Calendar.YEAR)
                             triggerMonth = cal.get(Calendar.MONTH) + 1
                             triggerDay = cal.get(Calendar.DAY_OF_MONTH)
+                            if(selectedCycle==Cycle.MONTHLY && !isDateMode && !isRuleMode) targetDay=triggerDay
                         }
                         showDateDialog = false
                     }) { Text(zh("确定")) }

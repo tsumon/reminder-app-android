@@ -4,8 +4,9 @@ import android.content.Context
 import com.reminderapp.ReminderApp
 import com.reminderapp.data.entity.ReminderEntity
 import com.reminderapp.i18n.zhf
-import com.reminderapp.receiver.ReminderWidgetProvider
 import java.util.Calendar
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 节假日前移预检（Item 2）
@@ -30,63 +31,38 @@ object HolidayPreCheck {
     private const val WINDOW_DAYS = 31
     private const val DAY_MS = 86_400_000L
 
+    suspend fun adjusted(context: Context, r: ReminderEntity, now: Long,
+        refresh: suspend (Int) -> Unit = { HolidayRemoteService.refresh(context,it) }): ReminderEntity {
+        if (!r.isActive || r.status in setOf("confirmed","overdue") || r.kind !in setOf("cycle","rule") ||
+            !r.holidayAdjustNote.isNullOrEmpty() || r.nextTriggerAt <= now || r.nextTriggerAt-now > WINDOW_DAYS*DAY_MS) return r
+        val cal=Calendar.getInstance().apply { timeInMillis=r.nextTriggerAt }
+        val y=cal.get(Calendar.YEAR);val m=cal.get(Calendar.MONTH)+1;val d=cal.get(Calendar.DAY_OF_MONTH)
+        // Known cached data completes immediately. A missing entry may refresh without holding the mutation gate.
+        val cached=HolidayRemoteService.status(context,y,m,d)
+        if(cached==null && !HolidayRemoteService.hasCachedYear(context,y)) {
+            try { withTimeoutOrNull(1500) { refresh(y) } }
+            catch(e: CancellationException) { throw e }
+            catch(_: Exception) { /* Optional refresh never blocks an offline completion. */ }
+        }
+        val st=HolidayRemoteService.status(context,y,m,d) ?: return r
+        if(!st.isHoliday) return r
+        val shifted=lastWorkingDay(context,r.nextTriggerAt) ?: return r
+        val newTs=buildShiftedTs(cal,shifted)
+        if(newTs<=now) return r
+        val day=Calendar.getInstance().apply { timeInMillis=newTs }
+        return r.copy(nextTriggerAt=newTs,holidayAdjustNote=zhf(
+            "因%s放假，已前移至假期前最近工作日（%02d-%02d）",st.name,day.get(Calendar.MONTH)+1,day.get(Calendar.DAY_OF_MONTH)))
+    }
+
     suspend fun run(context: Context) {
-        val db = ReminderApp.instance.database
-        val scheduler = ReminderApp.instance.scheduler
-        val now = System.currentTimeMillis()
-        val windowMs = WINDOW_DAYS * DAY_MS
-
-        val all = db.reminderDao().getAllSync()
-        val refreshedYears = mutableSetOf<Int>()
-
-        for (r in all) {
-            if (!r.isActive) continue
-            if (r.status == "confirmed" || r.status == "overdue") continue
-            // 仅非生日循环/规则提醒参与（日期提醒：生日、节假日本身不参与前移）
-            if (r.kind != "cycle" && r.kind != "rule") continue
-            // 本次已前移过则跳过，避免重复
-            if (!r.holidayAdjustNote.isNullOrEmpty()) continue
-
-            val occ = r.nextTriggerAt
-            if (occ <= now) continue
-            if (occ - now > windowMs) continue
-
-            val cal = Calendar.getInstance().apply { timeInMillis = occ }
-            val y = cal.get(Calendar.YEAR)
-            val m = cal.get(Calendar.MONTH) + 1
-            val d = cal.get(Calendar.DAY_OF_MONTH)
-
-            // 确保当年节假日数据就绪（同一年只刷一次）
-            if (refreshedYears.add(y)) {
-                HolidayRemoteService.refresh(context, y)
+        val db=ReminderApp.instance.database
+        val now=System.currentTimeMillis()
+        val refreshedYears=mutableSetOf<Int>()
+        for(r in db.reminderDao().getAllSync()) {
+            val adjusted=adjusted(context,r,now) { year ->
+                if(refreshedYears.add(year)) HolidayRemoteService.refresh(context,year)
             }
-
-            val st = HolidayRemoteService.status(context, y, m, d) ?: continue
-            if (!st.isHoliday) continue
-
-            // 前移到假期前最近工作日
-            val shifted = lastWorkingDay(context, occ) ?: continue
-            if (shifted <= now) continue
-
-            val newTs = buildShiftedTs(cal, shifted)
-            val shiftedCal = Calendar.getInstance().apply { timeInMillis = shifted }
-            val note = zhf(
-                "因%s放假，已前移至假期前最近工作日（%02d-%02d）",
-                st.name,
-                shiftedCal.get(Calendar.MONTH) + 1,
-                shiftedCal.get(Calendar.DAY_OF_MONTH)
-            )
-
-            val updated = r.copy(nextTriggerAt = newTs, holidayAdjustNote = note)
-            db.reminderDao().update(updated)
-            scheduler.schedule(updated)
-            SyncStore.touchLocalChange()
-            ReminderWidgetProvider.refresh(context)
-
-            android.util.Log.i(
-                "HolidayPreCheck",
-                "前移: ${r.title} ${y}-${m}-${d} → ${shiftedCal.get(Calendar.YEAR)}-${shiftedCal.get(Calendar.MONTH) + 1}-${shiftedCal.get(Calendar.DAY_OF_MONTH)}"
-            )
+            if(adjusted!=r) ReminderActions(context,db).edit(r,adjusted)
         }
     }
 

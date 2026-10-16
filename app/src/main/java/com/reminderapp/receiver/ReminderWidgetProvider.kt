@@ -35,7 +35,8 @@ class ReminderWidgetProvider : AppWidgetProvider() {
         val lunarText: String,
         val nextTitle: String?,
         val nextTimeText: String?,
-        val completeReminderId: Long?
+        val completeReminderId: Long?,
+        val snapshot: com.reminderapp.data.entity.ReminderEntity? = null
     )
 
     override fun onUpdate(
@@ -120,6 +121,9 @@ class ReminderWidgetProvider : AppWidgetProvider() {
             val completeIntent = Intent(context, WidgetActionReceiver::class.java).apply {
                 action = WidgetActionReceiver.ACTION_COMPLETE
                 putExtra(WidgetActionReceiver.EXTRA_REMINDER_ID, completeId)
+                val snapshot = data.snapshot
+                snapshot?.let { putExtra("expected_at",it.nextTriggerAt); putExtra("revision",it.revision);putExtra("expected_state",it.toString()) }
+                this.data = android.net.Uri.parse("reminder://widget/$completeId/${snapshot?.revision}/$action")
             }
             val completePi = PendingIntent.getBroadcast(
                 context,
@@ -133,6 +137,9 @@ class ReminderWidgetProvider : AppWidgetProvider() {
             val snoozeIntent = Intent(context, WidgetActionReceiver::class.java).apply {
                 action = WidgetActionReceiver.ACTION_SNOOZE
                 putExtra(WidgetActionReceiver.EXTRA_REMINDER_ID, completeId)
+                val snapshot = data.snapshot
+                snapshot?.let { putExtra("expected_at",it.nextTriggerAt); putExtra("revision",it.revision);putExtra("expected_state",it.toString()) }
+                this.data = android.net.Uri.parse("reminder://widget/$completeId/${snapshot?.revision}/$action")
             }
             val snoozePi = PendingIntent.getBroadcast(
                 context,
@@ -167,9 +174,7 @@ class ReminderWidgetProvider : AppWidgetProvider() {
                         (it.status in listOf("idle", "pending") && it.nextTriggerAt <= now)
                 }
 
-                val next = reminders
-                    .filter { it.nextTriggerAt > now }
-                    .minByOrNull { it.nextTriggerAt }
+                val next = reminders.filter { it.status != "confirmed" }.minByOrNull { it.nextTriggerAt }
 
                 val fmt = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
 
@@ -188,7 +193,8 @@ class ReminderWidgetProvider : AppWidgetProvider() {
                     lunarText = lunarText,
                     nextTitle = next?.title,
                     nextTimeText = nextTimeText,
-                    completeReminderId = next?.id
+                    completeReminderId = next?.id,
+                    snapshot = next
                 )
             }
 

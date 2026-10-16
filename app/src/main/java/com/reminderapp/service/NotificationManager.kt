@@ -89,7 +89,13 @@ class NotificationManager(private val context: Context) {
     /**
      * 发送正式提醒通知（带确认/稍后按钮 + 点击通知体直达确认面板）
      */
-    fun sendReminderNotification(reminderId: Long, title: String, body: String) {
+    fun canPostReminder(r: com.reminderapp.data.entity.ReminderEntity): Boolean {
+        if(!androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()) return false
+        val channel=notificationManager.getNotificationChannel(if(r.reminderStyle=="important") CHANNEL_CRITICAL else CHANNEL_REMINDER)
+        return channel == null || channel.importance != android.app.NotificationManager.IMPORTANCE_NONE
+    }
+
+    fun sendReminderNotification(reminderId: Long, title: String, body: String, expected: com.reminderapp.data.entity.ReminderEntity? = null) {
         val notificationId = reminderId.toInt() + 1000
 
         // 批次2 功能1: 点击通知体 → 打开确认面板（详情页）而非仅打开首页
@@ -107,6 +113,8 @@ class NotificationManager(private val context: Context) {
             action = ACTION_CONFIRM
             putExtra(EXTRA_REMINDER_ID, reminderId)
             putExtra(EXTRA_NOTIFICATION_ID, notificationId)
+            expected?.let { putExtra("expected_at",it.nextTriggerAt); putExtra("revision",it.revision);putExtra("expected_state",it.toString()) }
+            data = android.net.Uri.parse("reminder://action/$reminderId/${expected?.revision}/$action")
         }
         val confirmPending = PendingIntent.getBroadcast(
             context, notificationId * 2, confirmIntent,
@@ -117,6 +125,8 @@ class NotificationManager(private val context: Context) {
             action = ACTION_SNOOZE
             putExtra(EXTRA_REMINDER_ID, reminderId)
             putExtra(EXTRA_NOTIFICATION_ID, notificationId)
+            expected?.let { putExtra("expected_at",it.nextTriggerAt); putExtra("revision",it.revision);putExtra("expected_state",it.toString()) }
+            data = android.net.Uri.parse("reminder://action/$reminderId/${expected?.revision}/$action")
         }
         val snoozePending = PendingIntent.getBroadcast(
             context, notificationId * 2 + 1, snoozeIntent,
@@ -137,6 +147,7 @@ class NotificationManager(private val context: Context) {
             .extend(NotificationCompat.WearableExtender().setContentAction(0))
             .build()
 
+        if(android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(context,android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) throw SecurityException("Notification permission denied")
         notificationManager.notify(notificationId, notification)
     }
 
@@ -145,7 +156,7 @@ class NotificationManager(private val context: Context) {
      * 走最高优先级渠道 + 全屏弹窗（设备锁屏时直接覆盖屏幕），确保重要事项不被漏看。
      * 全屏弹窗需 Manifest 中声明 USE_FULL_SCREEN_INTENT 权限（普通权限，默认授予）。
      */
-    fun sendCriticalReminderNotification(reminderId: Long, title: String, body: String) {
+    fun sendCriticalReminderNotification(reminderId: Long, title: String, body: String, expected: com.reminderapp.data.entity.ReminderEntity? = null) {
         val notificationId = reminderId.toInt() + 1000
 
         val contentIntent = Intent(context, com.reminderapp.MainActivity::class.java).apply {
@@ -175,6 +186,8 @@ class NotificationManager(private val context: Context) {
             action = ACTION_CONFIRM
             putExtra(EXTRA_REMINDER_ID, reminderId)
             putExtra(EXTRA_NOTIFICATION_ID, notificationId)
+            expected?.let { putExtra("expected_at",it.nextTriggerAt); putExtra("revision",it.revision);putExtra("expected_state",it.toString()) }
+            data = android.net.Uri.parse("reminder://action/$reminderId/${expected?.revision}/$action")
         }
         val confirmPending = PendingIntent.getBroadcast(
             context, notificationId * 2, confirmIntent,
@@ -185,6 +198,8 @@ class NotificationManager(private val context: Context) {
             action = ACTION_SNOOZE
             putExtra(EXTRA_REMINDER_ID, reminderId)
             putExtra(EXTRA_NOTIFICATION_ID, notificationId)
+            expected?.let { putExtra("expected_at",it.nextTriggerAt); putExtra("revision",it.revision);putExtra("expected_state",it.toString()) }
+            data = android.net.Uri.parse("reminder://action/$reminderId/${expected?.revision}/$action")
         }
         val snoozePending = PendingIntent.getBroadcast(
             context, notificationId * 2 + 1, snoozeIntent,
@@ -208,6 +223,7 @@ class NotificationManager(private val context: Context) {
             .extend(NotificationCompat.WearableExtender().setContentAction(0))
             .build()
 
+        if(android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(context,android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) throw SecurityException("Notification permission denied")
         notificationManager.notify(notificationId, notification)
     }
 
@@ -225,6 +241,7 @@ class NotificationManager(private val context: Context) {
             .setAutoCancel(true)
             .build()
 
+        if(android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(context,android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) throw SecurityException("Notification permission denied")
         notificationManager.notify(notificationId, notification)
     }
 
@@ -259,6 +276,7 @@ class NotificationManager(private val context: Context) {
             .setAutoCancel(true)
             .build()
 
+        if(android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(context,android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return
         notificationManager.notify(0x5A17, notification)
     }
 

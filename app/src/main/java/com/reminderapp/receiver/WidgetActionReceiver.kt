@@ -1,121 +1,32 @@
 package com.reminderapp.receiver
 
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
+import android.content.*
 import com.reminderapp.data.database.AppDatabase
-import com.reminderapp.service.ReminderEngine
-import com.reminderapp.service.ReminderScheduler
-import com.reminderapp.service.SyncStore
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import com.reminderapp.service.*
+import kotlinx.coroutines.*
 
-/**
- * 桌面小组件快捷按钮动作接收器（v1.8.7 小组件增强）
- *
- * 点击小组件上的完成/稍后按钮 → 广播到这里 → 确认该提醒并重排下一次，
- * 与通知栏「确认」逻辑一致，最后刷新小组件。
- */
 class WidgetActionReceiver : BroadcastReceiver() {
-
     companion object {
         const val ACTION_COMPLETE = "com.reminderapp.widget.ACTION_COMPLETE"
-        // v2.0.16: 小组件「稍后提醒」按钮
         const val ACTION_SNOOZE = "com.reminderapp.widget.ACTION_SNOOZE"
         const val EXTRA_REMINDER_ID = "reminder_id"
     }
-
-    override fun onReceive(context: Context, intent: Intent) {
-        when (intent.action) {
-            ACTION_COMPLETE -> handleComplete(context, intent)
-            ACTION_SNOOZE -> handleSnooze(context, intent)
+    override fun onReceive(context: Context,intent: Intent) {
+        val action=when(intent.action) {
+            ACTION_COMPLETE -> ReminderActions.Action.COMPLETE
+            ACTION_SNOOZE -> ReminderActions.Action.SNOOZE
+            else -> return
         }
-    }
-
-    private fun handleComplete(context: Context, intent: Intent) {
-        val reminderId = intent.getLongExtra(EXTRA_REMINDER_ID, -1L)
-        if (reminderId <= 0) return
-
-        val appContext = context.applicationContext
-        val db = AppDatabase.getInstance(appContext)
-        val scheduler = ReminderScheduler(appContext)
-
-        // ⚠️ goAsync() 保活：小组件广播后台执行，协程未完成进程可能被杀
-        val pendingResult = goAsync()
+        val pending=goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val reminder = db.reminderDao().getById(reminderId) ?: return@launch
-                // v2.4.9: 对齐 NotificationActionReceiver——软删提醒后桌面上残留的小组件按钮
-                // 不应再操作已删除记录（否则会确认/重排已删任务、污染同步与统计）
-                if (!reminder.isActive) {
-                    com.reminderapp.service.NotificationManager(appContext).cancelReminderNotifications(reminderId)
-                    return@launch
-                }
-                val updated = ReminderEngine.confirm(reminder)
-                db.reminderDao().update(updated)
-                // v1.9.6 fix: 完成确认后取消已显示的通知
-                com.reminderapp.service.NotificationManager(appContext).cancelReminderNotifications(reminderId)
-                // v2.0.22: 一次性提醒确认后归档，不重排（对齐 NotificationActionReceiver）
-                if (!(updated.kind == "cycle" && updated.cycle == "once")) {
-                    scheduler.schedule(updated)
-                }
-                // v1.9.6 fix: 漏 touchLocalChange → 本地新数据被远程旧数据覆盖
-                SyncStore.touchLocalChange()
-                // 刷新小组件（含下次提醒与倒计时）
-                ReminderWidgetProvider.refresh(appContext)
-            } catch (e: Exception) {
-                // v2.4.9: 后台广播协程未捕获异常会杀进程
-                android.util.Log.e("WidgetActionReceiver", "处理小组件完成动作失败", e)
-                runCatching { com.reminderapp.service.NotificationManager(appContext).cancelReminderNotifications(reminderId) }
-            } finally {
-                pendingResult.finish()
-            }
-        }
-    }
-
-    // v2.0.16: 小组件「稍后提醒」——推迟 15 分钟并重排（对齐通知栏 ACTION_SNOOZE）
-    private fun handleSnooze(context: Context, intent: Intent) {
-        val reminderId = intent.getLongExtra(EXTRA_REMINDER_ID, -1L)
-        if (reminderId <= 0) return
-
-        val appContext = context.applicationContext
-        val db = AppDatabase.getInstance(appContext)
-        val scheduler = ReminderScheduler(appContext)
-
-        val pendingResult = goAsync()
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val reminder = db.reminderDao().getById(reminderId) ?: return@launch
-                // v2.4.9: 对齐 NotificationActionReceiver——软删提醒后残留小组件按钮不操作已删记录
-                if (!reminder.isActive) {
-                    com.reminderapp.service.NotificationManager(appContext).cancelReminderNotifications(reminderId)
-                    return@launch
-                }
-                val updated = ReminderEngine.snooze(reminder)
-                db.reminderDao().update(updated)
-                // snooze 已把 nextTriggerAt 设成 15 分钟后，交给 scheduler 定时重推
-                scheduler.schedule(updated)
-                // 写操作记录（统计「稍后提醒」频率；口径与通知栏 snooze 一致）
-                try {
-                    db.reminderRecordDao().insert(
-                        com.reminderapp.data.entity.ReminderRecordEntity(
-                            reminderId = reminderId,
-                            action = com.reminderapp.data.entity.ReminderRecordEntity.ACTION_SNOOZED
-                        )
-                    )
-                } catch (_: Exception) {
-                }
-                com.reminderapp.service.NotificationManager(appContext).cancelReminderNotifications(reminderId)
-                SyncStore.touchLocalChange()
-                ReminderWidgetProvider.refresh(appContext)
-            } catch (e: Exception) {
-                // v2.4.9: 后台广播协程未捕获异常会杀进程
-                android.util.Log.e("WidgetActionReceiver", "处理小组件稍后动作失败", e)
-                runCatching { com.reminderapp.service.NotificationManager(appContext).cancelReminderNotifications(reminderId) }
-            } finally {
-                pendingResult.finish()
-            }
+                val r=AppDatabase.getInstance(context).reminderDao().getById(intent.getLongExtra("reminder_id",0)) ?: return@launch
+                // Missing tokens are legacy notifications: require opening the app after upgrade.
+                if (r.nextTriggerAt != intent.getLongExtra("expected_at",-1) || r.revision != intent.getLongExtra("revision",-1)) return@launch
+                if (r.toString() != intent.getStringExtra("expected_state")) return@launch
+                ReminderActions(context).apply(r,action)
+            } catch(e: Exception) { android.util.Log.e("WidgetActionReceiver","Action failed",e) }
+            finally { pending.finish() }
         }
     }
 }

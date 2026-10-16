@@ -30,7 +30,7 @@ import com.reminderapp.i18n.zh
 object BackupService {
 
     private const val BACKUP_VERSION = 1
-    private const val SCHEMA_VERSION = 2
+    private const val SCHEMA_VERSION = 3
 
     /** 将提醒列表导出为 JSON 字符串（dataVersion 取当前本地单调版本，判新主依据） */
     fun exportToJson(reminders: List<ReminderEntity>, dataVersion: Long = SyncStore.localVersion): String {
@@ -79,6 +79,13 @@ object BackupService {
             obj.put("is_critical", r.isCritical)
             // v2.4.8: 避开节假日/周末（缺省 false，旧备份兼容）
             obj.put("holidayAware", r.holidayAware)
+            obj.put("recurrenceMode", r.recurrenceMode)
+            obj.put("reminderStyle", r.reminderStyle)
+            obj.put("retryIntervalsMinutes", JSONArray(ReminderPolicy.intervals(r)))
+            obj.put("maxReminderAttempts", r.maxReminderAttempts.coerceIn(1, 10))
+            obj.put("quietStartMinute", r.quietStartMinute ?: JSONObject.NULL)
+            obj.put("quietEndMinute", r.quietEndMinute ?: JSONObject.NULL)
+            obj.put("weeklyWeekday", r.weeklyWeekday ?: JSONObject.NULL)
             arr.put(obj)
         }
         root.put("reminders", arr)
@@ -116,7 +123,7 @@ object BackupService {
                     priority = o.optString("priority", "normal"),
                     firstTriggerAt = o.optLong("firstTriggerAt", System.currentTimeMillis()),
                     nextTriggerAt = o.optLong("nextTriggerAt", System.currentTimeMillis()),
-                    status = o.optString("status", "idle"),
+                    status = o.optString("status", "idle").let { if (it == "active") "notifying" else it },
                     isActive = o.optBoolean("isActive", true),
                     // v2.0.22: 恢复补齐的调度/元数据字段（旧文件缺字段回落默认值）
                     retryCount = o.optInt("retryCount", 0),
@@ -125,7 +132,14 @@ object BackupService {
                     holidayAdjustNote = if (o.isNull("holidayAdjustNote")) null else o.optString("holidayAdjustNote", "").ifEmpty { null },
                     // H1: 导入时写回关键标记（缺省 false，兼容旧备份文件缺字段）；阶段2 改 camelCase，旧 snake 兜底
                     isCritical = o.optBoolean("isCritical", o.optBoolean("is_critical", false)),
-                    holidayAware = o.optBoolean("holidayAware", false)
+                    holidayAware = o.optBoolean("holidayAware", false),
+                    weeklyWeekday = if (o.isNull("weeklyWeekday")) null else o.optInt("weeklyWeekday"),
+                    recurrenceMode = o.optString("recurrenceMode", "fixed").takeIf { it in setOf("fixed", "afterCompletion") } ?: "fixed",
+                    reminderStyle = o.optString("reminderStyle", if (o.optBoolean("isCritical", o.optBoolean("is_critical", false))) "important" else "persistent").takeIf { it in setOf("gentle", "persistent", "important") } ?: "persistent",
+                    retryIntervalsMinutes = parseIntervals(o),
+                    maxReminderAttempts = strictInt(o,"maxReminderAttempts",5).takeIf { it in 1..10 } ?: 5,
+                    quietStartMinute = quietMinute(o, "quietStartMinute"),
+                    quietEndMinute = quietMinute(o, "quietEndMinute")
                 )
                 list.add(entity)
             }
@@ -133,6 +147,18 @@ object BackupService {
         } catch (e: Exception) {
             null
         }
+    }
+
+    private fun strictInt(o: JSONObject,key: String,default: Int): Int = (o.opt(key) as? Number)?.toString()?.toIntOrNull() ?: default
+    private fun parseIntervals(o: JSONObject): String {
+        val arr = o.optJSONArray("retryIntervalsMinutes") ?: return "60,240,720,1440"
+        val values = (0 until arr.length()).map { (arr.opt(it) as? Number)?.toString()?.toIntOrNull() ?: -1 }
+        return if (values.size in 1..10 && values.all { it in 1..10080 }) values.joinToString(",") else "60,240,720,1440"
+    }
+    private fun quietMinute(o: JSONObject, key: String): Int? {
+        if (o.isNull("quietStartMinute") || o.isNull("quietEndMinute")) return null
+        val start = strictInt(o,"quietStartMinute",-1); val end = strictInt(o,"quietEndMinute",-1)
+        return if (start in 0..1439 && end in 0..1439) o.optInt(key) else null
     }
 
     /** 导入指纹（与近场传输共用，防误判）：title|nextTriggerAt|kind|cycle|note */

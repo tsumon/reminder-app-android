@@ -3,7 +3,15 @@ package com.reminderapp.service
 import android.content.Context
 import android.util.Log
 import com.google.gson.JsonParser
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.Dispatchers
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.Response
+import java.io.IOException
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -34,6 +42,28 @@ object HolidayRemoteService {
             .build()
     }
 
+    fun hasCachedYear(context: Context, year: Int): Boolean =
+        context.getSharedPreferences(CACHE_KEY_PREFIX+year,Context.MODE_PRIVATE).all.isNotEmpty()
+
+    /** Cancellation reaches the socket even while DNS/connect/read is waiting. */
+    internal suspend fun download(client: OkHttpClient, request: Request): String? = suspendCancellableCoroutine { continuation ->
+        val call=client.newCall(request)
+        continuation.invokeOnCancellation { call.cancel() }
+        call.enqueue(object: Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                if(continuation.isActive) continuation.resumeWithException(e)
+            }
+            override fun onResponse(call: Call, response: Response) {
+                try {
+                    val body=response.use { if(it.isSuccessful) it.body?.string() else null }
+                    if(continuation.isActive) continuation.resume(body)
+                } catch(e: Exception) {
+                    if(continuation.isActive) continuation.resumeWithException(e)
+                }
+            }
+        })
+    }
+
     /** 查询某公历日期（yyyy-MM-dd）的节假日状态；无数据（普通工作日/未拉到）返回 null */
     fun status(context: Context, year: Int, month: Int, day: Int): DayStatus? {
         val key = String.format(Locale.getDefault(), "%04d-%02d-%02d", year, month, day)
@@ -48,9 +78,8 @@ object HolidayRemoteService {
     suspend fun refresh(context: Context, year: Int) = withContext(Dispatchers.IO) {
         try {
             val req = Request.Builder().url("$BASE_URL/$year.json").build()
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext
-                val body = resp.body?.string() ?: return@withContext
+            val body = download(client,req) ?: return@withContext
+            run {
                 val json = try {
                     JsonParser.parseString(body).asJsonObject
                 } catch (e: Exception) {
@@ -70,9 +99,10 @@ object HolidayRemoteService {
                         count++
                     }
                 }
-                edit.apply()
+                edit.putBoolean("_loaded",true).apply()
                 Log.i("HolidayRemote", "$year 节假日数据已缓存 $count 条")
             }
+        } catch (e: CancellationException) { throw e
         } catch (e: Exception) {
             // 离线/接口失败：保留旧缓存，不打扰用户
             Log.i("HolidayRemote", "$year 刷新失败，使用缓存/降级: ${e.message}")

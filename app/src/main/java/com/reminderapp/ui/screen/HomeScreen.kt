@@ -133,6 +133,9 @@ private fun matchesSearch(reminder: ReminderEntity, query: String): Boolean {
 fun HomeScreen(
     viewModel: HomeViewModel,
     onCreateReminder: () -> Unit,
+    onQuickCreate: (ReminderEntity) -> Unit = {},
+    canUndoCreate: Boolean = false,
+    onUndoCreate: () -> Unit = {},
     onReminderClick: (Long) -> Unit,
     onAIChat: () -> Unit,
     onDeleteReminder: (Long) -> Unit,
@@ -373,12 +376,12 @@ fun HomeScreen(
         val now = System.currentTimeMillis()
         val due = allReminders.filter { r ->
             r.isActive && r.status != "confirmed" &&
-                (r.status == "notifying" || r.status == "overdue" || r.status == "snoozed" ||
+                (r.status == "notifying" || r.status == "overdue" || (r.status == "snoozed" && r.nextTriggerAt<=now) ||
                     (r.status == "pending" && r.nextTriggerAt <= now)) &&
                 matchSmartList(r, smartList) && matchesSearch(r, searchQuery)
         }.sortedBy { it.nextTriggerAt }
         val dueIds = due.map { it.id }.toSet()
-        val waiting = grouped.waiting.filter {
+        val waiting = grouped.waiting.sortedBy { it.nextTriggerAt }.filter {
             matchSmartList(it, smartList) && matchesSearch(it, searchQuery) && it.id !in dueIds
         }
         val completed = grouped.completed.filter {
@@ -403,10 +406,12 @@ fun HomeScreen(
                 )
             }
 
+            item { com.reminderapp.ui.component.QuickCreate(onQuickCreate,onAIChat)
+                if(canUndoCreate) TextButton(onClick=onUndoCreate) { Text(zh("撤销刚才的创建")) }
+            }
             item {
-                OverviewCard(
-                    unhandledCount = allReminders.count { it.isActive && it.status != "confirmed" }
-                )
+                val undo by viewModel.undo.collectAsState()
+                if(undo != null) TextButton(onClick={viewModel.undoCompletion()}) { Text(zh("撤销刚才的完成")) }
             }
 
             if (due.isNotEmpty()) {
@@ -433,6 +438,7 @@ fun HomeScreen(
                             selectedIds = if (reminder.id in selectedIds) selectedIds - reminder.id else selectedIds + reminder.id
                         }
                     )
+                    if(!(reminder.kind=="cycle" && reminder.cycle=="once")) TextButton(onClick={viewModel.skip(reminder)}) { Text(zh("跳过本次")) }
                 }
             }
 
@@ -672,16 +678,9 @@ fun HomeScreen(
                         return@TextButton
                     }
                     try {
-                        // 强制 id=0 让 Room 重新自增，避免与现有行主键冲突
-                        var imported = entity.copy(id = 0)
-                        // I10: 导入时重算下次触发时间（对齐 WebDAV replaceLocal），
-                        //     避免备份里的过期 nextTriggerAt 导致立即触发或永不触发
-                        imported = imported.copy(nextTriggerAt = com.reminderapp.service.ReminderEngine.calculateNextTrigger(imported, com.reminderapp.ReminderApp.instance))
+                        val imported=entity.copy(id=0)
                         scope.launch {
-                            val newId = ReminderApp.instance.database.reminderDao().insert(imported)
-                            ReminderApp.instance.scheduler.schedule(imported.copy(id = newId))
-                            com.reminderapp.service.SyncStore.touchLocalChange()
-                            com.reminderapp.receiver.ReminderWidgetProvider.refresh(cardImportContext)
+                            com.reminderapp.service.ReminderActions(cardImportContext).importItems(listOf(imported))
                             cardImportText = ""
                             cardImportMsg = null
                             showCardImportDialog = false
@@ -859,7 +858,7 @@ fun SwipeableReminderCard(
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = when {
-                        animated > 0f && isDone -> zh("撤销")
+                        animated > 0f && isDone -> zh("重新启用")
                         animated > 0f -> zh("完成")
                         else -> zh("删除")
                     },

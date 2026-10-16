@@ -87,9 +87,30 @@ object SyncStore {
         get() = !hasSyncedOnce && lastSyncVersion <= 0L
 
     /** 标记本地数据发生了变更（墙钟时间戳 + 单调版本同时推进） */
-    fun touchLocalChange() {
+    @Synchronized
+    fun touchLocalChange(): Long {
         lastLocalChange = System.currentTimeMillis()
         localVersion = localVersion + 1
+        return localVersion
+    }
+
+    @Synchronized
+    fun acknowledgeCaptured(generation: Long, uploadedAt: Long) {
+        lastSyncVersion=maxOf(lastSyncVersion,generation)
+        if(localVersion==generation) lastLocalChange=maxOf(lastLocalChange,uploadedAt)
+        lastSyncAt=System.currentTimeMillis()
+        hasSyncedOnce=true
+    }
+    @Synchronized
+    fun acceptRemote(expectedGeneration: Long, remoteGeneration: Long, remoteTimestamp: Long): Long {
+        check(localVersion==expectedGeneration) { "本地数据已变更，请重试" }
+        val merged=maxOf(expectedGeneration,remoteGeneration)
+        localVersion=merged
+        lastSyncVersion=merged
+        lastLocalChange=remoteTimestamp
+        lastSyncAt=System.currentTimeMillis()
+        hasSyncedOnce=true
+        return merged
     }
 
     var lastSyncAt: Long

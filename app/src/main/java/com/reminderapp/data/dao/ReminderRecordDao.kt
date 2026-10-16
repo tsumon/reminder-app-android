@@ -12,6 +12,12 @@ interface ReminderRecordDao {
     @Query("SELECT * FROM reminder_records ORDER BY timestamp ASC")
     suspend fun getAll(): List<ReminderRecordEntity>
 
+    @Query("DELETE FROM reminder_records WHERE id = :id AND action = 'confirmed'")
+    suspend fun deleteCompletion(id: Long)
+
+    @Query("DELETE FROM reminder_records WHERE id = :id AND action = 'notified'")
+    suspend fun deleteNotification(id: Long)
+
     @Insert
     suspend fun insert(record: ReminderRecordEntity): Long
 

@@ -6,14 +6,14 @@ plugins {
 
 android {
     namespace = "com.reminderapp"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.reminderapp"
         minSdk = 26
-        targetSdk = 34
-        versionCode = 69
-        versionName = "2.7.2"
+        targetSdk = 36
+        versionCode = 70
+        versionName = "2.8.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -111,6 +111,9 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     // 单元测试：JUnit + ICU4J（历法回归测试用，android.icu 与 com.ibm.icu 同源）
+    androidTestImplementation("androidx.test:runner:1.5.2")
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.room:room-testing:2.6.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.ibm.icu:icu4j:75.1")
     // mockable android.jar 里 org.json 全是返回默认值的 stub（JSONObject.toString 返回 null），
