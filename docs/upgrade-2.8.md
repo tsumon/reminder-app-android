@@ -38,6 +38,12 @@ JSON schemaVersion 3；`version` 继续为 1，旧字段仍可读。新字段及
 
 legacy isCritical=true 且没有 reminderStyle 时使用 important。静默字段为午夜起分钟数 0..1439，必须同时存在；无效间隔/次数回落旧策略。保留导入的 nextTriggerAt / retryCount / status；JSON 时间戳继续使用毫秒。共享行为数据见 `app/src/test/resources/fixtures/protocol_v3.json`，旧 v1/v2 fixture 继续测试。
 
+跨端合并将标准 UUID 的大小写视为同一身份；保留已有本地数值 ID、syncId 原始写法、revision 递增及完成记录引用。稳定身份在整个集合中优先于旧指纹匹配；不同显式身份、非 UUID 的大小写不同标识仍分别保留。旧 iOS v1/v2 的 active 导入为 notifying，保留原 nextTriggerAt、retryCount、lastConfirmedAt；overdue 和其他状态不重新计算。
+
+固定周期提前完成尚未触发的 pending/idle、retryCount=0 主提醒，会消耗该次未来周期一次。已触发重试或稍后的未来时间不作为周期锚点，避免跨过正常的下次主提醒。跳过使用相同区别；完成后重新计时的周期从实际跳过时刻加一个间隔，但不改 firstTriggerAt / lastConfirmedAt，也不计入完成次数。日期/规则的完成语义保持原状，跳过未来主提醒则前进一次。
+
+Android `BackupService` 当前只导出提醒，不导出完成记录；保留本地记录不代表跨端历史同步。联调使用真实 Android 导出 → iOS `BackupHelper` 导入/导出 → Android 导入/导出/再导入，比较双方支持的身份、运行状态、策略、关键提醒和完成锚点字段；本地数值 ID、导出时间、UUID 大小写及平台私有字段不作等值要求。
+
 Room 8→9 仅新增策略、静默和 revision 字段；旧关键提醒回填 important。保留原列、ID 和记录，迁移测试会比较每个旧列。SyncId 唯一索引与旧迁移保持一致，新建表也声明该索引。
 
 构建：AGP 8.10.1、Gradle 8.11.1、JDK 17、compile/target SDK 36，minSdk 26。正式签名环境变量及默认 secret 保持原值，不生成新密钥。CI 的 PR 测试无需签名 secret，可信 push/dispatch 才生成正式 APK；v* tag 的原发布路径保留，本轮不打 tag。上传前核对证书 SHA-256 `0ea509a1dc9461c291a2db47caf5f055d83e4108fb28c3e87ed4fa62bead7038`、应用 ID 和版本。
@@ -48,6 +54,16 @@ Room 8→9 仅新增策略、静默和 revision 字段；旧关键提醒回填 i
 ```
 
 Windows 的非 ASCII 路径检查已配置 override；若 JDK AF_UNIX 使用临时目录失败，可设置 `-Djdk.net.unixdomain.tmpdir=C:/codex-tools/tmp -Djava.io.tmpdir=C:/codex-tools/tmp`。该目录须先存在。
+
+## 联调与发布证据边界
+
+本轮增加真实导入/合并/引擎回归测试，并在 Room 动作测试中覆盖 UUID 合并后记录引用保留、提前完成/跳过及旧动作令牌拒绝。Windows 本地构建使用 ASCII 源码副本，每个受版本控制文件记录 SHA-256 对照；单元测试、debug APK、lint 和设备测试 APK 编译与最终 head 的 CI 分开报告。
+
+API 29/36 CI 在产品设备测试后启动实际应用并截屏，随 `android-device-tests-api-*` 上传 `smoke/home.png`、启动日志和状态；截图仅为外观烟雾证据。包装脚本保留原设备测试退出码，截图失败会留下警告；设备测试失败仍令 CI 失败。签名验证继续只读取原有 CI secret，不生成替代密钥。
+
+此前 Android `044fa34` 的 CI `38845115316` 单元测试与 API 29/36 设备测试通过，证书已与 v2.7.2 基线比较；这属于历史证据。新的联调提交仍须在准确 head 上重新运行完整 CI、签名 APK 的 `apksigner verify --print-certs` 与 `aapt dump badging`。最终 CI、产物及证书对照由 PR/联调报告记录，不能将历史通过视为新提交通过。
+
+真机锁屏送达、Doze/OEM 后台行为、原正式签名 APK 的原地覆盖安装以及 iOS 分发签名仍未验证。iOS 逻辑/迁移、模拟器 UI 与 app/widget 归档须按各自准确提交和实际 CI 输出报告；本地 Windows 不能替代 Xcode 构建。
 
 ## 公开测试清单（待真机执行，不能视为已验证）
 

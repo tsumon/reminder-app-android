@@ -13,6 +13,33 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ReminderActionsTest {
+    @Test fun earlyPrimaryCompletionAndSkipRejectDuplicateTokensAndPreserveRecords() = runBlocking {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val db=Room.inMemoryDatabaseBuilder(context,AppDatabase::class.java).build()
+        var id=0L
+        try {
+            fun time(value: String)=java.time.LocalDateTime.parse(value).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+            val now=time("2026-10-19T12:00")
+            val initial=ReminderEntity(title="Early primary",cycle="daily",firstTriggerAt=time("2026-10-20T09:00"),nextTriggerAt=time("2026-10-20T09:00"))
+            id=db.reminderDao().insert(initial)
+            val before=initial.copy(id=id)
+            val prior=db.reminderRecordDao().insert(ReminderRecordEntity(reminderId=id,action="confirmed",timestamp=now-86400000))
+            val actions=ReminderActions(context,db)
+            val completed=actions.apply(before,ReminderActions.Action.COMPLETE,now=now)!!
+            assertEquals(time("2026-10-21T09:00"),completed.reminder.nextTriggerAt)
+            assertEquals(now,completed.reminder.lastConfirmedAt)
+            assertNull(actions.apply(before,ReminderActions.Action.COMPLETE,now=now))
+            assertEquals(2,db.reminderRecordDao().getAll().count { it.action=="confirmed" })
+            assertTrue(actions.undo(completed.undo!!))
+            val restored=db.reminderDao().getById(id)!!
+            val skipped=actions.apply(restored,ReminderActions.Action.SKIP,now=now)!!.reminder
+            assertEquals(time("2026-10-21T09:00"),skipped.nextTriggerAt)
+            assertNull(skipped.lastConfirmedAt)
+            assertNull(actions.apply(restored,ReminderActions.Action.SKIP,now=now))
+            assertEquals(listOf(prior),db.reminderRecordDao().getAll().filter { it.action=="confirmed" }.map { it.id })
+            assertEquals(1,db.reminderRecordDao().getAll().count { it.action=="skipped" })
+        } finally { if(id>0) ReminderScheduler(context).cancel(id);db.close() }
+    }
     @Test fun productionActionsRecordSkipCompleteAndGuardedUndo() = runBlocking {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val db=Room.inMemoryDatabaseBuilder(context,AppDatabase::class.java).build()

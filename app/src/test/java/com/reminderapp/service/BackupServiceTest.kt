@@ -10,6 +10,26 @@ import org.junit.Test
  * 避免「文件导入重复新增、近场传输跳过重复」的跨入口不一致。
  */
 class BackupServiceTest {
+    @Test fun legacyIosActiveImportsAsNotifyingWithoutChangingRuntimeState() {
+        for (version in listOf(1,2)) {
+            val json="""{"schemaVersion":$version,"reminders":[{"syncId":"8F14E45F-CEEA-4B5F-8D1A-9C3F2B7E5D01","title":"Legacy iOS","status":"active","nextTriggerAt":1792497600000,"retryCount":2,"lastConfirmedAt":1792314000000}]}"""
+            val imported=BackupService.importFromJson(json)!!.single()
+            assertEquals("notifying",imported.status)
+            assertEquals(1792497600000L,imported.nextTriggerAt)
+            assertEquals(2,imported.retryCount)
+            assertEquals(1792314000000L,imported.lastConfirmedAt)
+            assertTrue(ReminderPolicy.shouldSchedule(imported))
+            assertEquals(imported,BackupService.importFromJson(BackupService.exportToJson(listOf(imported),0))!!.single())
+        }
+    }
+    @Test fun importPreservesOverdueAndUnknownStatuses() {
+        for (status in listOf("notifying","overdue","snoozed","custom-state")) {
+            val r=BackupService.importFromJson("""{"reminders":[{"status":"$status","nextTriggerAt":12345,"retryCount":5}]}""")!!.single()
+            assertEquals(status,r.status)
+            assertEquals(12345L,r.nextTriggerAt)
+            assertEquals(5,r.retryCount)
+        }
+    }
 
     private fun reminder(title: String, nextTriggerAt: Long) = ReminderEntity(
         title = title,

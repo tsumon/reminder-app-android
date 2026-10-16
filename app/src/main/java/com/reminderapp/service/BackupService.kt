@@ -123,7 +123,7 @@ object BackupService {
                     priority = o.optString("priority", "normal"),
                     firstTriggerAt = o.optLong("firstTriggerAt", System.currentTimeMillis()),
                     nextTriggerAt = o.optLong("nextTriggerAt", System.currentTimeMillis()),
-                    status = o.optString("status", "idle"),
+                    status = o.optString("status", "idle").let { if (it == "active") "notifying" else it },
                     isActive = o.optBoolean("isActive", true),
                     // v2.0.22: 恢复补齐的调度/元数据字段（旧文件缺字段回落默认值）
                     retryCount = o.optInt("retryCount", 0),

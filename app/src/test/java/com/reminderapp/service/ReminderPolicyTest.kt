@@ -27,7 +27,7 @@ class ReminderPolicyTest {
     }
     @Test fun monthlyCompletionAndFixedUseCalendar() {
         val now=time("2026-01-31T11:00")
-        val r=daily().copy(cycle="monthly", firstTriggerAt=time("2026-01-31T09:00"))
+        val r=daily().copy(cycle="monthly", firstTriggerAt=time("2026-01-31T09:00"), nextTriggerAt=time("2026-01-31T09:00"))
         assertEquals(time("2026-02-28T09:00"),ReminderEngine.confirm(r,now).nextTriggerAt)
         assertEquals(time("2026-02-28T11:00"),ReminderEngine.confirm(r.copy(recurrenceMode="afterCompletion"),now).nextTriggerAt)
     }

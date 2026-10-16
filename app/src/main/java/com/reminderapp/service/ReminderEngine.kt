@@ -350,18 +350,28 @@ object ReminderEngine {
         if (reminder.kind == "cycle" && reminder.cycle == "once") return reminder.copy(
             status = "confirmed", lastConfirmedAt = now, retryCount = 0, holidayAdjustNote = null, revision = reminder.revision + 1)
         val completed = reminder.copy(lastConfirmedAt = now)
-        val next = calculateNextTrigger(completed, now)
+        val reference = if (reminder.kind == "cycle" && reminder.recurrenceMode == "fixed")
+            primaryOccurrenceReference(reminder, now) else now
+        val next = calculateNextTrigger(completed, reference)
         return completed.copy(status = "pending", nextTriggerAt = next, retryCount = 0,
             holidayAdjustNote = null, revision = reminder.revision + 1)
     }
 
     fun skip(reminder: ReminderEntity, now: Long = System.currentTimeMillis()): ReminderEntity? {
         if (reminder.kind == "cycle" && reminder.cycle == "once") return null
-        // Skipping advances the current schedule without a completion or a new completion anchor.
-        val next = calculateNextTrigger(reminder, maxOf(now, reminder.nextTriggerAt))
+        // Use a transient relative anchor for calculation only; skip never writes a completion.
+        val relative = reminder.kind == "cycle" && reminder.recurrenceMode == "afterCompletion"
+        val schedule = if (relative) reminder.copy(lastConfirmedAt = now) else reminder
+        val reference = if (relative) now else primaryOccurrenceReference(reminder, now)
+        val next = calculateNextTrigger(schedule, reference)
         return reminder.copy(status = "pending", nextTriggerAt = next, retryCount = 0,
             holidayAdjustNote = null, revision = reminder.revision + 1)
     }
+
+    /** Only an untriggered primary identifies a future occurrence; retry/snooze dates do not. */
+    private fun primaryOccurrenceReference(reminder: ReminderEntity, now: Long): Long =
+        if (reminder.status in setOf("pending", "idle") && reminder.retryCount == 0)
+            maxOf(now, reminder.nextTriggerAt) else now
 
     /**
      * 稍后提醒 → N 分钟后重推（v1.9.7 对齐 iOS：不动 retryCount，

@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.reminderapp.data.database.AppDatabase
 import com.reminderapp.data.entity.ReminderEntity
+import com.reminderapp.data.entity.ReminderRecordEntity
 import com.reminderapp.service.*
 import kotlinx.coroutines.*
 import org.json.JSONObject
@@ -14,6 +15,29 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class SyncGenerationTest {
+    @Test fun uuidCaseMergeAndImportKeepLocalRecordReferencesAndStoredIdentity() = runBlocking {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val db=Room.inMemoryDatabaseBuilder(context,AppDatabase::class.java).build()
+        var id=0L
+        try {
+            val now=System.currentTimeMillis()
+            val local=ReminderEntity(title="UUID identity",syncId="8f14e45f-ceea-4b5f-8d1a-9c3f2b7e5d01",
+                cycle="daily",firstTriggerAt=now,nextTriggerAt=now+86400000,revision=4)
+            id=db.reminderDao().insert(local)
+            val recordId=db.reminderRecordDao().insert(ReminderRecordEntity(reminderId=id,action="confirmed",timestamp=now-1000))
+            val coordinator=ReminderSyncCoordinator(context,db)
+            val remote=local.copy(id=999,syncId=local.syncId!!.uppercase(),note="Remote edit",status="notifying",retryCount=2)
+            coordinator.merge(coordinator.capture(),listOf(remote),300,now)
+            val merged=db.reminderDao().getAllIncludingInactive().single()
+            assertEquals(remote.copy(id=id,syncId=local.syncId,revision=5),merged)
+            val imported=ReminderActions(context,db).importItems(listOf(remote.copy(note="File import")))
+            assertEquals(1,imported.saved.size)
+            assertEquals(remote.copy(id=id,syncId=local.syncId,note="File import",revision=6),db.reminderDao().getAllIncludingInactive().single())
+            val record=db.reminderRecordDao().getAll().single()
+            assertEquals(recordId,record.id)
+            assertEquals(id,record.reminderId)
+        } finally { if(id>0) ReminderScheduler(context).cancel(id);db.close() }
+    }
     @Test fun completionDuringInitialUploadRemainsDirtyAndPayloadUsesCapturedGeneration() = runBlocking {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val db=Room.inMemoryDatabaseBuilder(context,AppDatabase::class.java).build()
