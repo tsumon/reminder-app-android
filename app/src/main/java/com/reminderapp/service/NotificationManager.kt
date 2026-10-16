@@ -147,6 +147,7 @@ class NotificationManager(private val context: Context) {
             .extend(NotificationCompat.WearableExtender().setContentAction(0))
             .build()
 
+        if(android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(context,android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) throw SecurityException("Notification permission denied")
         notificationManager.notify(notificationId, notification)
     }
 
@@ -222,6 +223,7 @@ class NotificationManager(private val context: Context) {
             .extend(NotificationCompat.WearableExtender().setContentAction(0))
             .build()
 
+        if(android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(context,android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) throw SecurityException("Notification permission denied")
         notificationManager.notify(notificationId, notification)
     }
 
@@ -239,6 +241,7 @@ class NotificationManager(private val context: Context) {
             .setAutoCancel(true)
             .build()
 
+        if(android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(context,android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) throw SecurityException("Notification permission denied")
         notificationManager.notify(notificationId, notification)
     }
 
@@ -273,6 +276,7 @@ class NotificationManager(private val context: Context) {
             .setAutoCancel(true)
             .build()
 
+        if(android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(context,android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return
         notificationManager.notify(0x5A17, notification)
     }
 

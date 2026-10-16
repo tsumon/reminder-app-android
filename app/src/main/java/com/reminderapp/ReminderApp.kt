@@ -57,6 +57,7 @@ class ReminderApp : Application() {
 
         // v2.1.1: 本地自动备份（自签无 iCloud 的本地兜底；当日已备份则跳过）
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            com.reminderapp.service.QuietHoursStore.migrateLegacy(this@ReminderApp)
             com.reminderapp.service.LocalBackupService.backupOnLaunch(this@ReminderApp)
         }
     }

@@ -25,6 +25,8 @@ object AITools {
         - 用户描述提醒需求时 → 调用 create_reminder
         - 用户要确认某个提醒已完成 → 调用 confirm_reminder
         - 用户要推迟某个提醒 → 调用 snooze_reminder
+        - 用户要跳过本次周期 → 调用 skip_reminder（不计完成）
+        - 完成后重新计时 → recurrenceMode=afterCompletion；固定日程 → fixed。轻柔=gentle（仅一次），持续=persistent，重要=important。可传 retryIntervalsMinutes、maxReminderAttempts、quietStartMinute/quietEndMinute（午夜起分钟数）。
         - 用户要删除提醒 → 调用 delete_reminder
         - 用户要修改/调整已有提醒（改标题、改周期、改时间、改备注等） → 调用 update_reminder（只传要改的字段，其余保留原值）
         - 用户问'有什么提醒''列表' → 调用 list_reminders
@@ -68,7 +70,7 @@ object AITools {
         - 例「每季度第二周周二」→ kind=rule, rule_period=quarterly, rule_week=2, rule_weekday=2
         - 例「每年1、4、7、10月第一周周四报税」→ 这是每季度(1/4/7/10月)第一周周四：
           kind=rule, rule_period=quarterly, rule_week=1, rule_weekday=4
-        - 「每月最后一个周五」等 → 近似用 rule_week=5（该月无第5周时自动跳过）
+        - 不支持的复杂规则（例如每月最后一个工作日/周五）不得近似成第5周；使用 ask_user 说明限制并让用户明确选择支持的规则。
 
         **提醒时间：** 用 reminder_hour / reminder_minute 指定时分（默认 9:00）。日期类提醒会自动按目标月日计算，无需传 trigger_date。
 
@@ -91,6 +93,12 @@ object AITools {
                         "note" to mapOf("type" to "string", "description" to "备注"),
                         "kind" to mapOf("type" to "string", "enum" to listOf("cycle", "date", "rule"), "description" to "周期/日期/规则(第N周周X)"),
                         "cycle" to mapOf("type" to "string", "enum" to listOf("daily", "weekly", "biweekly", "monthly", "quarterly", "yearly", "custom", "once")),
+                        "recurrenceMode" to mapOf("type" to "string","enum" to listOf("fixed","afterCompletion")),
+                        "reminderStyle" to mapOf("type" to "string","enum" to listOf("gentle","persistent","important")),
+                        "retryIntervalsMinutes" to mapOf("type" to "array","items" to mapOf("type" to "integer","minimum" to 1,"maximum" to 10080),"minItems" to 1,"maxItems" to 10),
+                        "maxReminderAttempts" to mapOf("type" to "integer","minimum" to 1,"maximum" to 10),
+                        "quietStartMinute" to mapOf("type" to "integer","minimum" to 0,"maximum" to 1439),
+                        "quietEndMinute" to mapOf("type" to "integer","minimum" to 0,"maximum" to 1439),
                         "custom_days" to mapOf("type" to "integer"),
                         "weekday" to mapOf("type" to "integer", "description" to "【每周/每两周提醒必须填】用户指定的星期：1=周一…7=周日。例：「每周日打针」→ cycle=weekly, weekday=7；「每周三开会」→ weekday=3"),
                         "rule_period" to mapOf("type" to "string", "enum" to listOf("monthly", "quarterly", "yearly"), "description" to "规则提醒频率，如每季度/每年"),
@@ -156,6 +164,10 @@ object AITools {
                 )
             )
         ),
+        mapOf("type" to "function", "function" to mapOf(
+            "name" to "skip_reminder", "description" to "跳过当前周期，不记录完成；一次性提醒不能跳过",
+            "parameters" to mapOf("type" to "object","properties" to mapOf("title_keyword" to mapOf("type" to "string")),"required" to listOf("title_keyword"))
+        )),
         mapOf(
             "type" to "function",
             "function" to mapOf(
@@ -196,6 +208,12 @@ object AITools {
                         "new_title" to mapOf("type" to "string", "description" to "新的标题（可选）"),
                         "note" to mapOf("type" to "string", "description" to "新的备注（可选）"),
                         "cycle" to mapOf("type" to "string", "enum" to listOf("daily", "weekly", "biweekly", "monthly", "quarterly", "yearly", "custom", "once")),
+                        "recurrenceMode" to mapOf("type" to "string","enum" to listOf("fixed","afterCompletion")),
+                        "reminderStyle" to mapOf("type" to "string","enum" to listOf("gentle","persistent","important")),
+                        "retryIntervalsMinutes" to mapOf("type" to "array","items" to mapOf("type" to "integer","minimum" to 1,"maximum" to 10080),"minItems" to 1,"maxItems" to 10),
+                        "maxReminderAttempts" to mapOf("type" to "integer","minimum" to 1,"maximum" to 10),
+                        "quietStartMinute" to mapOf("type" to "integer","minimum" to 0,"maximum" to 1439),
+                        "quietEndMinute" to mapOf("type" to "integer","minimum" to 0,"maximum" to 1439),
                         "custom_days" to mapOf("type" to "integer"),
                         "weekday" to mapOf("type" to "integer", "description" to "【每周/每两周提醒必须填】用户指定的星期：1=周一…7=周日。例：「每周日打针」→ cycle=weekly, weekday=7；「每周三开会」→ weekday=3"),
                         "rule_period" to mapOf("type" to "string", "enum" to listOf("monthly", "quarterly", "yearly")),
@@ -232,7 +250,13 @@ object AITools {
                                         "note" to mapOf("type" to "string", "description" to "备注"),
                                         "kind" to mapOf("type" to "string", "enum" to listOf("cycle", "date", "rule"), "description" to "周期/日期/规则"),
                                         "cycle" to mapOf("type" to "string", "enum" to listOf("daily", "weekly", "biweekly", "monthly", "quarterly", "yearly", "custom", "once")),
-                                        "custom_days" to mapOf("type" to "integer"),
+                                        "recurrenceMode" to mapOf("type" to "string","enum" to listOf("fixed","afterCompletion")),
+                        "reminderStyle" to mapOf("type" to "string","enum" to listOf("gentle","persistent","important")),
+                        "retryIntervalsMinutes" to mapOf("type" to "array","items" to mapOf("type" to "integer","minimum" to 1,"maximum" to 10080),"minItems" to 1,"maxItems" to 10),
+                        "maxReminderAttempts" to mapOf("type" to "integer","minimum" to 1,"maximum" to 10),
+                        "quietStartMinute" to mapOf("type" to "integer","minimum" to 0,"maximum" to 1439),
+                        "quietEndMinute" to mapOf("type" to "integer","minimum" to 0,"maximum" to 1439),
+                        "custom_days" to mapOf("type" to "integer"),
                         "weekday" to mapOf("type" to "integer", "description" to "【每周/每两周提醒必须填】用户指定的星期：1=周一…7=周日。例：「每周日打针」→ cycle=weekly, weekday=7；「每周三开会」→ weekday=3"),
                                         "rule_period" to mapOf("type" to "string", "enum" to listOf("monthly", "quarterly", "yearly")),
                                         "rule_week" to mapOf("type" to "integer"),

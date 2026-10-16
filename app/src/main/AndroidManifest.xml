@@ -22,6 +22,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- v1.9.7 近场传输: 扫码接收需要相机 -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
         android:name=".ReminderApp"

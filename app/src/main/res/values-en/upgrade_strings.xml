@@ -59,4 +59,5 @@
     <string name="upgrade_056">WebDAV sync pauses when both sides change. Choose explicitly; a local snapshot is saved first. Local-only reminders stay scheduled. The legacy protocol cannot sync deletions.</string>
     <string name="upgrade_057">Keep local and upload</string>
     <string name="upgrade_058">Use remote and merge</string>
+    <string name="upgrade_059">One-time reminders cannot be skipped</string>
 </resources>

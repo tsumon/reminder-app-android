@@ -56,6 +56,12 @@ class ReminderPolicyTest {
         val json="""{"reminders":[{"title":"test","quietStartMinute":1320}]}"""
         assertNull(BackupService.importFromJson(json)!!.single().quietStartMinute)
     }
+    @Test fun aiPolicyArgumentsUseSameValidatedContract() {
+        val changed=ReminderPolicy.withArguments(daily(),mapOf("recurrenceMode" to "afterCompletion","reminderStyle" to "gentle","maxReminderAttempts" to 3.0,"retryIntervalsMinutes" to listOf(5.0,15.0)))
+        assertEquals("afterCompletion",changed.recurrenceMode);assertEquals("gentle",changed.reminderStyle)
+        assertEquals(listOf(5,15),ReminderPolicy.intervals(changed));assertEquals(3,changed.maxReminderAttempts)
+        assertEquals(ReminderPolicy.legacyIntervals,ReminderPolicy.intervals(ReminderPolicy.withArguments(daily(),mapOf("retryIntervalsMinutes" to listOf(1.5)))))
+    }
     @Test fun malformedPolicyFallsBack() { assertEquals(listOf(60,240,720,1440),ReminderPolicy.intervals(daily().copy(retryIntervalsMinutes="-3,0"))) }
     @Test fun undoGuardRejectsAnyNewerState() {
         val before=daily(); val after=ReminderEngine.confirm(before,time("2026-10-16T11:00"))

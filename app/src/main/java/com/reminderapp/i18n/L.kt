@@ -14,6 +14,7 @@ import com.reminderapp.ReminderApp
  */
 object L {
     val ids: Map<String, Int> = mapOf(
+        "一次性提醒不能跳过" to R.string.upgrade_059,
         "提醒方式" to R.string.upgrade_000,
         "轻柔" to R.string.upgrade_001,
         "持续" to R.string.upgrade_002,

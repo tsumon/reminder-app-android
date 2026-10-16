@@ -59,6 +59,7 @@ object WebDavSync {
             return@withContext SyncResult.Error(zh("请先配置 WebDAV 服务器"))
         }
 
+        QuietHoursStore.migrateLegacy(context)
         val db = AppDatabase.getInstance(context)
         val dao = db.reminderDao()
         // v2.0.17: 单调版本（localVer）为判新主依据；墙钟（localChange）仅兜底（旧文件/升级前本地无版本）

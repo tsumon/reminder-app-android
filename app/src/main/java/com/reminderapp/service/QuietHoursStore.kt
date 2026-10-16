@@ -2,6 +2,9 @@ package com.reminderapp.service
 
 import android.content.Context
 import java.util.Calendar
+import androidx.room.withTransaction
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * 勿扰时段（v2.1.1）：单条提醒的每日静默窗口。
@@ -10,6 +13,25 @@ import java.util.Calendar
  * 语义：start 到 end（分钟，0..1439）之间不弹通知；end < start 表示跨天窗口（如 22:00–08:00）。
  */
 object QuietHoursStore {
+    private val migrationMutex=Mutex()
+    suspend fun migrateLegacy(context: Context) = migrationMutex.withLock {
+        val prefs=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
+        if(prefs.getBoolean("policy_v9_migrated",false)) return@withLock
+        val db=com.reminderapp.data.database.AppDatabase.getInstance(context)
+        var changed=false
+        db.withTransaction {
+            db.reminderDao().getAllIncludingInactive().forEach { r ->
+                val start=startMinute(context,r.id);val end=endMinute(context,r.id)
+                if(r.quietStartMinute==null && start!=null && end!=null) {
+                    db.reminderDao().update(r.copy(quietStartMinute=start,quietEndMinute=end,revision=r.revision+1));changed=true
+                }
+            }
+        }
+        prefs.edit().putBoolean("policy_v9_migrated",true).apply()
+        if(changed) SyncStore.touchLocalChange()
+    }
+    fun legacyAdjusted(context: Context,id: Long,at: Long): Long =
+        if(context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).getBoolean("policy_v9_migrated",false)) at else adjust(context,id,at)
     private const val PREFS = "quiet_hours_settings"
     private fun key(id: Long, suffix: String) = "quiet_hours_${id}_$suffix"
 

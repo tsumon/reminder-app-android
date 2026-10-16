@@ -786,6 +786,7 @@ private suspend fun executeTool(
         "create_reminder" -> handleCreate(args, database, scheduler, notificationMgr)
         "list_reminders" -> handleList(database)
         "confirm_reminder" -> handleConfirm(args, database, scheduler, notificationMgr)
+        "skip_reminder" -> handleSkip(args,database)
         "snooze_reminder" -> handleSnooze(args, database, scheduler, notificationMgr)
         "delete_reminder" -> handleDelete(args, database)
         "update_reminder" -> handleUpdate(args, database, scheduler)
@@ -925,8 +926,9 @@ private fun tryBuildEntity(args: Map<String, Any?>): Pair<ReminderEntity?, Strin
     )
 
     // 用引擎重算 nextTriggerAt（日期/规则类按目标月日计算，避免落到 +1 分钟）
-    val nextTrigger = ReminderEngine.calculateNextTrigger(entity, com.reminderapp.ReminderApp.instance)
-    return Pair(entity.copy(nextTriggerAt = nextTrigger), null)
+    val configured=com.reminderapp.service.ReminderPolicy.withArguments(entity,args)
+    val nextTrigger = ReminderEngine.calculateNextTrigger(configured, com.reminderapp.ReminderApp.instance)
+    return Pair(configured.copy(nextTriggerAt = nextTrigger), null)
 }
 
 private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase, scheduler: ReminderScheduler, notificationMgr: NotificationManager): String {
@@ -1068,6 +1070,13 @@ private suspend fun handleConfirm(args: Map<String, Any?>, database: AppDatabase
     return zhf("已确认「%s」，下次提醒时间已更新。", match.title)
 }
 
+private suspend fun handleSkip(args: Map<String,Any?>,database: AppDatabase): String {
+    val keyword=(args["title_keyword"] as? String)?.trim()?.takeIf { it.isNotEmpty() } ?: return zh("请指定要确认的提醒标题（如：确认「交房租」）。")
+    val r=database.reminderDao().getAllSync().find { it.title.contains(keyword,ignoreCase=true) } ?: return zhf("未找到包含「%s」的提醒",keyword)
+    if(r.kind=="cycle" && r.cycle=="once") return zh("一次性提醒不能跳过")
+    return if(com.reminderapp.service.ReminderActions(com.reminderapp.ReminderApp.instance).apply(r,com.reminderapp.service.ReminderActions.Action.SKIP)!=null) zh("已更新提醒") else zh("提醒已有新变更，请重试")
+}
+
 private suspend fun handleSnooze(args: Map<String, Any?>, database: AppDatabase, scheduler: ReminderScheduler, notificationMgr: NotificationManager): String {
     val keyword = (args["title_keyword"] as? String ?: "").lowercase()
     if (keyword.isEmpty()) return zh("请指定要推迟的提醒标题（如：推迟「交房租」）。")
@@ -1170,8 +1179,15 @@ private suspend fun handleUpdate(
             updatedForTime = updatedBase.copy(firstTriggerAt = cal.timeInMillis)
         }
         val nextTrigger = ReminderEngine.calculateNextTrigger(updatedForTime, com.reminderapp.ReminderApp.instance)
-        val finalUpdated = updatedForTime.copy(nextTriggerAt = nextTrigger, holidayAdjustNote = null)
+        val configured=com.reminderapp.service.ReminderPolicy.withArguments(updatedForTime,args)
+        val scheduleChanged=listOf("cycle","custom_days","rule_period","rule_week","rule_weekday","date_type","target_month","target_day","reminder_hour","reminder_minute","holiday_name","holiday_aware").any { args.containsKey(it) }
+        val finalUpdated = configured.copy(nextTriggerAt = if(scheduleChanged || wasOverdue) nextTrigger else match.nextTriggerAt,
+            revision=match.revision+1,holidayAdjustNote = null)
+        val latest=database.reminderDao().getById(match.id)
+        if(latest!=match) return zh("提醒已有新变更，请重试")
         database.reminderDao().update(finalUpdated)
+        com.reminderapp.service.QuietHoursStore.set(ctx,finalUpdated.id,finalUpdated.quietStartMinute,finalUpdated.quietEndMinute)
+        NotificationManager(ctx).cancelReminderNotifications(finalUpdated.id)
         scheduler.schedule(finalUpdated)
     com.reminderapp.service.SyncStore.touchLocalChange()
     com.reminderapp.receiver.ReminderWidgetProvider.refresh(ctx)

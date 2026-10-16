@@ -42,6 +42,25 @@ class ReminderActionsTest {
             assertFalse(actions.undo(third.undo!!))
         } finally { if(id>0) ReminderScheduler(context).cancel(id);db.close() }
     }
+    @Test fun advanceDeliveryAlsoRespectsQuietHours() = runBlocking {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val db=Room.inMemoryDatabaseBuilder(context,AppDatabase::class.java).build()
+        var id=0L
+        try {
+            val now=System.currentTimeMillis()
+            val clock=java.util.Calendar.getInstance().apply { timeInMillis=now }
+            val minute=clock.get(java.util.Calendar.HOUR_OF_DAY)*60+clock.get(java.util.Calendar.MINUTE)
+            val r=ReminderEntity(title="Quiet advance",kind="date",dateType="solar_birthday",firstTriggerAt=now,nextTriggerAt=now+86400000,
+                quietStartMinute=minute,quietEndMinute=(minute+30)%1440)
+            id=db.reminderDao().insert(r)
+            NotificationManager(context).cancelReminderNotifications(id)
+            ReminderActions(context,db,notificationAllowed={true}).deliver(id,r.nextTriggerAt,0,advanceDays=1,now=now)
+            val system=context.getSystemService(android.app.NotificationManager::class.java)
+            assertFalse(system.activeNotifications.any { it.id==id.toInt()+2000 })
+            assertEquals(r.copy(id=id),db.reminderDao().getById(id))
+            assertTrue(db.reminderRecordDao().getAll().isEmpty())
+        } finally { if(id>0) ReminderScheduler(context).cancel(id);db.close() }
+    }
     @Test fun deniedNotificationsDoNotConsumeAttemptsOrStatistics() = runBlocking {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val db=Room.inMemoryDatabaseBuilder(context,AppDatabase::class.java).build()
@@ -59,6 +78,11 @@ class ReminderActionsTest {
     }
     @Test fun deliveryClaimIsIdempotentAndGentleStillCompletes() = runBlocking {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
+        if(android.os.Build.VERSION.SDK_INT>=33) {
+            InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS").use { descriptor ->
+                java.io.FileInputStream(descriptor.fileDescriptor).use { it.readBytes() }
+            }
+        }
         val db=Room.inMemoryDatabaseBuilder(context,AppDatabase::class.java).build()
         var id=0L
         try {

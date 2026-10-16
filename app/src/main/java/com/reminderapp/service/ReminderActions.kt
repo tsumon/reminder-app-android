@@ -76,12 +76,14 @@ class ReminderActions(private val context: Context, private val db: AppDatabase 
     suspend fun deliver(id: Long, expectedAt: Long, revision: Long, advanceDays: Int = 0, now: Long = System.currentTimeMillis()) = actionMutex.withLock { deliverLocked(id,expectedAt,revision,advanceDays,now) }
     private suspend fun deliverLocked(id: Long, expectedAt: Long, revision: Long, advanceDays: Int, now: Long) {
         var delivered: ReminderEntity? = null
+        var deliveryBefore: ReminderEntity? = null
+        var deliveryRecordId: Long? = null
         var deferred: ReminderEntity? = null
         var deferredAdvance: Pair<ReminderEntity,Long>? = null
         db.withTransaction {
             val r = db.reminderDao().getById(id) ?: return@withTransaction
             if (!ReminderPolicy.shouldSchedule(r) || r.nextTriggerAt != expectedAt || r.revision != revision) return@withTransaction
-            val quiet = ReminderPolicy.adjustQuiet(r, QuietHoursStore.adjust(context,id,now))
+            val quiet = ReminderPolicy.adjustQuiet(r, QuietHoursStore.legacyAdjusted(context,id,now))
             if (advanceDays > 0) {
                 if(quiet>now || !notificationAllowed(r)) deferredAdvance=r to maxOf(quiet,if(notificationAllowed(r)) now else now+3_600_000)
                 else delivered=r
@@ -98,18 +100,38 @@ class ReminderActions(private val context: Context, private val db: AppDatabase 
             }
             val next = ReminderEngine.escalate(r,now)
             db.reminderDao().update(next)
-            db.reminderRecordDao().insert(ReminderRecordEntity(reminderId=id, action="notified",timestamp=now))
+            deliveryRecordId=db.reminderRecordDao().insert(ReminderRecordEntity(reminderId=id, action="notified",timestamp=now))
+            deliveryBefore=r
             delivered=next
         }
         deferredAdvance?.let { (r,at) -> ReminderScheduler(context).scheduleAdvance(r,advanceDays,at) }
         deferred?.let { SyncStore.touchLocalChange();ReminderScheduler(context).schedule(it) }
         val r = delivered ?: return
         val notifications=NotificationManager(context)
-        if (advanceDays > 0) notifications.sendAdvanceNotification(id,r.title,"$advanceDays 天后 · ${r.note}")
-        else {
+        if (advanceDays > 0) {
+            try { notifications.sendAdvanceNotification(id,r.title,"$advanceDays 天后 · ${r.note}") }
+            catch(_: SecurityException) { ReminderScheduler(context).scheduleAdvance(r,advanceDays,ReminderPolicy.adjustQuiet(r,now+3_600_000)) }
+        } else {
             SyncStore.touchLocalChange()
-            if (r.reminderStyle == "important") notifications.sendCriticalReminderNotification(id,r.title,r.note,r)
-            else notifications.sendReminderNotification(id,r.title,r.note,r)
+            try {
+                if (r.reminderStyle == "important") notifications.sendCriticalReminderNotification(id,r.title,r.note,r)
+                else notifications.sendReminderNotification(id,r.title,r.note,r)
+            } catch(_: SecurityException) {
+                // Permission may be revoked after the capability check. Restore only this delivery claim.
+                var retry: ReminderEntity?=null
+                db.withTransaction {
+                    val latest=db.reminderDao().getById(id)
+                    val before=deliveryBefore
+                    if(latest==r && before!=null) {
+                        retry=before.copy(nextTriggerAt=ReminderPolicy.adjustQuiet(before,now+3_600_000),revision=r.revision+1)
+                        db.reminderDao().update(retry!!)
+                    }
+                    deliveryRecordId?.let { db.reminderRecordDao().deleteNotification(it) }
+                }
+                SyncStore.touchLocalChange()
+                retry?.let { ReminderScheduler(context).schedule(it) }
+                return
+            }
             // Re-read after notification work: a simultaneous completion must not restore its old retry.
             val latest=db.reminderDao().getById(id)
             if (latest == r && ReminderPolicy.shouldSchedule(r)) ReminderScheduler(context).schedule(r)

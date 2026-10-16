@@ -77,11 +77,8 @@ class HomeViewModel(
     fun ensureSchedules() {
         viewModelScope.launch {
             val context=com.reminderapp.ReminderApp.instance
-            val active = dao.getAllSync().map { r ->
-                if(r.quietStartMinute==null && com.reminderapp.service.QuietHoursStore.isEnabled(context,r.id)) {
-                    r.copy(quietStartMinute=com.reminderapp.service.QuietHoursStore.startMinute(context,r.id),quietEndMinute=com.reminderapp.service.QuietHoursStore.endMinute(context,r.id)).also { dao.update(it) }
-                } else r
-            }
+            com.reminderapp.service.QuietHoursStore.migrateLegacy(context)
+            val active=dao.getAllSync()
             if (active.isNotEmpty()) scheduler.ensureScheduled(active)
         }
     }
@@ -367,33 +364,6 @@ class ReminderDetailViewModel(
             }
             _reminder.value = updated
             com.reminderapp.service.SyncStore.touchLocalChange()
-        }
-    }
-
-    fun escalate() {
-        viewModelScope.launch {
-            val r = _reminder.value ?: return@launch
-            val updated = ReminderEngine.escalate(r)
-            dao.update(updated)
-            recordDao.insert(ReminderRecordEntity(reminderId = r.id, action = ReminderRecordEntity.ACTION_NOTIFIED))
-            // 批次3 功能5: 关键提醒走最高优先级渠道 + 全屏弹窗
-            if (updated.isCritical) {
-                notificationMgr.sendCriticalReminderNotification(
-                    updated.id,
-                    "⏰ ${updated.title}",
-                    updated.note.ifEmpty { zh("该事项仍需要你确认") }
-                )
-            } else {
-                notificationMgr.sendReminderNotification(
-                    updated.id,
-                    "⏰ ${updated.title}",
-                    updated.note.ifEmpty { zh("该事项仍需要你确认") }
-                )
-            }
-            // v1.9.7: 对齐 iOS —— 重试必须重新排期，否则下一次到点永远不会响；
-            // 已逾期（达到重试上限）不再排期
-            if (updated.status != "overdue") scheduler.schedule(updated)
-            _reminder.value = updated
         }
     }
 

@@ -26,6 +26,7 @@ class BootReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                com.reminderapp.service.QuietHoursStore.migrateLegacy(context)
                 val allActive = db.reminderDao().getAllActive().first()
                 scheduler.rescheduleAll(allActive)
             } finally {

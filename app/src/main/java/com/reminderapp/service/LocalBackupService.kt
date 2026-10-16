@@ -43,6 +43,7 @@ object LocalBackupService {
         return name
     }
 
+    @androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.Q)
     private fun writeToDownloads(context: Context, name: String, json: String): Boolean {
         return try {
             val values = ContentValues().apply {
