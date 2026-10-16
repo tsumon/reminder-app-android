@@ -70,10 +70,10 @@ object WebDavSync {
         try {
             val remote=downloadSnapshot(remoteUrl())
             val remoteJson=remote?.json
-            suspend fun uploadCaptured(): SyncResult {
-                val json=coordinator.uploadJson(captured)
+            suspend fun uploadCaptured(selected: ReminderSyncCoordinator.Snapshot = captured): SyncResult {
+                val json=coordinator.uploadJson(selected)
                 upload(json,remote?.etag)
-                coordinator.acknowledgeUpload(captured,JSONObject(json).getLong("exportedAt"))
+                coordinator.acknowledgeUpload(selected,JSONObject(json).getLong("exportedAt"))
                 pendingConflict.value=null
                 return SyncResult.Success()
             }
@@ -85,58 +85,30 @@ object WebDavSync {
             if(raw<=0) return SyncResult.Error(zh("远程文件解析失败：缺少 exportedAt（文件可能已损坏），未覆盖本地数据"))
             val remoteTimestamp=if(raw<1_000_000_000_000L) raw*1000 else raw
             val remoteGeneration=BackupService.dataVersionOf(remoteJson)
-            val conflict=ReminderSyncCoordinator.conflicts(captured,remoteGeneration,remoteTimestamp,BackupService.remindersCountOf(remoteJson)>0)
+            val decision=ReminderSyncCoordinator.decide(captured,remoteGeneration,remoteTimestamp,BackupService.remindersCountOf(remoteJson)>0)
             if(resolution!=null && (resolution.conflict.localVersion!=localVer || resolution.conflict.remoteJson!=remoteJson))
                 return SyncResult.Error(zh("数据已有新变更，请重新同步后选择"))
             if(SyncStore.localVersion!=localVer) return SyncResult.Error(zh("本地数据已变更，请重试"))
-            if(conflict && resolution==null) return SyncResult.Conflict(remoteJson,localVer,remote?.etag).also { pendingConflict.value=it }
+            if(decision==ReminderSyncCoordinator.Decision.CONFLICT && resolution==null) return SyncResult.Conflict(remoteJson,localVer,remote?.etag).also { pendingConflict.value=it }
             if(resolution!=null) {
                 snapshotLocal(localItems,localVer)
-                if(resolution.useLocal) return uploadCaptured()
+                if(resolution.useLocal) return uploadCaptured(coordinator.prepareLocalResolution(captured,remoteGeneration))
             }
-            if(resolution!=null || remoteNewer(remoteGeneration,remoteTimestamp,localVer,localChange,captured.firstSync)) {
+            if(resolution!=null || decision==ReminderSyncCoordinator.Decision.DOWNLOAD) {
                 val items=BackupService.importFromJson(remoteJson) ?: return SyncResult.Error(zh("远程文件解析失败"))
                 if(resolution==null) snapshotLocal(localItems,localVer)
-                coordinator.merge(captured,items,remoteGeneration,remoteTimestamp)
+                coordinator.merge(captured,items,remoteGeneration,remoteTimestamp,publishSelected=resolution!=null)
                 // Generation acknowledgement is already committed. A later completion stays dirty during restoration.
                 coordinator.restoreSchedules()
+                val merged=coordinator.capture()
+                if(merged.generation>merged.lastSyncGeneration) return uploadCaptured(merged)
                 pendingConflict.value=null
                 return SyncResult.Success()
             }
-            if(localNewer(remoteGeneration,remoteTimestamp,localVer,localChange,captured.firstSync) || localVer>captured.lastSyncGeneration) return uploadCaptured()
+            if(decision==ReminderSyncCoordinator.Decision.UPLOAD) return uploadCaptured()
             coordinator.acknowledgeUpload(captured,localChange)
             return SyncResult.Success()
         } catch(e: Exception) { return SyncResult.Error(friendlyMessage(e)) }
-    }
-
-    // MARK: - v2.0.17 单调版本判新（v2.0.21 修正 F1/F2）
-    // 双端都有 dataVersion 时用单调版本比较（防墙钟回拨/时钟偏差）；
-    // 任一为 0（旧版远程文件 / 升级前本地从未计数）回退 exportedAt 时间戳比较。
-    //
-    // F1：首次同步（firstSync）时两边版本不同源——远程是该账号历史累计值、本地从 0 起，
-    //     版本比较必然判「远程新」→ 本机新建数据被静默覆盖。此时一律回退时间戳。
-    // F2：版本相等（双端自同一基线各改相同次数）时，若仍按 rdv > lv / lv > rdv 判定，
-    //     两者皆 false → 落入「无变更」分支 → 双方改动都不同步且不提示，数据永久分叉。
-    //     故版本相等时用时间戳决胜。
-
-    /** 远程是否更新 */
-    private fun remoteNewer(rdv: Long, rts: Long, lv: Long, lts: Long, firstSync: Boolean): Boolean {
-        if (firstSync) return rts > lts
-        if (rdv > 0L && lv > 0L) {
-            if (rdv == lv) return rts > lts
-            return rdv > lv
-        }
-        return rts > lts
-    }
-
-    /** 本地是否更新 */
-    private fun localNewer(rdv: Long, rts: Long, lv: Long, lts: Long, firstSync: Boolean): Boolean {
-        if (firstSync) return lts > rts
-        if (rdv > 0L && lv > 0L) {
-            if (rdv == lv) return lts > rts
-            return lv > rdv
-        }
-        return lts > rts
     }
 
     /** 远程文件完整 URL（WebDAV 目录 + 文件名） */

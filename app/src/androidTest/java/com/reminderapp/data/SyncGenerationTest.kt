@@ -15,6 +15,43 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class SyncGenerationTest {
+    @Test fun explicitSelectionsPublishMonotonicWireGenerationAndRetainLocalOnlyRows() = runBlocking {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val db=Room.inMemoryDatabaseBuilder(context,AppDatabase::class.java).build()
+        try {
+            val now=System.currentTimeMillis()
+            val shared=ReminderEntity(title="Shared Android",syncId="aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",firstTriggerAt=now,nextTriggerAt=now+86400000)
+            val id=db.reminderDao().insert(shared)
+            val onlyId=db.reminderDao().insert(shared.copy(syncId="bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",title="Local only"))
+            val coordinator=ReminderSyncCoordinator(context,db)
+            SyncStore.localVersion=200;SyncStore.lastSyncVersion=199;SyncStore.hasSyncedOnce=true
+            val local=coordinator.capture()
+            val chosenLocal=coordinator.prepareLocalResolution(local,100)
+            val localJSON=JSONObject(coordinator.uploadJson(chosenLocal))
+            assertEquals(201,localJSON.getLong("dataVersion"))
+            assertEquals("Shared Android",localJSON.getJSONArray("reminders").getJSONObject(0).getString("title"))
+            coordinator.acknowledgeUpload(chosenLocal,now)
+            assertEquals(201,SyncStore.lastSyncVersion)
+            val before=coordinator.capture()
+            coordinator.merge(before,listOf(shared.copy(id=999,title="Selected remote")),100,now,publishSelected=true)
+            val selected=coordinator.capture()
+            assertEquals(202,selected.generation)
+            assertTrue(selected.generation>selected.lastSyncGeneration)
+            assertEquals("Selected remote",db.reminderDao().getById(id)!!.title)
+            assertNotNull(db.reminderDao().getById(onlyId))
+            val selectedJSON=JSONObject(coordinator.uploadJson(selected))
+            assertEquals(202,selectedJSON.getLong("dataVersion"))
+            assertEquals(2,selectedJSON.getJSONArray("reminders").length())
+            // Immutable uploaded selection cannot acknowledge a newer local edit.
+            SyncStore.touchLocalChange()
+            coordinator.acknowledgeUpload(selected,now)
+            assertEquals(202,SyncStore.lastSyncVersion)
+            assertTrue(SyncStore.localVersion>SyncStore.lastSyncVersion)
+            val cleanOther=ReminderSyncCoordinator.Snapshot(listOf(shared),200,now,false,200,now)
+            assertEquals(ReminderSyncCoordinator.Decision.DOWNLOAD,ReminderSyncCoordinator.decide(cleanOther,202,now+1,true))
+            assertEquals(ReminderSyncCoordinator.Decision.CONFLICT,ReminderSyncCoordinator.decide(cleanOther.copy(generation=201),202,now+1,true))
+        } finally { db.close() }
+    }
     @Test fun uuidCaseMergeAndImportKeepLocalRecordReferencesAndStoredIdentity() = runBlocking {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val db=Room.inMemoryDatabaseBuilder(context,AppDatabase::class.java).build()
@@ -30,7 +67,7 @@ class SyncGenerationTest {
             coordinator.merge(coordinator.capture(),listOf(remote),300,now)
             val merged=db.reminderDao().getAllIncludingInactive().single()
             assertEquals(remote.copy(id=id,syncId=local.syncId,revision=5),merged)
-            val imported=ReminderActions(context,db).importItems(listOf(remote.copy(note="File import")))
+            val imported=ReminderActions(context,db,holidayRefresh={}).importItems(listOf(remote.copy(note="File import")))
             assertEquals(1,imported.saved.size)
             assertEquals(remote.copy(id=id,syncId=local.syncId,note="File import",revision=6),db.reminderDao().getAllIncludingInactive().single())
             val record=db.reminderRecordDao().getAll().single()
@@ -57,7 +94,7 @@ class SyncGenerationTest {
                 payload
             }
             inFlight.await()
-            ReminderActions(context,db).apply(raw.copy(id=id),ReminderActions.Action.COMPLETE,now=now+1000)!!
+            ReminderActions(context,db,holidayRefresh={}).apply(raw.copy(id=id),ReminderActions.Action.COMPLETE,now=now+1000)!!
             finishUpload.complete(Unit)
             val payload=JSONObject(upload.await())
             assertEquals(captured.generation,payload.getLong("dataVersion"))
@@ -73,7 +110,7 @@ class SyncGenerationTest {
         val ids=mutableListOf<Long>()
         try {
             SyncStore.localVersion=400;SyncStore.lastSyncVersion=400
-            val actions=ReminderActions(context,db)
+            val actions=ReminderActions(context,db,holidayRefresh={})
             val coordinator=ReminderSyncCoordinator(context,db)
             val now=System.currentTimeMillis()
             val initial=ReminderEntity(title="Creation gate",cycle="daily",firstTriggerAt=now,nextTriggerAt=now)
@@ -112,7 +149,7 @@ class SyncGenerationTest {
             val captured=coordinator.capture()
             val mergedGeneration=coordinator.merge(captured,listOf(raw.copy(id=999,note="remote")),300,now)
             val merged=db.reminderDao().getById(id)!!
-            ReminderActions(context,db).apply(merged,ReminderActions.Action.COMPLETE,now=now+1000)!!
+            ReminderActions(context,db,holidayRefresh={}).apply(merged,ReminderActions.Action.COMPLETE,now=now+1000)!!
             coordinator.restoreSchedules()
             assertEquals(mergedGeneration,SyncStore.lastSyncVersion)
             assertTrue(SyncStore.localVersion>SyncStore.lastSyncVersion)

@@ -8,24 +8,33 @@ import com.reminderapp.receiver.ReminderWidgetProvider
 
 /** All surfaces use this transactional state transition, followed by platform side effects. */
 class ReminderActions(private val context: Context, private val db: AppDatabase = AppDatabase.getInstance(context),
-    private val notificationAllowed: (ReminderEntity) -> Boolean = { NotificationManager(context).canPostReminder(it) }) {
+    private val notificationAllowed: (ReminderEntity) -> Boolean = { NotificationManager(context).canPostReminder(it) },
+    private val holidayRefresh: suspend (Int) -> Unit = { HolidayRemoteService.refresh(context,it) }) {
     enum class Action { COMPLETE, SNOOZE, TOMORROW, SKIP }
     data class Undo(val before: ReminderEntity, val after: ReminderEntity, val recordId: Long, val localVersion: Long)
     data class Result(val reminder: ReminderEntity, val undo: Undo? = null)
-    suspend fun apply(expected: ReminderEntity, action: Action, minutes: Long = 15, now: Long = System.currentTimeMillis()): Result? = ReminderMutationGate.serialized { applyLocked(expected,action,minutes,now) }
-    private suspend fun applyLocked(expected: ReminderEntity, action: Action, minutes: Long, now: Long): Result? {
+    suspend fun apply(expected: ReminderEntity, action: Action, minutes: Long = 15, now: Long = System.currentTimeMillis()): Result? {
+        // Complete the derived precheck before committing the action and returning its undo token.
+        // Network refresh holds no mutation lock; the final exact comparison rejects any newer edit/action.
+        val prepared=if(action in setOf(Action.COMPLETE,Action.SKIP)) {
+            var next=if(action==Action.COMPLETE) ReminderEngine.confirm(expected,now) else ReminderEngine.skip(expected,now) ?: return null
+            if(expected.holidayAware && next.status!="confirmed")
+                next=next.copy(nextTriggerAt=ReminderEngine.deferToWorkday(next.nextTriggerAt,context))
+            HolidayPreCheck.adjusted(context,next,now,holidayRefresh)
+        } else null
+        return ReminderMutationGate.serialized { applyLocked(expected,action,minutes,now,prepared) }
+    }
+    private suspend fun applyLocked(expected: ReminderEntity, action: Action, minutes: Long, now: Long, prepared: ReminderEntity?): Result? {
         var result: Result? = null
         db.withTransaction {
             val current = db.reminderDao().getById(expected.id) ?: return@withTransaction
             if (!ReminderPolicy.matches(current, expected) || current.status == "confirmed") return@withTransaction
-            var next = when (action) {
+            val next = prepared ?: when (action) {
                 Action.COMPLETE -> ReminderEngine.confirm(current, now)
                 Action.SNOOZE -> ReminderEngine.snooze(current, minutes, now)
                 Action.TOMORROW -> ReminderEngine.snoozeTomorrow(current,now)
                 Action.SKIP -> ReminderEngine.skip(current, now) ?: return@withTransaction
             }
-            if (current.holidayAware && action in setOf(Action.COMPLETE, Action.SKIP) && next.status != "confirmed")
-                next = next.copy(nextTriggerAt = ReminderEngine.deferToWorkday(next.nextTriggerAt, context))
             db.reminderDao().update(next)
             val recordId = db.reminderRecordDao().insert(ReminderRecordEntity(reminderId=current.id,
                 action=when(action) { Action.COMPLETE -> "confirmed"; Action.SKIP -> "skipped"; else -> "snoozed" }, timestamp=now))

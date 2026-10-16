@@ -13,6 +13,66 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ReminderActionsTest {
+    @Test fun completionPrechecksCachedHolidayAndExactUndoThroughSharedNonUiAction() = runBlocking {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val db=Room.inMemoryDatabaseBuilder(context,AppDatabase::class.java).build()
+        val cache=context.getSharedPreferences("remote_holiday_cache_2026",0)
+        val old=cache.all.toMap()
+        var id=0L
+        try {
+            fun time(value: String)=java.time.LocalDateTime.parse(value).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+            val now=time("2026-09-24T09:00")
+            cache.edit().clear().putString("2026-10-01","true|National Day").putString("2026-09-30","false|Workday").commit()
+            val initial=ReminderEntity(title="Holiday completion",cycle="weekly",firstTriggerAt=now,nextTriggerAt=now,holidayAware=false)
+            id=db.reminderDao().insert(initial)
+            val before=initial.copy(id=id)
+            val prior=db.reminderRecordDao().insert(ReminderRecordEntity(reminderId=id,action="confirmed",timestamp=now-86400000))
+            val actions=ReminderActions(context,db,holidayRefresh={})
+            val result=actions.apply(before,ReminderActions.Action.COMPLETE,now=now)!!
+            assertEquals(time("2026-09-30T09:00"),result.reminder.nextTriggerAt)
+            assertEquals(now,result.reminder.firstTriggerAt)
+            assertTrue(result.reminder.holidayAdjustNote!!.contains("National Day"))
+            assertEquals(result.reminder,db.reminderDao().getById(id))
+            assertEquals(2,db.reminderRecordDao().getAll().count { it.action=="confirmed" })
+            assertTrue(actions.undo(result.undo!!))
+            assertEquals(before.copy(revision=result.reminder.revision+1),db.reminderDao().getById(id))
+            assertEquals(listOf(prior),db.reminderRecordDao().getAll().map { it.id })
+        } finally {
+            cache.edit().clear().apply();old.forEach { (k,v) -> when(v) { is String -> cache.edit().putString(k,v).apply(); is Boolean -> cache.edit().putBoolean(k,v).apply() } }
+            if(id>0) ReminderScheduler(context).cancel(id);db.close()
+        }
+    }
+    @Test fun newerSnoozeOrEditDuringHolidayRefreshRejectsObsoleteCompletion() = runBlocking {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        for(edit in listOf(false,true)) {
+            val db=Room.inMemoryDatabaseBuilder(context,AppDatabase::class.java).build()
+            val cache=context.getSharedPreferences("remote_holiday_cache_2026",0)
+            val old=cache.all.toMap();var id=0L
+            try {
+                fun time(value: String)=java.time.LocalDateTime.parse(value).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                val now=time("2026-09-24T09:00")
+                cache.edit().clear().commit()
+                val initial=ReminderEntity(title="Refresh race",cycle="weekly",firstTriggerAt=now,nextTriggerAt=now)
+                id=db.reminderDao().insert(initial);val before=initial.copy(id=id)
+                val entered=CompletableDeferred<Unit>();val release=CompletableDeferred<Unit>()
+                val completing=async { ReminderActions(context,db,holidayRefresh={
+                    entered.complete(Unit);release.await()
+                    cache.edit().putString("2026-10-01","true|National Day").putString("2026-09-30","false|Workday").commit()
+                }).apply(before,ReminderActions.Action.COMPLETE,now=now) }
+                entered.await()
+                val actions=ReminderActions(context,db,holidayRefresh={})
+                val newer=if(edit) actions.edit(before,before.copy(note="New edit"))!!
+                    else actions.apply(before,ReminderActions.Action.SNOOZE,now=now)!!.reminder
+                release.complete(Unit)
+                assertNull(completing.await())
+                assertEquals(newer,db.reminderDao().getById(id))
+                assertTrue(db.reminderRecordDao().getAll().none { it.action=="confirmed" })
+            } finally {
+                cache.edit().clear().apply();old.forEach { (k,v) -> when(v) { is String -> cache.edit().putString(k,v).apply(); is Boolean -> cache.edit().putBoolean(k,v).apply() } }
+                if(id>0) ReminderScheduler(context).cancel(id);db.close()
+            }
+        }
+    }
     @Test fun earlyPrimaryCompletionAndSkipRejectDuplicateTokensAndPreserveRecords() = runBlocking {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val db=Room.inMemoryDatabaseBuilder(context,AppDatabase::class.java).build()
@@ -24,7 +84,7 @@ class ReminderActionsTest {
             id=db.reminderDao().insert(initial)
             val before=initial.copy(id=id)
             val prior=db.reminderRecordDao().insert(ReminderRecordEntity(reminderId=id,action="confirmed",timestamp=now-86400000))
-            val actions=ReminderActions(context,db)
+            val actions=ReminderActions(context,db,holidayRefresh={})
             val completed=actions.apply(before,ReminderActions.Action.COMPLETE,now=now)!!
             assertEquals(time("2026-10-21T09:00"),completed.reminder.nextTriggerAt)
             assertEquals(now,completed.reminder.lastConfirmedAt)
@@ -43,7 +103,7 @@ class ReminderActionsTest {
     @Test fun productionActionsRecordSkipCompleteAndGuardedUndo() = runBlocking {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val db=Room.inMemoryDatabaseBuilder(context,AppDatabase::class.java).build()
-        val actions=ReminderActions(context,db)
+        val actions=ReminderActions(context,db,holidayRefresh={})
         var id=0L
         try {
             val now=System.currentTimeMillis()
@@ -84,7 +144,7 @@ class ReminderActionsTest {
             val now=System.currentTimeMillis()
             val initial=ReminderEntity(title="Gentle snooze",cycle="once",reminderStyle="gentle",firstTriggerAt=now,nextTriggerAt=now)
             id=db.reminderDao().insert(initial)
-            val actions=ReminderActions(context,db,notificationAllowed={true})
+            val actions=ReminderActions(context,db,notificationAllowed={true},holidayRefresh={})
             actions.deliver(id,now,0,now=now)
             val first=db.reminderDao().getById(id)!!
             val snoozed=actions.apply(first,ReminderActions.Action.SNOOZE,minutes=15,now=now+1)!!.reminder
@@ -110,7 +170,7 @@ class ReminderActionsTest {
                 val raw=ReminderEntity(title="Concurrent edit",cycle="daily",firstTriggerAt=now,nextTriggerAt=now)
                 id=db.reminderDao().insert(raw)
                 val before=raw.copy(id=id)
-                val actions=ReminderActions(context,db,notificationAllowed={true})
+                val actions=ReminderActions(context,db,notificationAllowed={true},holidayRefresh={})
                 val entered=CompletableDeferred<Unit>();val release=CompletableDeferred<Unit>()
                 val holder=launch(Dispatchers.IO) { ReminderMutationGate.serialized { entered.complete(Unit);release.await() } }
                 entered.await()
@@ -139,7 +199,7 @@ class ReminderActionsTest {
                 quietStartMinute=minute,quietEndMinute=(minute+30)%1440)
             id=db.reminderDao().insert(r)
             NotificationManager(context).cancelReminderNotifications(id)
-            ReminderActions(context,db,notificationAllowed={true}).deliver(id,r.nextTriggerAt,0,advanceDays=1,now=now)
+            ReminderActions(context,db,notificationAllowed={true},holidayRefresh={}).deliver(id,r.nextTriggerAt,0,advanceDays=1,now=now)
             val system=context.getSystemService(android.app.NotificationManager::class.java)
             assertFalse(system.activeNotifications.any { it.id==id.toInt()+2000 })
             assertEquals(r.copy(id=id),db.reminderDao().getById(id))
@@ -154,7 +214,7 @@ class ReminderActionsTest {
             val now=System.currentTimeMillis()
             val r=ReminderEntity(title="Permission test",cycle="once",firstTriggerAt=now,nextTriggerAt=now)
             id=db.reminderDao().insert(r)
-            ReminderActions(context,db,notificationAllowed={false}).deliver(id,now,0,now=now)
+            ReminderActions(context,db,notificationAllowed={false},holidayRefresh={}).deliver(id,now,0,now=now)
             val deferred=db.reminderDao().getById(id)!!
             assertEquals(0,deferred.retryCount);assertTrue(deferred.nextTriggerAt>now)
             assertTrue(db.reminderRecordDao().getAll().isEmpty())
@@ -174,7 +234,7 @@ class ReminderActionsTest {
             val now=System.currentTimeMillis()
             val r=ReminderEntity(title="Gentle test",cycle="once",reminderStyle="gentle",firstTriggerAt=now,nextTriggerAt=now)
             id=db.reminderDao().insert(r)
-            val actions=ReminderActions(context,db)
+            val actions=ReminderActions(context,db,holidayRefresh={})
             actions.deliver(id,now,0,now=now)
             actions.deliver(id,now,0,now=now)
             assertEquals(1,db.reminderRecordDao().getAll().count { it.action=="notified" })
