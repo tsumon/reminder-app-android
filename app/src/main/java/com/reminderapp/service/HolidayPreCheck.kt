@@ -4,7 +4,6 @@ import android.content.Context
 import com.reminderapp.ReminderApp
 import com.reminderapp.data.entity.ReminderEntity
 import com.reminderapp.i18n.zhf
-import com.reminderapp.receiver.ReminderWidgetProvider
 import java.util.Calendar
 
 /**
@@ -32,7 +31,6 @@ object HolidayPreCheck {
 
     suspend fun run(context: Context) {
         val db = ReminderApp.instance.database
-        val scheduler = ReminderApp.instance.scheduler
         val now = System.currentTimeMillis()
         val windowMs = WINDOW_DAYS * DAY_MS
 
@@ -78,10 +76,7 @@ object HolidayPreCheck {
             )
 
             val updated = r.copy(nextTriggerAt = newTs, holidayAdjustNote = note)
-            db.reminderDao().update(updated)
-            scheduler.schedule(updated)
-            SyncStore.touchLocalChange()
-            ReminderWidgetProvider.refresh(context)
+            if(ReminderActions(context,db).edit(r,updated)==null) continue
 
             android.util.Log.i(
                 "HolidayPreCheck",

@@ -94,6 +94,25 @@ object SyncStore {
         return localVersion
     }
 
+    @Synchronized
+    fun acknowledgeCaptured(generation: Long, uploadedAt: Long) {
+        lastSyncVersion=maxOf(lastSyncVersion,generation)
+        if(localVersion==generation) lastLocalChange=maxOf(lastLocalChange,uploadedAt)
+        lastSyncAt=System.currentTimeMillis()
+        hasSyncedOnce=true
+    }
+    @Synchronized
+    fun acceptRemote(expectedGeneration: Long, remoteGeneration: Long, remoteTimestamp: Long): Long {
+        check(localVersion==expectedGeneration) { "本地数据已变更，请重试" }
+        val merged=maxOf(expectedGeneration,remoteGeneration)
+        localVersion=merged
+        lastSyncVersion=merged
+        lastLocalChange=remoteTimestamp
+        lastSyncAt=System.currentTimeMillis()
+        hasSyncedOnce=true
+        return merged
+    }
+
     var lastSyncAt: Long
         get() = prefs(ReminderApp.instance).getLong(KEY_LAST_SYNC, 0L)
         set(value) = prefs(ReminderApp.instance).edit().putLong(KEY_LAST_SYNC, value).apply()

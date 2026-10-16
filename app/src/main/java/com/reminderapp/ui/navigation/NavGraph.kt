@@ -16,7 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.room.withTransaction
 import androidx.compose.ui.unit.dp
 import com.reminderapp.ui.theme.SoftFab
 import com.reminderapp.ui.theme.SoftTabDock
@@ -141,42 +140,11 @@ fun NavGraph(
                             ?: return@launch
                         val reminders = com.reminderapp.service.BackupService.importFromJson(json)
                             ?: return@launch
-                        // v2.0.22: 文件导入与近场传输共用同一指纹去重，
-                        // 重复导入同一备份不再生成重复提醒（对齐 NearbyShareScreen.receive）
-                        val existingFp = database.reminderDao().getAllSync()
-                            .map { com.reminderapp.service.BackupService.fingerprint(it) }
-                            .toSet()
-                        val toImport = com.reminderapp.service.BackupService.dedupeByFingerprint(reminders, existingFp)
-                        var imported = 0
-                        var skipped = reminders.size - toImport.size
-                        toImport.forEach { r ->
-                            // 阶段2: syncId 缺失补 UUID；id=0 让 Room 重新自增（备份 JSON 保留了原 id，
-                            // 直接插入会与现有行（含软删行）主键冲突 → SQLiteConstraintException 崩溃）
-                            val prepared = com.reminderapp.service.BackupService.ensureSyncId(r).copy(
-                                id = 0,
-                                // I10: 导入时重算下次触发时间（对齐 WebDAV 合并），
-                                //     避免备份里的过期 nextTriggerAt 导致立即触发或永不触发
-                                nextTriggerAt = r.nextTriggerAt
-                            )
-                            // 阶段2: 按 syncId 匹配——同一条提醒（用户编辑过、指纹已变）更新现有行，
-                            // 本地自增 id 不变，通知/小组件/操作记录引用不失效
-                            val existing = prepared.syncId?.let { database.reminderDao().getBySyncId(it) }
-                            val finalEntity = if (existing != null) {
-                                prepared.copy(id = existing.id).also { database.reminderDao().update(it) }
-                            } else {
-                                try {
-                                    prepared.copy(id = database.reminderDao().insert(prepared))
-                                } catch (e: Exception) {
-                                    android.util.Log.e("NavGraph", "导入单条失败: ${e.message}")
-                                    skipped++
-                                    return@forEach
-                                }
-                            }
-                            scheduler.schedule(finalEntity)
-                            imported++
+                        val result=runCatching { com.reminderapp.service.ReminderActions(context,database).importItems(reminders) }.getOrElse {
+                            android.widget.Toast.makeText(context,zh("数据解析失败"),android.widget.Toast.LENGTH_LONG).show();return@launch
                         }
-                        com.reminderapp.service.SyncStore.touchLocalChange()
-                        com.reminderapp.receiver.ReminderWidgetProvider.refresh(context)
+                        val imported=result.saved.size
+                        val skipped=result.skipped
                         android.widget.Toast.makeText(
                             context,
                             com.reminderapp.i18n.zhf("导入完成：新增 %1\$s 条，跳过重复或失败 %2\$s 条", imported, skipped),
@@ -424,35 +392,15 @@ fun NavGraph(
                 initial = draft,
                 onSave = { entity ->
                     scope.launch {
-                        // P0 修复：手动创建路径之前直接 insert + schedule，
-                        // date 类 nextTriggerAt 落到「提醒时间」默认的今天，
-                        // 导致手动建的生日/节假日今天 9:00 就误触发。
-                        // 与 AI 创建路径（AIChatScreen）一致，date/rule 类
-                        // 统一走引擎按目标月日重算；cycle 类引擎会按周期锚点算。
-                        val finalEntity = if (entity.kind == "cycle") {
-                            entity
+                        val actions=com.reminderapp.service.ReminderActions(context)
+                        if(entity.id>0L) {
+                            val expected=draft ?: return@launch
+                            if(actions.edit(expected,entity)==null) android.widget.Toast.makeText(context,zh("提醒已有新变更，请重新打开编辑"),android.widget.Toast.LENGTH_LONG).show()
                         } else {
-                            entity.copy(nextTriggerAt = ReminderEngine.calculateNextTrigger(entity, com.reminderapp.ReminderApp.instance))
+                            val created=actions.create(entity)
+                            createdUndo=created.reminder to created.generation
+                            com.reminderapp.service.TelemetryService.logEvent("reminder.create",mapOf("kind" to entity.kind))
                         }
-                        val id = if(finalEntity.id > 0) {
-                            val updated=database.withTransaction {
-                                val current=database.reminderDao().getById(finalEntity.id)
-                                if(current != draft) false else { database.reminderDao().update(finalEntity);true }
-                            }
-                            if(!updated) {
-                                android.widget.Toast.makeText(context,zh("提醒已有新变更，请重新打开编辑"),android.widget.Toast.LENGTH_LONG).show()
-                                navController.popBackStack();return@launch
-                            }
-                            notificationMgr.cancelReminderNotifications(finalEntity.id)
-                            finalEntity.id
-                        } else database.reminderDao().insert(finalEntity)
-                        val saved = finalEntity.copy(id = id)
-                        com.reminderapp.service.QuietHoursStore.set(context,id,saved.quietStartMinute,saved.quietEndMinute)
-                        scheduler.schedule(saved)
-                        com.reminderapp.service.TelemetryService.logEvent("reminder.create", mapOf("kind" to entity.kind))
-                        val savedVersion=com.reminderapp.service.SyncStore.touchLocalChange()
-                        com.reminderapp.receiver.ReminderWidgetProvider.refresh(context)
-                        if(entity.id==0L) createdUndo=saved to savedVersion
                         navController.popBackStack()
                     }
                 },

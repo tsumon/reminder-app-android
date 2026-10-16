@@ -60,4 +60,5 @@
     <string name="upgrade_057">保留本地並上傳</string>
     <string name="upgrade_058">使用遠端併合並</string>
     <string name="upgrade_059">一次性提醒不能跳過</string>
+    <string name="upgrade_060">請修正標紅的設定後儲存</string>
 </resources>

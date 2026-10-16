@@ -466,7 +466,7 @@ fun AIChatScreen(
                         val items = pendingImport
                         pendingImportState.value = null
                         scope.launch {
-                            commitImport(items, database, scheduler, notificationMgr)
+                            commitImport(items, database)
                             Toast.makeText(context, zhf("已批量创建 %d 条提醒", items.size), Toast.LENGTH_SHORT).show()
                         }
                     }) { Text(zh("确认创建")) }
@@ -783,13 +783,13 @@ private suspend fun executeTool(
     }
 
     return when (name) {
-        "create_reminder" -> handleCreate(args, database, scheduler, notificationMgr)
+        "create_reminder" -> handleCreate(args, database)
         "list_reminders" -> handleList(database)
-        "confirm_reminder" -> handleConfirm(args, database, scheduler, notificationMgr)
+        "confirm_reminder" -> handleConfirm(args, database)
         "skip_reminder" -> handleSkip(args,database)
-        "snooze_reminder" -> handleSnooze(args, database, scheduler, notificationMgr)
+        "snooze_reminder" -> handleSnooze(args, database)
         "delete_reminder" -> handleDelete(args, database)
-        "update_reminder" -> handleUpdate(args, database, scheduler)
+        "update_reminder" -> handleUpdate(args, database)
         "import_tasks" -> handleImportTasks(args, database, scheduler, notificationMgr, gson)
         "get_stats_context" -> handleStatsContext(database)
         else -> zhf("未知工具: %s", name)
@@ -931,14 +931,10 @@ private fun tryBuildEntity(args: Map<String, Any?>): Pair<ReminderEntity?, Strin
     return Pair(configured.copy(nextTriggerAt = nextTrigger), null)
 }
 
-private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase, scheduler: ReminderScheduler, notificationMgr: NotificationManager): String {
+private suspend fun handleCreate(args: Map<String, Any?>, database: AppDatabase): String {
     val (entity, err) = tryBuildEntity(args)
     if (entity == null) return err ?: zh("创建失败")
-    val id = database.reminderDao().insert(entity)
-    scheduler.schedule(entity.copy(id = id))
-    // v1.9.6 fix: 漏 touchLocalChange → AI 新建的提醒永远不同步 / 被远程旧数据覆盖
-    com.reminderapp.service.SyncStore.touchLocalChange()
-    com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+    com.reminderapp.service.ReminderActions(com.reminderapp.ReminderApp.instance,database).create(entity)
     return zhf("已创建提醒：「%s」", entity.title)
 }
 
@@ -978,14 +974,9 @@ private fun describeReminder(e: ReminderEntity): String {
 
 /** 用户确认预览后批量写入：逐条 insert + 调度 + 标记本地变更 + 刷新小组件 */
 private suspend fun commitImport(
-    items: List<ReminderEntity>, database: AppDatabase, scheduler: ReminderScheduler, notificationMgr: NotificationManager
+    items: List<ReminderEntity>, database: AppDatabase
 ) {
-    for (e in items) {
-        val id = database.reminderDao().insert(e)
-        scheduler.schedule(e.copy(id = id))
-    }
-    com.reminderapp.service.SyncStore.touchLocalChange()
-    com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+    com.reminderapp.service.ReminderActions(com.reminderapp.ReminderApp.instance,database).importItems(items)
 }
 
 private suspend fun handleList(database: AppDatabase): String {
@@ -1060,7 +1051,7 @@ private suspend fun handleStatsContext(database: AppDatabase): String {
     return sb.toString()
 }
 
-private suspend fun handleConfirm(args: Map<String, Any?>, database: AppDatabase, scheduler: ReminderScheduler, notificationMgr: NotificationManager): String {
+private suspend fun handleConfirm(args: Map<String, Any?>, database: AppDatabase): String {
     val keyword = (args["title_keyword"] as? String ?: "").lowercase()
     // 空关键词 contains("") 恒 true 会命中第一条无关提醒 → 必须守卫
     if (keyword.isEmpty()) return zh("请指定要确认的提醒标题（如：确认「交房租」）。")
@@ -1077,7 +1068,7 @@ private suspend fun handleSkip(args: Map<String,Any?>,database: AppDatabase): St
     return if(com.reminderapp.service.ReminderActions(com.reminderapp.ReminderApp.instance).apply(r,com.reminderapp.service.ReminderActions.Action.SKIP)!=null) zh("已更新提醒") else zh("提醒已有新变更，请重试")
 }
 
-private suspend fun handleSnooze(args: Map<String, Any?>, database: AppDatabase, scheduler: ReminderScheduler, notificationMgr: NotificationManager): String {
+private suspend fun handleSnooze(args: Map<String, Any?>, database: AppDatabase): String {
     val keyword = (args["title_keyword"] as? String ?: "").lowercase()
     if (keyword.isEmpty()) return zh("请指定要推迟的提醒标题（如：推迟「交房租」）。")
     val list = database.reminderDao().getAllSync()
@@ -1091,21 +1082,13 @@ private suspend fun handleDelete(args: Map<String, Any?>, database: AppDatabase)
     if (keyword.isEmpty()) return zh("请指定要删除的提醒标题（如：删除「交房租」）。")
     val list = database.reminderDao().getAllSync()
     val match = list.find { it.title.lowercase().contains(keyword) } ?: return zhf("未找到包含「%s」的提醒", keyword)
-    // v1.9.6 fix: 必须先取消 WorkManager 排期 + 已显示通知，再用软删。
-    // 原实现物理 delete：遗留任务触发时 Worker 先发通知才查库 → 幽灵通知；
-    // 且物理删会级联清掉统计记录（与 UI 路径软删不一致）
-    ReminderScheduler(com.reminderapp.ReminderApp.instance).cancel(match.id)
-    NotificationManager(com.reminderapp.ReminderApp.instance).cancelReminderNotifications(match.id)
-    database.reminderDao().softDelete(match.id)
-    com.reminderapp.service.SyncStore.touchLocalChange()
-    com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+    if(!com.reminderapp.service.ReminderActions(com.reminderapp.ReminderApp.instance,database).delete(match)) return zh("提醒已有新变更，请重试")
     return zhf("已删除「%s」", match.title)
 }
 
 private suspend fun handleUpdate(
     args: Map<String, Any?>,
-    database: AppDatabase,
-    scheduler: ReminderScheduler
+    database: AppDatabase
 ): String {
     val keyword = (args["title_keyword"] as? String ?: "").lowercase()
     if (keyword.isEmpty()) return zh("请指定要修改的提醒标题（如：把「交房租」改成每月 5 号）。")
@@ -1183,13 +1166,6 @@ private suspend fun handleUpdate(
         val scheduleChanged=listOf("cycle","custom_days","rule_period","rule_week","rule_weekday","date_type","target_month","target_day","reminder_hour","reminder_minute","holiday_name","holiday_aware").any { args.containsKey(it) }
         val finalUpdated = configured.copy(nextTriggerAt = if(scheduleChanged || wasOverdue) nextTrigger else match.nextTriggerAt,
             revision=match.revision+1,holidayAdjustNote = null)
-        val latest=database.reminderDao().getById(match.id)
-        if(latest!=match) return zh("提醒已有新变更，请重试")
-        database.reminderDao().update(finalUpdated)
-        com.reminderapp.service.QuietHoursStore.set(ctx,finalUpdated.id,finalUpdated.quietStartMinute,finalUpdated.quietEndMinute)
-        NotificationManager(ctx).cancelReminderNotifications(finalUpdated.id)
-        scheduler.schedule(finalUpdated)
-    com.reminderapp.service.SyncStore.touchLocalChange()
-    com.reminderapp.receiver.ReminderWidgetProvider.refresh(ctx)
+        if(com.reminderapp.service.ReminderActions(ctx,database).edit(match,finalUpdated)==null) return zh("提醒已有新变更，请重试")
     return zhf("已修改「%s」", finalUpdated.title)
 }

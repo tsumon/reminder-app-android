@@ -62,6 +62,14 @@ class ReminderPolicyTest {
         assertEquals(listOf(5,15),ReminderPolicy.intervals(changed));assertEquals(3,changed.maxReminderAttempts)
         assertEquals(ReminderPolicy.legacyIntervals,ReminderPolicy.intervals(ReminderPolicy.withArguments(daily(),mapOf("retryIntervalsMinutes" to listOf(1.5)))))
     }
+    @Test fun gentleExplicitSnoozeDeliversOnceAgainWithoutAutomaticRetries() {
+        val first=ReminderEngine.escalate(daily().copy(reminderStyle="gentle"),time("2026-10-16T09:00"))
+        val snoozed=ReminderEngine.snooze(first,15,time("2026-10-16T09:01"))
+        assertTrue(ReminderPolicy.shouldSchedule(snoozed))
+        val second=ReminderEngine.escalate(snoozed,snoozed.nextTriggerAt)
+        assertFalse(ReminderPolicy.shouldSchedule(second))
+        assertTrue(ReminderPolicy.shouldSchedule(ReminderEngine.snoozeTomorrow(second,time("2026-10-16T10:00"))))
+    }
     @Test fun malformedPolicyFallsBack() { assertEquals(listOf(60,240,720,1440),ReminderPolicy.intervals(daily().copy(retryIntervalsMinutes="-3,0"))) }
     @Test fun undoGuardRejectsAnyNewerState() {
         val before=daily(); val after=ReminderEngine.confirm(before,time("2026-10-16T11:00"))

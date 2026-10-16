@@ -43,7 +43,7 @@ class HomeViewModel(
                     it.status == "overdue" ||
                         (it.status in listOf("notifying", "pending") && it.nextTriggerAt <= System.currentTimeMillis())
                 }
-                val waiting = reminders.filter { it.status in listOf("notifying", "pending", "idle") && it.nextTriggerAt > System.currentTimeMillis() }
+                val waiting = reminders.filter { it.status in listOf("notifying", "pending", "idle", "snoozed") && it.nextTriggerAt > System.currentTimeMillis() }
                 val completed = reminders.filter { it.status == "confirmed" }
                 _groupedReminders.value = GroupedReminders(reminding, waiting, completed)
             }
@@ -65,10 +65,7 @@ class HomeViewModel(
             val all = dao.getDueReminders(System.currentTimeMillis())
             val missed = ReminderEngine.checkMissed(all, System.currentTimeMillis())
             missed.forEach { r ->
-                val alreadyNotifying = r.status == "notifying"
-                val updated = r.copy(status = "notifying")
-                dao.update(updated)
-                if (!alreadyNotifying) scheduler.schedule(updated)
+                if(r.status!="notifying" && r.status!="snoozed") ReminderActions(com.reminderapp.ReminderApp.instance).edit(r,r.copy(status="notifying"))
             }
         }
     }
@@ -78,8 +75,7 @@ class HomeViewModel(
         viewModelScope.launch {
             val context=com.reminderapp.ReminderApp.instance
             com.reminderapp.service.QuietHoursStore.migrateLegacy(context)
-            val active=dao.getAllSync()
-            if (active.isNotEmpty()) scheduler.ensureScheduled(active)
+            com.reminderapp.service.ReminderSyncCoordinator(context).restoreSchedules()
         }
     }
 
@@ -139,22 +135,14 @@ class HomeViewModel(
             val next = if (reminder.nextTriggerAt <= System.currentTimeMillis())
                 ReminderEngine.calculateNextTrigger(reminder, com.reminderapp.ReminderApp.instance) else reminder.nextTriggerAt
             val updated = reminder.copy(status = "pending", nextTriggerAt = next, retryCount = 0, holidayAdjustNote = null)
-            dao.update(updated)
-            scheduler.schedule(updated)
-            com.reminderapp.service.SyncStore.touchLocalChange()
-            com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+            ReminderActions(com.reminderapp.ReminderApp.instance).edit(reminder,updated)
         }
     }
 
     fun deleteReminder(id: Long) {
         viewModelScope.launch {
-            scheduler.cancel(id)
-            recordDao.deleteByReminderId(id)
-            dao.softDelete(id)
-            // v2.0.22: 删除时同时取消已显示的通知，避免旧通知操作已删除的提醒
-            com.reminderapp.service.NotificationManager(com.reminderapp.ReminderApp.instance).cancelReminderNotifications(id)
-            com.reminderapp.service.SyncStore.touchLocalChange()
-            com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+            val current=dao.getById(id) ?: return@launch
+            ReminderActions(com.reminderapp.ReminderApp.instance).delete(current,removeRecords=true)
         }
     }
 
@@ -179,10 +167,8 @@ class HomeViewModel(
                 if (diff == 0 && cal.timeInMillis <= now) diff = 7
                 cal.add(java.util.Calendar.DAY_OF_MONTH, diff)
                 val fixed = r.copy(firstTriggerAt = cal.timeInMillis, nextTriggerAt = cal.timeInMillis)
-                dao.update(fixed)
-                scheduler.schedule(fixed)
+                ReminderActions(com.reminderapp.ReminderApp.instance).edit(r,fixed)
             }
-            com.reminderapp.service.SyncStore.touchLocalChange()
             com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
         }
     }
@@ -198,7 +184,6 @@ class HomeViewModel(
                     confirmReminder(r)
                 }
             }
-            com.reminderapp.service.SyncStore.touchLocalChange()
             com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
         }
     }
@@ -222,10 +207,8 @@ class HomeViewModel(
                 } else updated
                 val next = ReminderEngine.calculateNextTrigger(withAnchor, com.reminderapp.ReminderApp.instance)
                 val final = withAnchor.copy(nextTriggerAt = next)
-                dao.update(final)
-                scheduler.schedule(final)
+                ReminderActions(com.reminderapp.ReminderApp.instance).edit(r,final)
             }
-            com.reminderapp.service.SyncStore.touchLocalChange()
             com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
         }
     }
@@ -235,7 +218,6 @@ class HomeViewModel(
             ids.forEach { id ->
                 deleteReminder(id)
             }
-            com.reminderapp.service.SyncStore.touchLocalChange()
             com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
         }
     }
@@ -293,7 +275,7 @@ class ReminderDetailViewModel(
             _reminder.value=result.reminder
             _records.value=recordDao.getByReminderId(r.id)
             result.undo?.let { _undo.value=it }
-            _checkInFeedback.value=zh("已更新提醒")
+            _checkInFeedback.value=if(isMakeUp) zh("补打卡成功 🎉") else zh("已更新提醒")
         }
     }
 
@@ -341,29 +323,20 @@ class ReminderDetailViewModel(
         viewModelScope.launch {
             val old=_reminder.value ?: return@launch
             val context=com.reminderapp.ReminderApp.instance
-            val r=old.copy(quietStartMinute=com.reminderapp.service.QuietHoursStore.startMinute(context,old.id),
-                quietEndMinute=com.reminderapp.service.QuietHoursStore.endMinute(context,old.id),revision=old.revision+1)
-            dao.update(r);_reminder.value=r
-            scheduler.schedule(r);com.reminderapp.service.SyncStore.touchLocalChange()
+            val proposed=old.copy(quietStartMinute=com.reminderapp.service.QuietHoursStore.startMinute(context,old.id),
+                quietEndMinute=com.reminderapp.service.QuietHoursStore.endMinute(context,old.id))
+            val changed=ReminderActions(context).edit(old,proposed)
+            _reminder.value=changed ?: dao.getById(old.id)
+            if(changed==null) _checkInFeedback.value=zh("提醒已有新变更，请重试")
         }
     }
-
-    /** 批次3 功能5: 切换关键提醒标记（落库 + 按对应渠道重排通知） */
     fun setCritical(value: Boolean) {
         viewModelScope.launch {
-            val r = _reminder.value ?: return@launch
-            val updated = r.copy(isCritical = value, reminderStyle = if(value) "important" else "persistent", revision=r.revision+1)
-            dao.update(updated)
-            notificationMgr.cancelReminderNotifications(r.id)
-            // 仅当提醒仍生效时重排，使其走对应的通知渠道
-            if (updated.isActive &&
-                updated.status != "confirmed" &&
-                updated.status != "overdue"
-            ) {
-                scheduler.schedule(updated)
-            }
-            _reminder.value = updated
-            com.reminderapp.service.SyncStore.touchLocalChange()
+            val old=_reminder.value ?: return@launch
+            val proposed=old.copy(isCritical=value,reminderStyle=if(value) "important" else "persistent")
+            val changed=ReminderActions(com.reminderapp.ReminderApp.instance).edit(old,proposed)
+            _reminder.value=changed ?: dao.getById(old.id)
+            if(changed==null) _checkInFeedback.value=zh("提醒已有新变更，请重试")
         }
     }
 
@@ -371,12 +344,7 @@ class ReminderDetailViewModel(
     fun delete() {
         viewModelScope.launch {
             val r = _reminder.value ?: return@launch
-            scheduler.cancel(r.id)
-            notificationMgr.cancelReminderNotifications(r.id)
-            recordDao.deleteByReminderId(r.id)
-            dao.softDelete(r.id)
-            com.reminderapp.service.SyncStore.touchLocalChange()
-            com.reminderapp.receiver.ReminderWidgetProvider.refresh(com.reminderapp.ReminderApp.instance)
+            ReminderActions(com.reminderapp.ReminderApp.instance).delete(r,removeRecords=true)
         }
     }
 }

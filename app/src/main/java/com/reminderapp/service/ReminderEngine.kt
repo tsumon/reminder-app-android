@@ -369,7 +369,7 @@ object ReminderEngine {
      */
     fun snooze(reminder: ReminderEntity, minutes: Long = 15, now: Long = System.currentTimeMillis()): ReminderEntity {
         return reminder.copy(
-            status = ReminderStatus.NOTIFYING.name.lowercase(),
+            status = if(reminder.reminderStyle=="gentle") "snoozed" else ReminderStatus.NOTIFYING.name.lowercase(),
             nextTriggerAt = ReminderPolicy.adjustQuiet(reminder, now + minutes.coerceIn(1, 10080) * 60_000L),
             revision = reminder.revision + 1,
             retryCount = reminder.retryCount
@@ -389,7 +389,7 @@ object ReminderEngine {
             t = cal.timeInMillis
         }
         return reminder.copy(
-            status = ReminderStatus.NOTIFYING.name.lowercase(),
+            status = if(reminder.reminderStyle=="gentle") "snoozed" else ReminderStatus.NOTIFYING.name.lowercase(),
             nextTriggerAt = ReminderPolicy.adjustQuiet(reminder, t),
             revision = reminder.revision + 1,
             retryCount = reminder.retryCount

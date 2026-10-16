@@ -9,7 +9,14 @@ import com.reminderapp.data.entity.ReminderEntity
 import com.reminderapp.i18n.zh
 
 @Composable
-fun ReminderPolicyEditor(value: ReminderEntity, onChange: (ReminderEntity) -> Unit) {
+fun ReminderPolicyEditor(value: ReminderEntity, onChange: (ReminderEntity) -> Unit, onValidityChange: (Boolean) -> Unit = {}) {
+    var intervals by remember(value.id) { mutableStateOf(value.retryIntervalsMinutes) }
+    var cap by remember(value.id) { mutableStateOf(value.maxReminderAttempts.toString()) }
+    var quietStart by remember(value.id) { mutableStateOf(value.quietStartMinute?.let { String.format(java.util.Locale.ROOT,"%02d:%02d",it/60,it%60) } ?: "") }
+    var quietEnd by remember(value.id) { mutableStateOf(value.quietEndMinute?.let { String.format(java.util.Locale.ROOT,"%02d:%02d",it/60,it%60) } ?: "") }
+    val retryValid=com.reminderapp.service.ReminderPolicy.validEditorInput(value.reminderStyle,intervals,cap,"","")
+    val quietValid=com.reminderapp.service.ReminderPolicy.validEditorInput("gentle",intervals,cap,quietStart,quietEnd)
+    LaunchedEffect(retryValid,quietValid) { onValidityChange(retryValid && quietValid) }
     Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Text(zh("提醒方式"),style=MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
@@ -25,20 +32,17 @@ fun ReminderPolicyEditor(value: ReminderEntity, onChange: (ReminderEntity) -> Un
             }
         }
         if(value.reminderStyle!="gentle") {
-            var intervals by remember(value.id) { mutableStateOf(value.retryIntervalsMinutes) }
-            var cap by remember(value.id) { mutableStateOf(value.maxReminderAttempts.toString()) }
             OutlinedTextField(value=intervals,onValueChange={ text ->
                 intervals=text
                 val list=text.split(",").map { it.trim().toIntOrNull() }
                 if(list.size in 1..10 && list.all { it != null && it in 1..10080 }) onChange(value.copy(retryIntervalsMinutes=list.joinToString(",")))
-            },label={Text(zh("重试间隔（分钟，逗号分隔，1–10080）"))},supportingText={Text(zh("最多 10 项；最后一个间隔重复使用"))},modifier=Modifier.fillMaxWidth())
-            OutlinedTextField(value=cap,onValueChange={ cap=it;it.toIntOrNull()?.takeIf { n -> n in 1..10 }?.let { n -> onChange(value.copy(maxReminderAttempts=n)) } },label={Text(zh("最多提醒次数（1–10，含首次）"))},modifier=Modifier.fillMaxWidth())
+            },label={Text(zh("重试间隔（分钟，逗号分隔，1–10080）"))},supportingText={Text(zh("最多 10 项；最后一个间隔重复使用"))},isError=!retryValid,modifier=Modifier.fillMaxWidth())
+            OutlinedTextField(value=cap,onValueChange={ cap=it;it.toIntOrNull()?.takeIf { n -> n in 1..10 }?.let { n -> onChange(value.copy(maxReminderAttempts=n)) } },label={Text(zh("最多提醒次数（1–10，含首次）"))},isError=!retryValid,modifier=Modifier.fillMaxWidth())
         }
-        var quietStart by remember(value.id) { mutableStateOf(value.quietStartMinute?.let { "%02d:%02d".format(it/60,it%60) } ?: "") }
-        var quietEnd by remember(value.id) { mutableStateOf(value.quietEndMinute?.let { "%02d:%02d".format(it/60,it%60) } ?: "") }
         fun minute(text: String): Int? { val p=text.split(":").map { it.toIntOrNull() };return if(p.size==2 && p[0] in 0..23 && p[1] in 0..59) p[0]!!*60+p[1]!! else null }
         fun updateQuiet() { val start=minute(quietStart);val end=minute(quietEnd);if(start!=null && end!=null) onChange(value.copy(quietStartMinute=start,quietEndMinute=end));if(quietStart.isBlank() && quietEnd.isBlank()) onChange(value.copy(quietStartMinute=null,quietEndMinute=null)) }
-        OutlinedTextField(value=quietStart,onValueChange={quietStart=it;updateQuiet()},label={Text(zh("勿扰开始 HH:mm（留空关闭）"))},modifier=Modifier.fillMaxWidth())
-        OutlinedTextField(value=quietEnd,onValueChange={quietEnd=it;updateQuiet()},label={Text(zh("勿扰结束 HH:mm"))},modifier=Modifier.fillMaxWidth())
+        OutlinedTextField(value=quietStart,onValueChange={quietStart=it;updateQuiet()},label={Text(zh("勿扰开始 HH:mm（留空关闭）"))},isError=!quietValid,modifier=Modifier.fillMaxWidth())
+        if(!retryValid || !quietValid) Text(zh("请修正标红的设置后保存"),color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
+        OutlinedTextField(value=quietEnd,onValueChange={quietEnd=it;updateQuiet()},label={Text(zh("勿扰结束 HH:mm"))},isError=!quietValid,modifier=Modifier.fillMaxWidth())
     }
 }

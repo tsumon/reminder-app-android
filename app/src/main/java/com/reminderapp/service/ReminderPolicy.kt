@@ -10,7 +10,7 @@ object ReminderPolicy {
         val parsed = r.retryIntervalsMinutes.split(",").map { it.trim().toIntOrNull() }
         return if (parsed.size in 1..10 && parsed.all { it != null && it in 1..10080 }) parsed.filterNotNull() else legacyIntervals
     }
-    fun shouldSchedule(r: ReminderEntity) = r.isActive && r.status !in setOf("confirmed", "overdue") && !(r.reminderStyle == "gentle" && r.retryCount > 0)
+    fun shouldSchedule(r: ReminderEntity) = r.isActive && r.status !in setOf("confirmed", "overdue") && !(r.reminderStyle == "gentle" && r.retryCount > 0 && r.status != "snoozed")
     fun adjustQuiet(r: ReminderEntity, at: Long, zone: ZoneId = ZoneId.systemDefault()): Long {
         val start = r.quietStartMinute ?: return at
         val end = r.quietEndMinute ?: return at
@@ -40,6 +40,16 @@ object ReminderPolicy {
             maxReminderAttempts=if(args.containsKey("maxReminderAttempts")) int(args["maxReminderAttempts"])?.takeIf { it in 1..10 } ?: 5 else r.maxReminderAttempts,
             quietStartMinute=if(quietChanged) if(valid) start else null else r.quietStartMinute,
             quietEndMinute=if(quietChanged) if(valid) end else null else r.quietEndMinute)
+    }
+    fun validEditorInput(style: String, intervals: String, cap: String, quietStart: String, quietEnd: String): Boolean {
+        val parsed=intervals.split(",").map { it.trim().toIntOrNull() }
+        val retryValid=style=="gentle" || (parsed.size in 1..10 && parsed.all { it!=null && it in 1..10080 } && cap.toIntOrNull() in 1..10)
+        fun validClock(text: String): Boolean {
+            val parts=text.split(":").map { it.toIntOrNull() }
+            return parts.size==2 && parts[0] in 0..23 && parts[1] in 0..59
+        }
+        val quietValid=(quietStart.isBlank() && quietEnd.isBlank()) || (validClock(quietStart) && validClock(quietEnd))
+        return retryValid && quietValid
     }
     fun matches(r: ReminderEntity, expected: ReminderEntity) = r == expected && r.isActive
     fun canUndo(current: ReminderEntity, expected: ReminderEntity, localVersion: Long, expectedVersion: Long) = current == expected && localVersion == expectedVersion

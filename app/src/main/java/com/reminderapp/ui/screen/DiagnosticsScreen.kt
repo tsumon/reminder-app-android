@@ -97,9 +97,7 @@ fun DiagnosticsScreen(
                     Button(onClick={scope.launch {
                         val at=System.currentTimeMillis()+60_000
                         val r=com.reminderapp.data.entity.ReminderEntity(title=zh("提醒自检（1 分钟）"),cycle="once",firstTriggerAt=at,nextTriggerAt=at,reminderStyle="gentle")
-                        val id=db.reminderDao().insert(r)
-                        com.reminderapp.service.ReminderScheduler(context).schedule(r.copy(id=id))
-                        com.reminderapp.service.SyncStore.touchLocalChange()
+                        com.reminderapp.service.ReminderActions(context,db).create(r)
                         testMessage=zh("测试提醒已安排，请锁屏等待约 1 分钟；可在首页完成或删除。")
                     }}) { Text(zh("创建测试提醒")) }
                     if(testMessage.isNotEmpty()) Text(testMessage)

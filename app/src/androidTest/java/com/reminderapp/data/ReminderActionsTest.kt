@@ -6,7 +6,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.reminderapp.data.database.AppDatabase
 import com.reminderapp.data.entity.*
 import com.reminderapp.service.*
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,6 +41,64 @@ class ReminderActionsTest {
             SyncStore.touchLocalChange() // synchronization or a newer unrelated edit invalidates undo
             assertFalse(actions.undo(third.undo!!))
         } finally { if(id>0) ReminderScheduler(context).cancel(id);db.close() }
+    }
+    private fun grantNotifications() {
+        if(android.os.Build.VERSION.SDK_INT>=33) {
+            val context=InstrumentationRegistry.getInstrumentation().targetContext
+            InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS").use { descriptor -> java.io.FileInputStream(descriptor.fileDescriptor).use { it.readBytes() } }
+        }
+    }
+    @Test fun gentleDeliveryThenExplicitSnoozeHasOneMoreDeliveryOnly() = runBlocking {
+        grantNotifications()
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val db=Room.inMemoryDatabaseBuilder(context,AppDatabase::class.java).build()
+        var id=0L
+        try {
+            val now=System.currentTimeMillis()
+            val initial=ReminderEntity(title="Gentle snooze",cycle="once",reminderStyle="gentle",firstTriggerAt=now,nextTriggerAt=now)
+            id=db.reminderDao().insert(initial)
+            val actions=ReminderActions(context,db,notificationAllowed={true})
+            actions.deliver(id,now,0,now=now)
+            val first=db.reminderDao().getById(id)!!
+            val snoozed=actions.apply(first,ReminderActions.Action.SNOOZE,minutes=15,now=now+1)!!.reminder
+            assertTrue(ReminderPolicy.shouldSchedule(snoozed))
+            actions.deliver(id,snoozed.nextTriggerAt,snoozed.revision,now=snoozed.nextTriggerAt)
+            val second=db.reminderDao().getById(id)!!
+            assertFalse(ReminderPolicy.shouldSchedule(second))
+            assertEquals(2,db.reminderRecordDao().getAll().count { it.action=="notified" })
+            actions.deliver(id,second.nextTriggerAt,second.revision,now=second.nextTriggerAt)
+            assertEquals(2,db.reminderRecordDao().getAll().count { it.action=="notified" })
+            val tomorrow=actions.apply(second,ReminderActions.Action.TOMORROW,now=now+2)!!.reminder
+            assertTrue(ReminderPolicy.shouldSchedule(tomorrow))
+        } finally { if(id>0) { ReminderScheduler(context).cancel(id);NotificationManager(context).cancelReminderNotifications(id) };db.close() }
+    }
+    @Test fun queuedAiEditCannotOverwriteCompletionOrDelivery() = runBlocking {
+        grantNotifications()
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        for(deliver in listOf(false,true)) {
+            val db=Room.inMemoryDatabaseBuilder(context,AppDatabase::class.java).build()
+            var id=0L
+            try {
+                val now=System.currentTimeMillis()
+                val raw=ReminderEntity(title="Concurrent edit",cycle="daily",firstTriggerAt=now,nextTriggerAt=now)
+                id=db.reminderDao().insert(raw)
+                val before=raw.copy(id=id)
+                val actions=ReminderActions(context,db,notificationAllowed={true})
+                val entered=CompletableDeferred<Unit>();val release=CompletableDeferred<Unit>()
+                val holder=launch(Dispatchers.IO) { ReminderMutationGate.serialized { entered.complete(Unit);release.await() } }
+                entered.await()
+                val first=async(start=CoroutineStart.UNDISPATCHED) {
+                    if(deliver) actions.deliver(id,now,0,now=now) else actions.apply(before,ReminderActions.Action.COMPLETE,now=now)
+                }
+                val staleEdit=async(start=CoroutineStart.UNDISPATCHED) { actions.edit(before,before.copy(note="AI edit")) }
+                release.complete(Unit);holder.join();first.await()
+                assertNull(staleEdit.await())
+                val current=db.reminderDao().getById(id)!!
+                assertEquals("",current.note)
+                if(deliver) { assertEquals(1,current.retryCount);assertEquals(1,db.reminderRecordDao().getAll().count { it.action=="notified" }) }
+                else { assertNotNull(current.lastConfirmedAt);assertEquals(1,db.reminderRecordDao().getAll().count { it.action=="confirmed" }) }
+            } finally { if(id>0) { ReminderScheduler(context).cancel(id);NotificationManager(context).cancelReminderNotifications(id) };db.close() }
+        }
     }
     @Test fun advanceDeliveryAlsoRespectsQuietHours() = runBlocking {
         val context=InstrumentationRegistry.getInstrumentation().targetContext

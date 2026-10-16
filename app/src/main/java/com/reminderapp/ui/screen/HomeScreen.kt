@@ -376,7 +376,7 @@ fun HomeScreen(
         val now = System.currentTimeMillis()
         val due = allReminders.filter { r ->
             r.isActive && r.status != "confirmed" &&
-                (r.status == "notifying" || r.status == "overdue" || r.status == "snoozed" ||
+                (r.status == "notifying" || r.status == "overdue" || (r.status == "snoozed" && r.nextTriggerAt<=now) ||
                     (r.status == "pending" && r.nextTriggerAt <= now)) &&
                 matchSmartList(r, smartList) && matchesSearch(r, searchQuery)
         }.sortedBy { it.nextTriggerAt }
@@ -678,16 +678,9 @@ fun HomeScreen(
                         return@TextButton
                     }
                     try {
-                        // 强制 id=0 让 Room 重新自增，避免与现有行主键冲突
-                        var imported = entity.copy(id = 0)
-                        // I10: 导入时重算下次触发时间（对齐 WebDAV replaceLocal），
-                        //     避免备份里的过期 nextTriggerAt 导致立即触发或永不触发
-                        imported = imported.copy(nextTriggerAt = com.reminderapp.service.ReminderEngine.calculateNextTrigger(imported, com.reminderapp.ReminderApp.instance))
+                        val imported=entity.copy(id=0)
                         scope.launch {
-                            val newId = ReminderApp.instance.database.reminderDao().insert(imported)
-                            ReminderApp.instance.scheduler.schedule(imported.copy(id = newId))
-                            com.reminderapp.service.SyncStore.touchLocalChange()
-                            com.reminderapp.receiver.ReminderWidgetProvider.refresh(cardImportContext)
+                            com.reminderapp.service.ReminderActions(cardImportContext).importItems(listOf(imported))
                             cardImportText = ""
                             cardImportMsg = null
                             showCardImportDialog = false

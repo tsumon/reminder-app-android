@@ -14,9 +14,9 @@ import kotlinx.coroutines.sync.withLock
  */
 object QuietHoursStore {
     private val migrationMutex=Mutex()
-    suspend fun migrateLegacy(context: Context) = migrationMutex.withLock {
+    suspend fun migrateLegacy(context: Context) = migrationMutex.withLock { ReminderMutationGate.serialized {
         val prefs=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
-        if(prefs.getBoolean("policy_v9_migrated",false)) return@withLock
+        if(prefs.getBoolean("policy_v9_migrated",false)) return@serialized
         val db=com.reminderapp.data.database.AppDatabase.getInstance(context)
         var changed=false
         db.withTransaction {
@@ -29,7 +29,7 @@ object QuietHoursStore {
         }
         prefs.edit().putBoolean("policy_v9_migrated",true).apply()
         if(changed) SyncStore.touchLocalChange()
-    }
+    } }
     fun legacyAdjusted(context: Context,id: Long,at: Long): Long =
         if(context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).getBoolean("policy_v9_migrated",false)) at else adjust(context,id,at)
     private const val PREFS = "quiet_hours_settings"

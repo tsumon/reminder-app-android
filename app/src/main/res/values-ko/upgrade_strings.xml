@@ -60,4 +60,5 @@
     <string name="upgrade_057">로컬 유지 후 업로드</string>
     <string name="upgrade_058">원격 사용 후 병합</string>
     <string name="upgrade_059">일회성 알림은 건너뛸 수 없습니다</string>
+    <string name="upgrade_060">빨간색으로 표시된 설정을 수정한 후 저장하세요</string>
 </resources>
