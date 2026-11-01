@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="refresh_000">新增重試間隔</string>
+    <string name="refresh_001">移除此間隔</string>
+    <string name="refresh_002">移除</string>
+    <string name="refresh_003">第 %1$d 次重試 · %2$d 分鐘</string>
+    <string name="refresh_004">第 %1$s 次重試（分鐘）</string>
+    <string name="refresh_005">最多提醒 %1$s 次（含首次）</string>
+    <string name="refresh_006">通知已授權</string>
+    <string name="refresh_007">通知需要設定</string>
+    <string name="refresh_008">已排程 %1$d 則通知 · 點擊自檢</string>
+    <string name="refresh_009">授權與排程不代表已經送達</string>
+    <string name="refresh_010">提醒可能延遲</string>
+    <string name="refresh_011">通知與精確鬧鐘已授權</string>
+    <string name="refresh_012">點擊檢查管道、權限與測試提醒；授權不代表已經送達</string>
+    <string name="refresh_013">全部類型</string>
+    <string name="refresh_014">排序</string>
+    <string name="refresh_015">依到期時間排列</string>
+    <string name="refresh_016">每次確認，都有記錄</string>
+    <string name="refresh_017">完成、略過和漏掉分別統計</string>
+    <string name="refresh_018">略過</string>
+    <string name="refresh_019">漏掉</string>
+    <string name="refresh_020">完成天數</string>
+    <string name="refresh_021">漏掉依出現重試的日期計數；完成與略過依操作次數計數。</string>
+    <string name="refresh_022">提醒預覽</string>
+    <string name="refresh_023">第 %1$d 次週期</string>
+    <string name="refresh_024">第 %1$s 次週期 · %2$s</string>
+    <string name="refresh_025">重試 %1$d · %2$s</string>
+    <string name="refresh_026">重試還會依勿擾時段順延</string>
+    <string name="refresh_027">依裝置日曆計算；更換時區不改寫原始時間戳，請檢查下次時間。預覽假設準時確認，假日資料更新後可能調整。</string>
+    <string name="refresh_028">原定 %1$s</string>
+    <string name="refresh_029">原定 %1$s</string>
+    <string name="refresh_030">下次提醒 %1$s</string>
+    <string name="refresh_031">下次提醒 %1$s</string>
+    <string name="refresh_032">同步衝突：兩端都有修改，已停止寫入。選擇前將儲存本機快照。雙端升級後可同步刪除。</string>
+    <string name="refresh_033">同步衝突會停止並等待你選擇。WebDAV 快照儲存在應用程式私有目錄；雙端升級後支援刪除同步。</string>
+    <string name="refresh_034">本週</string>
+    <string name="refresh_035">本月</string>
+    <string name="refresh_036">全部</string>
+</resources>

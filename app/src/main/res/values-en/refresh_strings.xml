@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="refresh_000">Add retry interval</string>
+    <string name="refresh_001">Remove interval</string>
+    <string name="refresh_002">Remove</string>
+    <string name="refresh_003">Retry %1$d · %2$d minutes</string>
+    <string name="refresh_004">Retry %1$s (minutes)</string>
+    <string name="refresh_005">Up to %1$s alerts (including first)</string>
+    <string name="refresh_006">Notifications authorized</string>
+    <string name="refresh_007">Review notification settings</string>
+    <string name="refresh_008">%1$d notifications scheduled · Check status</string>
+    <string name="refresh_009">Permission and scheduling do not confirm delivery</string>
+    <string name="refresh_010">Alerts may be delayed</string>
+    <string name="refresh_011">Notification and exact alarm permissions granted</string>
+    <string name="refresh_012">Check channels, permissions and a test alert; permission does not confirm delivery</string>
+    <string name="refresh_013">All types</string>
+    <string name="refresh_014">Sort</string>
+    <string name="refresh_015">Due date</string>
+    <string name="refresh_016">Every confirmation counts</string>
+    <string name="refresh_017">Completed, skipped and missed shown separately</string>
+    <string name="refresh_018">Skipped</string>
+    <string name="refresh_019">Missed</string>
+    <string name="refresh_020">Days completed</string>
+    <string name="refresh_021">Missed counts days with retries; completed and skipped count actions.</string>
+    <string name="refresh_022">Schedule preview</string>
+    <string name="refresh_023">Occurrence %1$d</string>
+    <string name="refresh_024">Occurrence %1$s · %2$s</string>
+    <string name="refresh_025">Retry %1$d · %2$s</string>
+    <string name="refresh_026">Retries also respect quiet hours</string>
+    <string name="refresh_027">Uses the device calendar. Changing time zones preserves stored timestamps; check the next alert. Preview assumes on-time confirmation and may change with holiday data.</string>
+    <string name="refresh_028">Originally %1$s</string>
+    <string name="refresh_029">Originally %1$s</string>
+    <string name="refresh_030">Next alert %1$s</string>
+    <string name="refresh_031">Next alert %1$s</string>
+    <string name="refresh_032">Sync paused: both devices changed. A local snapshot is saved before your choice. Upgrade both devices for deletion sync.</string>
+    <string name="refresh_033">Sync conflicts wait for your choice. Private local snapshots are retained; deletion sync requires both devices to be upgraded.</string>
+    <string name="refresh_034">This week</string>
+    <string name="refresh_035">This month</string>
+    <string name="refresh_036">All</string>
+</resources>

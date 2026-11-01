@@ -31,9 +31,16 @@ import com.reminderapp.ui.theme.softWarn
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatsScreen(
-    records: List<ReminderRecordEntity>,
+    allRecords: List<ReminderRecordEntity>,
     onBack: () -> Unit
 ) {
+    var range by remember { mutableStateOf("week") }
+    var offset by remember { mutableIntStateOf(0) }
+    val today=java.time.LocalDate.now()
+    val start=if(range=="month") today.withDayOfMonth(1).plusMonths(offset.toLong()) else today.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY)).plusWeeks(offset.toLong())
+    val end=if(range=="month") start.plusMonths(1) else start.plusWeeks(1)
+    val zone=java.time.ZoneId.systemDefault()
+    val records=allRecords.filter { range=="all" || (it.timestamp>=start.atStartOfDay(zone).toInstant().toEpochMilli() && it.timestamp<end.atStartOfDay(zone).toInstant().toEpochMilli()) }
     val summary = remember(records) { StatsService.summarize(records) }
     val rate = summary.completionRate ?: 0.0
 
@@ -51,8 +58,27 @@ fun StatsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item {
+                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        listOf("week" to "本周","month" to "本月","all" to "全部").forEach { (id,label) -> FilterChip(selected=range==id,onClick={range=id;offset=0},label={Text(zh(label))}) }
+                    }
+                    if(range!="all") Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
+                        TextButton(onClick={offset--}) { Text("‹") }
+                        Text("$start – ${end.minusDays(1)}",style=MaterialTheme.typography.bodySmall)
+                        TextButton(onClick={offset++}) { Text("›") }
+                    }
+                }
+                item { Text(zh("每次确认，都有记录"),style=MaterialTheme.typography.headlineSmall) }
+                item {
+                    Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                        StatMiniCard(zh("已完成"),records.count { it.action=="confirmed" }.toString(),softOk(),Modifier.weight(1f))
+                        StatMiniCard(zh("跳过"),records.count { it.action=="skipped" }.toString(),softWarn(),Modifier.weight(1f))
+                        StatMiniCard(zh("漏掉"),summary.missedCount.toString(),com.reminderapp.ui.theme.softDanger(),Modifier.weight(1f))
+                    }
+                }
+                item { Text(zh("漏掉按出现重试的日期计数；完成与跳过按操作次数计数。"),style=MaterialTheme.typography.bodySmall) }
+                item {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        StatMiniCard(zh("本月完成"), summary.confirmCount.toString(), softOk(), Modifier.weight(1f))
+                        StatMiniCard(zh("完成天数"), summary.confirmCount.toString(), softOk(), Modifier.weight(1f))
                         StatMiniCard(zh("连续天数"), summary.currentStreak.toString(), softWarn(), Modifier.weight(1f))
                         StatMiniCard(
                             zh("完成率"),

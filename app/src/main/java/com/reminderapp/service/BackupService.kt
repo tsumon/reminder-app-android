@@ -1,5 +1,6 @@
 package com.reminderapp.service
 
+import androidx.room.withTransaction
 import android.content.Context
 import android.net.Uri
 import com.reminderapp.data.entity.ReminderEntity
@@ -30,16 +31,20 @@ import com.reminderapp.i18n.zh
 object BackupService {
 
     private const val BACKUP_VERSION = 1
-    private const val SCHEMA_VERSION = 3
+    private const val SCHEMA_VERSION = 4
 
     /** 将提醒列表导出为 JSON 字符串（dataVersion 取当前本地单调版本，判新主依据） */
-    fun exportToJson(reminders: List<ReminderEntity>, dataVersion: Long = SyncStore.localVersion): String {
+    fun exportToJson(reminders: List<ReminderEntity>, dataVersion: Long = SyncStore.localVersion,
+        records: List<com.reminderapp.data.entity.ReminderRecordEntity> = emptyList(),
+        deletions: List<com.reminderapp.data.entity.SyncDeletion> = emptyList()): String {
         val root = JSONObject()
         root.put("version", BACKUP_VERSION)
         root.put("schemaVersion", SCHEMA_VERSION)
         root.put("exportedAt", System.currentTimeMillis())
         root.put("dataVersion", dataVersion)
 
+        root.put("deletedReminderIds", JSONArray(deletions.filter { it.kind=="reminder" }.map { it.syncId }))
+        root.put("deletedRecordIds", JSONArray(deletions.filter { it.kind=="record" }.map { it.syncId }))
         val arr = JSONArray()
         reminders.forEach { r ->
             val obj = JSONObject()
@@ -86,10 +91,58 @@ object BackupService {
             obj.put("quietStartMinute", r.quietStartMinute ?: JSONObject.NULL)
             obj.put("quietEndMinute", r.quietEndMinute ?: JSONObject.NULL)
             obj.put("weeklyWeekday", r.weeklyWeekday ?: JSONObject.NULL)
+            obj.put("scheduledOccurrenceAt", r.scheduledOccurrenceAt ?: JSONObject.NULL)
+            obj.put("timeZoneMode", "deviceCalendar")
+            obj.put("records", JSONArray().apply { records.filter { it.reminderId==r.id }.forEach { rec ->
+                put(JSONObject().put("id",rec.syncId).put("performedAt",rec.timestamp)
+                    .put("type",when(rec.action) { "confirmed" -> "confirm"; "notified" -> "trigger"; "snoozed" -> "snooze"; else -> rec.action }).put("note",rec.note))
+            } })
             arr.put(obj)
         }
         root.put("reminders", arr)
         return root.toString(2)!!
+    }
+
+    suspend fun exportDatabase(db: com.reminderapp.data.database.AppDatabase): String = db.withTransaction {
+        exportToJson(db.reminderDao().getAllSync(), records=db.reminderRecordDao().getAll(), deletions=db.syncDeletionDao().all())
+    }
+    fun deletions(json: String): List<com.reminderapp.data.entity.SyncDeletion> {
+        val root=JSONObject(json)
+        return listOf("reminder" to "deletedReminderIds", "record" to "deletedRecordIds").flatMap { (kind,key) ->
+            val arr=root.optJSONArray(key) ?: JSONArray()
+            (0 until arr.length()).mapNotNull { i ->
+                runCatching { java.util.UUID.fromString(arr.getString(i)).toString() }.getOrNull()?.let { com.reminderapp.data.entity.SyncDeletion(kind,it) }
+            }
+        }
+    }
+    /** Merge wire history only after reminders have their final local IDs. */
+    suspend fun mergeMetadata(json: String, db: com.reminderapp.data.database.AppDatabase) {
+        deletions(json).forEach { db.syncDeletionDao().insert(it) }
+        val ledger=db.syncDeletionDao().all()
+        val removed=ledger.filter { it.kind=="reminder" }.map { it.syncId.lowercase() }.toSet()
+        val removedRecords=ledger.filter { it.kind=="record" }.map { it.syncId.lowercase() }.toSet()
+        db.reminderDao().getAllIncludingInactive().filter { it.syncId?.lowercase() in removed }.forEach {
+            db.reminderDao().softDelete(it.id)
+            db.reminderRecordDao().deleteByReminderId(it.id)
+        }
+        db.reminderRecordDao().getAll().filter { it.syncId.lowercase() in removedRecords }.forEach { db.reminderRecordDao().deleteById(it.id) }
+        val existing=db.reminderRecordDao().getAll().map { it.syncId.lowercase() }.toMutableSet()
+        val root=JSONObject(json).optJSONArray("reminders") ?: return
+        val local=db.reminderDao().getAllIncludingInactive()
+        for(i in 0 until root.length()) {
+            val row=root.getJSONObject(i)
+            val sid=row.optString("syncId",row.optString("id"))
+            val parent=local.firstOrNull { it.syncId.equals(sid,true) } ?: continue
+            if(!parent.isActive || parent.syncId?.lowercase() in removed) continue
+            val records=row.optJSONArray("records") ?: continue
+            for(j in 0 until records.length()) {
+                val record=records.getJSONObject(j)
+                val id=runCatching { java.util.UUID.fromString(record.getString("id")).toString() }.getOrNull() ?: continue
+                if(id in removedRecords || !existing.add(id)) continue
+                val type=when(record.optString("type")) { "confirm" -> "confirmed"; "trigger" -> "notified"; "snooze" -> "snoozed"; else -> record.optString("type") }
+                db.reminderRecordDao().insert(com.reminderapp.data.entity.ReminderRecordEntity(reminderId=parent.id,action=type,timestamp=record.getLong("performedAt"),syncId=id,note=record.optString("note","")))
+            }
+        }
     }
 
     /** 从 JSON 字符串解析提醒列表（失败返回 null） */
@@ -102,7 +155,8 @@ object BackupService {
                 val entity = ReminderEntity(
                     id = o.optLong("id", 0),
                     // 阶段2: syncId 缺省为 null（旧文件无此字段），由调用方 ensureSyncId 补 UUID
-                    syncId = if (o.isNull("syncId")) null else o.optString("syncId"),
+                    syncId = o.optString("syncId").takeIf { it.isNotBlank() } ?: (o.opt("id") as? String)?.takeIf { runCatching { java.util.UUID.fromString(it) }.isSuccess },
+                    scheduledOccurrenceAt = if(o.isNull("scheduledOccurrenceAt")) null else o.optLong("scheduledOccurrenceAt"),
                     title = o.optString("title", zh("未命名提醒")),
                     note = o.optString("note", ""),
                     kind = o.optString("kind", "cycle"),

@@ -107,7 +107,7 @@ fun DiagnosticsScreen(
                 SettingsCard {
                     Text(zh("隐私与数据"),style=MaterialTheme.typography.titleMedium)
                     Text(zh("提醒与完成记录保存在本机。使用 AI 时，对话及相关提醒内容会发往你配置的模型服务地址。启用 WebDAV 后，提醒备份上传至你配置的服务器。本地备份也可能出现在下载目录，请妥善保管。"))
-                    Text(zh("同步冲突会停止并等待你选择。WebDAV 快照保存在应用私有目录；同步不会传播删除。"))
+                    Text(zh("同步冲突会停止并等待你选择。WebDAV 快照保存在应用私有目录；双端升级后支持删除同步。"))
                 }
             }
             item {

@@ -50,7 +50,7 @@ object HolidayPreCheck {
         val newTs=buildShiftedTs(cal,shifted)
         if(newTs<=now) return r
         val day=Calendar.getInstance().apply { timeInMillis=newTs }
-        return r.copy(nextTriggerAt=newTs,holidayAdjustNote=zhf(
+        return r.copy(nextTriggerAt=newTs,scheduledOccurrenceAt=r.nextTriggerAt,holidayAdjustNote=zhf(
             "因%s放假，已前移至假期前最近工作日（%02d-%02d）",st.name,day.get(Calendar.MONTH)+1,day.get(Calendar.DAY_OF_MONTH)))
     }
 

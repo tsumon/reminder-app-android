@@ -143,12 +143,18 @@ fun HomeScreen(
     onImport: () -> Unit = {},
     onOpenSyncSettings: () -> Unit = {},
     onOpenStats: () -> Unit = {},
+    onOpenDiagnostics: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onExportICS: () -> Unit = {},
     onCheckUpdate: () -> Unit = {},
     onNearbyShare: () -> Unit = {},
     onSyncNow: () -> Unit = {}
 ) {
+    var showQuickEntry by remember { mutableStateOf(false) }
+    var kindFilter by remember { mutableStateOf("all") }
+    var sortOrder by remember { mutableStateOf("time") }
+    val order=when(sortOrder) { "title" -> compareBy<ReminderEntity> { it.title }; "priority" -> compareBy<ReminderEntity> { if(it.priority=="high") 0 else if(it.priority=="normal") 1 else 2 }.thenBy { it.nextTriggerAt }; else -> compareBy { it.nextTriggerAt } }
+    fun matchesKind(r: ReminderEntity)=kindFilter=="all" || r.kind==kindFilter
     val grouped by viewModel.groupedReminders.collectAsState()
     val allReminders by viewModel.allReminders.collectAsState()
     val checkInFeedback by viewModel.checkInFeedback.collectAsState()
@@ -206,7 +212,7 @@ fun HomeScreen(
         topBar = {
             if (!selectionMode) {
                 SoftScreenTitle(
-                    title = zh("提醒事项"),
+                    title = zh("今天"),
                     leading = {
                         SoftCircleButton(onClick = onAIChat, size = 40.dp, contentDescription = zh("AI 助手")) {
                             Icon(
@@ -378,14 +384,14 @@ fun HomeScreen(
             r.isActive && r.status != "confirmed" &&
                 (r.status == "notifying" || r.status == "overdue" || (r.status == "snoozed" && r.nextTriggerAt<=now) ||
                     (r.status == "pending" && r.nextTriggerAt <= now)) &&
-                matchSmartList(r, smartList) && matchesSearch(r, searchQuery)
-        }.sortedBy { it.nextTriggerAt }
+                matchSmartList(r, smartList) && matchesSearch(r, searchQuery) && matchesKind(r)
+        }.sortedWith(order)
         val dueIds = due.map { it.id }.toSet()
-        val waiting = grouped.waiting.sortedBy { it.nextTriggerAt }.filter {
-            matchSmartList(it, smartList) && matchesSearch(it, searchQuery) && it.id !in dueIds
+        val waiting = grouped.waiting.sortedWith(order).filter {
+            matchSmartList(it, smartList) && matchesSearch(it, searchQuery) && matchesKind(it) && it.id !in dueIds
         }
-        val completed = grouped.completed.filter {
-            matchSmartList(it, smartList) && matchesSearch(it, searchQuery)
+        val completed = grouped.completed.sortedWith(order).filter {
+            matchSmartList(it, smartList) && matchesSearch(it, searchQuery) && matchesKind(it)
         }
 
         LazyColumn(
@@ -406,7 +412,31 @@ fun HomeScreen(
                 )
             }
 
-            item { com.reminderapp.ui.component.QuickCreate(onQuickCreate,onAIChat)
+            item { NotificationHealthHint(onOpenDiagnostics) }
+            item {
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                    var kindsOpen by remember { mutableStateOf(false) }
+                    var sortOpen by remember { mutableStateOf(false) }
+                    Box {
+                        TextButton(onClick={kindsOpen=true}) { Text(zh(when(kindFilter) { "cycle" -> "周期提醒"; "date" -> "日期提醒"; "rule" -> "规则提醒"; else -> "全部类型" })) }
+                        DropdownMenu(expanded=kindsOpen,onDismissRequest={kindsOpen=false}) {
+                            listOf("all" to "全部类型","cycle" to "周期提醒","date" to "日期提醒","rule" to "规则提醒").forEach { (id,label) -> DropdownMenuItem(text={Text(zh(label))},onClick={kindFilter=id;kindsOpen=false}) }
+                        }
+                    }
+                    Box {
+                        TextButton(onClick={sortOpen=true}) { Text(zh(when(sortOrder) { "title" -> "提醒标题"; "priority" -> "优先级"; else -> "按到期时间排列" })) }
+                        DropdownMenu(expanded=sortOpen,onDismissRequest={sortOpen=false}) {
+                            listOf("time" to "按到期时间排列","priority" to "优先级","title" to "提醒标题").forEach { (id,label) -> DropdownMenuItem(text={Text(zh(label))},onClick={sortOrder=id;sortOpen=false}) }
+                        }
+                    }
+                }
+            }
+            item {
+                Row {
+                    TextButton(onClick={showQuickEntry=!showQuickEntry}) { Text(zh("输入一句话创建提醒")) }
+                    TextButton(onClick=onAIChat) { Text(zh("AI / 语音")) }
+                }
+                if(showQuickEntry) com.reminderapp.ui.component.QuickCreate(onQuickCreate,onAIChat)
                 if(canUndoCreate) TextButton(onClick=onUndoCreate) { Text(zh("撤销刚才的创建")) }
             }
             item {
@@ -428,6 +458,7 @@ fun HomeScreen(
                         onClick = { onReminderClick(reminder.id) },
                         modifier = Modifier.animateItemPlacement(),
                         onMakeUp = { viewModel.confirmReminder(reminder, isMakeUp = true) },
+                        onSnooze = { viewModel.snoozeLater(reminder,15) },
                         onConfirm = {
                             viewModel.confirmReminder(reminder)
                             confettiTrigger++
@@ -817,6 +848,7 @@ fun SwipeableReminderCard(
     /** 批次3 功能2：逾期提醒的「补打今天」入口，传 null 则不显示 */
     onMakeUp: (() -> Unit)? = null,
     /** 到期/逾期/已推迟：行内确认 */
+    onSnooze: (() -> Unit)? = null,
     onConfirm: (() -> Unit)? = null,
     /** v2.1.1: 批量管理透传 */
     selectionMode: Boolean = false,
@@ -891,6 +923,7 @@ fun SwipeableReminderCard(
         ) {
             ReminderCard(
                 reminder, statusColor, onDelete = onDelete, onClick = onClick, onMakeUp = onMakeUp,
+                onSnooze = onSnooze,
                 onConfirm = onConfirm,
                 selectionMode = selectionMode, selected = selected, onToggleSelect = onToggleSelect
             )
@@ -1220,6 +1253,7 @@ fun ReminderCard(
     /** 批次3 功能2：逾期提醒的「补打今天」入口，传 null 则不显示 */
     onMakeUp: (() -> Unit)? = null,
     /** 到期项行内确认按钮 */
+    onSnooze: (() -> Unit)? = null,
     onConfirm: (() -> Unit)? = null,
     /** v2.1.1: 批量管理——选择模式标记/选择回调，非空时卡片进入多选态 */
     selectionMode: Boolean = false,
@@ -1289,7 +1323,7 @@ fun ReminderCard(
                 Text(
                     text = reminder.title,
                     style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                     textDecoration = if (isDone) TextDecoration.LineThrough else TextDecoration.None,
                     color = if (isDone) MaterialTheme.colorScheme.onSurfaceVariant
@@ -1297,9 +1331,11 @@ fun ReminderCard(
                 )
                 Spacer(modifier = Modifier.height(5.dp))
                 ReminderTagRow(reminder)
+                reminder.scheduledOccurrenceAt?.let { original -> Text(com.reminderapp.i18n.zhf("原定 %s",dateFormat.format(Date(original))),style=MaterialTheme.typography.bodySmall,color=softMuted()) }
+                if(!isDone && reminder.status!="overdue") Text(com.reminderapp.i18n.zhf("下次提醒 %s",dateFormat.format(Date(reminder.nextTriggerAt))),style=MaterialTheme.typography.bodySmall,color=softMuted())
                 if (reminder.retryCount > 0 && !isDone) {
                     Text(
-                        text = "还没确认 · ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(java.util.Date(reminder.nextTriggerAt))} 再响",
+                        text = if(reminder.status=="overdue") zh("已达提醒次数上限，等待手动处理") else "还没确认 · ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(java.util.Date(reminder.nextTriggerAt))} 再响",
                         fontSize = 12.5.sp,
                         lineHeight = 16.sp,
                         color = softWarn()
@@ -1361,8 +1397,10 @@ fun ReminderCard(
                             .clip(CircleShape)
                             .background(Tokens.BrandPrimary)
                             .clickable(onClick = onConfirm)
-                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                            .heightIn(min=48.dp)
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
                     )
+                    if(onSnooze!=null) TextButton(onClick=onSnooze) { Text(zh("稍后")) }
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1505,5 +1543,28 @@ private fun MergedBirthdayCard(solar: ReminderEntity, lunar: ReminderEntity, onC
                 )
             }
         }
+    }
+}
+
+@Composable private fun NotificationHealthHint(onClick: () -> Unit) {
+    val context=androidx.compose.ui.platform.LocalContext.current
+    val owner=androidx.compose.ui.platform.LocalLifecycleOwner.current
+    var notifications by remember { mutableStateOf(false) }
+    var exact by remember { mutableStateOf(false) }
+    DisposableEffect(owner) {
+        val observer=androidx.lifecycle.LifecycleEventObserver { _,event ->
+            if(event==androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                notifications=androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
+                exact=com.reminderapp.service.ReminderScheduler(context).canScheduleExact()
+            }
+        }
+        owner.lifecycle.addObserver(observer)
+        notifications=androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
+        exact=com.reminderapp.service.ReminderScheduler(context).canScheduleExact()
+        onDispose { owner.lifecycle.removeObserver(observer) }
+    }
+    Column(Modifier.fillMaxWidth().background(Tokens.BrandPrimary.copy(alpha=0.08f),RoundedCornerShape(16.dp)).clickable(onClick=onClick).padding(16.dp)) {
+        Text(zh(if(!notifications) "通知需要设置" else if(!exact) "提醒可能延迟" else "通知与精确闹钟已授权"),style=MaterialTheme.typography.titleSmall)
+        Text(zh("点击检查渠道、权限与测试提醒；授权不代表已经送达"),style=MaterialTheme.typography.bodySmall)
     }
 }

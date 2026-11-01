@@ -26,18 +26,35 @@ fun ReminderPolicyEditor(value: ReminderEntity, onChange: (ReminderEntity) -> Un
         }
         if(value.reminderStyle=="important") Text(zh("重要提醒使用高优先级通知；全屏和勿扰权限由系统控制。"),style=MaterialTheme.typography.bodySmall)
         if(value.kind=="cycle" && value.cycle!="once") {
-            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+            Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
                 FilterChip(selected=value.recurrenceMode=="fixed",onClick={onChange(value.copy(recurrenceMode="fixed"))},label={Text(zh("固定周期"))})
                 FilterChip(selected=value.recurrenceMode=="afterCompletion",onClick={onChange(value.copy(recurrenceMode="afterCompletion"))},label={Text(zh("完成后重新计时"))})
             }
         }
         if(value.reminderStyle!="gentle") {
-            OutlinedTextField(value=intervals,onValueChange={ text ->
-                intervals=text
-                val list=text.split(",").map { it.trim().toIntOrNull() }
-                if(list.size in 1..10 && list.all { it != null && it in 1..10080 }) onChange(value.copy(retryIntervalsMinutes=list.joinToString(",")))
-            },label={Text(zh("重试间隔（分钟，逗号分隔，1–10080）"))},supportingText={Text(zh("最多 10 项；最后一个间隔重复使用"))},isError=!retryValid,modifier=Modifier.fillMaxWidth())
-            OutlinedTextField(value=cap,onValueChange={ cap=it;it.toIntOrNull()?.takeIf { n -> n in 1..10 }?.let { n -> onChange(value.copy(maxReminderAttempts=n)) } },label={Text(zh("最多提醒次数（1–10，含首次）"))},isError=!retryValid,modifier=Modifier.fillMaxWidth())
+            intervals.split(",").forEachIndexed { index, text ->
+                Row(Modifier.fillMaxWidth(),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
+                    OutlinedTextField(value=text,onValueChange={ input ->
+                        val parts=intervals.split(",").toMutableList(); if(index !in parts.indices) return@OutlinedTextField; parts[index]=input; intervals=parts.joinToString(",")
+                        if(parts.all { it.toIntOrNull() in 1..10080 }) onChange(value.copy(retryIntervalsMinutes=intervals))
+                    },label={Text(com.reminderapp.i18n.zhf("第 %s 次重试（分钟）",index+1))},isError=text.toIntOrNull() !in 1..10080,
+                    keyboardOptions=androidx.compose.foundation.text.KeyboardOptions(keyboardType=androidx.compose.ui.text.input.KeyboardType.Number),modifier=Modifier.weight(1f))
+                    TextButton(enabled=intervals.split(",").size>1,onClick={
+                        val parts=intervals.split(",").toMutableList();if(index !in parts.indices) return@TextButton;parts.removeAt(index);intervals=parts.joinToString(",")
+                        if(parts.all { it.toIntOrNull() in 1..10080 }) onChange(value.copy(retryIntervalsMinutes=intervals))
+                    }) { Text(zh("移除")) }
+                }
+            }
+            TextButton(enabled=intervals.split(",").size<10,onClick={
+                intervals+=",60";if(intervals.split(",").all { it.toIntOrNull() in 1..10080 }) onChange(value.copy(retryIntervalsMinutes=intervals))
+            }) { Text(zh("添加重试间隔")) }
+            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
+                Text(com.reminderapp.i18n.zhf("最多提醒 %s 次（含首次）",value.maxReminderAttempts),modifier=Modifier.weight(1f))
+                TextButton(enabled=value.maxReminderAttempts>1,onClick={cap=(value.maxReminderAttempts-1).toString();onChange(value.copy(maxReminderAttempts=value.maxReminderAttempts-1))}) { Text("−") }
+                TextButton(enabled=value.maxReminderAttempts<10,onClick={cap=(value.maxReminderAttempts+1).toString();onChange(value.copy(maxReminderAttempts=value.maxReminderAttempts+1))}) { Text("+") }
+            }
+            Text(zh("最多 10 项；最后一个间隔重复使用"),style=MaterialTheme.typography.bodySmall)
+
         }
         fun minute(text: String): Int? { val p=text.split(":").map { it.toIntOrNull() };return if(p.size==2 && p[0] in 0..23 && p[1] in 0..59) p[0]!!*60+p[1]!! else null }
         fun updateQuiet() { val start=minute(quietStart);val end=minute(quietEnd);if(start!=null && end!=null) onChange(value.copy(quietStartMinute=start,quietEndMinute=end));if(quietStart.isBlank() && quietEnd.isBlank()) onChange(value.copy(quietStartMinute=null,quietEndMinute=null)) }

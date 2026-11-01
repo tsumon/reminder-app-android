@@ -366,7 +366,6 @@ fun CreateReminderScreen(
             if(!com.reminderapp.service.ReminderScheduler(context).canScheduleExact()) Text(zh("当前为非精确提醒，可能延迟。可在设置 → 提醒诊断中授权精确闹钟。"),style=MaterialTheme.typography.bodySmall)
             if(!androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()) Text(zh("通知未开启。保存后请到设置 → 提醒诊断中开启通知并测试。"),style=MaterialTheme.typography.bodySmall)
             Text(if(initial?.id != null && initial.id > 0) zh("编辑提醒") else zh("检查规则后保存"),style=MaterialTheme.typography.titleMedium)
-            com.reminderapp.ui.component.ReminderPolicyEditor(policy.copy(kind=if(isDateMode) "date" else if(isRuleMode) "rule" else "cycle",cycle=selectedCycle.name.lowercase()),onChange={policy=it;isCritical=it.isCritical;if(it.isCritical) ensureCriticalPermissions()},onValidityChange={policyValid=it})
             // === 模板 ===
             Text(zh("从模板开始"), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             Row(
@@ -964,6 +963,30 @@ fun CreateReminderScreen(
                 }
             }
 
+            com.reminderapp.ui.component.ReminderPolicyEditor(policy.copy(kind=if(isDateMode) "date" else if(isRuleMode) "rule" else "cycle",cycle=selectedCycle.name.lowercase()),onChange={policy=it;isCritical=it.isCritical;if(it.isCritical) ensureCriticalPermissions()},onValidityChange={policyValid=it})
+            val previewAnchor=buildFirstTriggerAt()
+            val previewDraft=policy.copy(title=title,kind=if(isDateMode) "date" else if(isRuleMode) "rule" else "cycle",
+                cycle=selectedCycle.name.lowercase(),customDays=customDays,
+                dateType=selectedDateType?.name?.lowercase(),targetMonth=targetMonth,targetDay=targetDay,
+                holidayId=com.reminderapp.service.HolidayService.allHolidays.find { it.name==selectedHolidayName }?.id,holidayName=selectedHolidayName,rulePeriod=rulePeriod.name.lowercase(),ruleWeek=ruleWeek,ruleWeekday=ruleWeekday,
+                reminderHour=triggerHour,reminderMinute=triggerMinute,firstTriggerAt=previewAnchor,nextTriggerAt=previewAnchor,holidayAware=holidayAware)
+            val firstPreview=if(isDateMode || isRuleMode) ReminderEngine.calculateNextTrigger(previewDraft,context) else previewAnchor
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer,androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                Text(zh("提醒预览"),style=MaterialTheme.typography.titleSmall)
+                ReminderEngine.futureTriggers(previewDraft.copy(nextTriggerAt=firstPreview),count=3,context=context).forEachIndexed { index,date ->
+                    Text(com.reminderapp.i18n.zhf("第 %s 次周期 · %s",index+1,java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM,java.text.DateFormat.SHORT).format(java.util.Date(date))))
+                }
+                if(previewDraft.reminderStyle!="gentle") {
+                    var retryAt=com.reminderapp.service.ReminderPolicy.adjustQuiet(previewDraft,firstPreview)
+                    val gaps=com.reminderapp.service.ReminderPolicy.intervals(previewDraft)
+                    for(index in 0 until minOf(3,previewDraft.maxReminderAttempts-1)) {
+                        retryAt=com.reminderapp.service.ReminderPolicy.adjustQuiet(previewDraft,retryAt+gaps[minOf(index,gaps.lastIndex)]*60000L)
+                        Text(com.reminderapp.i18n.zhf("下次提醒 %s",java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM,java.text.DateFormat.SHORT).format(java.util.Date(retryAt))),style=MaterialTheme.typography.bodySmall)
+                    }
+                }
+                Text(zh("按设备日历计算；更换时区不改写原始时间戳，请检查下次时间。预览假设按时确认，节假日数据更新后可能调整。"),style=MaterialTheme.typography.bodySmall)
+            }
+
             Spacer(modifier = Modifier.height(32.dp))
         }
 
@@ -1065,52 +1088,11 @@ fun CreateReminderScreen(
  * 仅展示层，选择仍写原 selectedCycle 状态。
  */
 @Composable
-private fun CycleOptionCard(
-    emoji: String,
-    label: String,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val scale by animateFloatAsState(
-        targetValue = if (isSelected) 1.05f else 1f,
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMedium),
-        label = "cycleScale"
-    )
-    val cardShape = RoundedCornerShape(14.dp)
-    Column(
-        modifier = modifier
-            .scale(scale)
-            .clip(cardShape)
-            .then(
-                if (isSelected) Modifier.background(
-                    Brush.linearGradient(
-                        listOf(Playful.purple.copy(alpha = 0.14f), Playful.coral.copy(alpha = 0.10f))
-                    )
-                ) else Modifier.background(Playful.ink.copy(alpha = 0.05f))
-            )
-            .then(
-                if (isSelected) Modifier.border(
-                    2.dp,
-                    Brush.sweepGradient(
-                        listOf(Playful.mint, Playful.gold, Playful.coral, Playful.purple, Playful.mint)
-                    ),
-                    cardShape
-                ) else Modifier
-            )
-            .clickable(onClick = onClick, onClickLabel = label)
-            .padding(vertical = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Text(emoji, fontSize = 22.sp)
-        Text(
-            label,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = if (isSelected) Playful.purple else MaterialTheme.colorScheme.onSurface,
-            maxLines = 1
-        )
+private fun CycleOptionCard(emoji:String,label:String,isSelected:Boolean,onClick:()->Unit,modifier:Modifier=Modifier) {
+    Column(modifier.clip(RoundedCornerShape(14.dp)).background(if(isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
+        .clickable(onClick=onClick,onClickLabel=label).padding(vertical=12.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(5.dp)) {
+        Text(emoji,fontSize=20.sp)
+        Text(label,style=MaterialTheme.typography.labelMedium,color=if(isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,maxLines=2)
     }
 }
 
@@ -1119,43 +1101,9 @@ private fun CycleOptionCard(
  * emoji 无法做真灰度，用 alpha 0.4 近似（iOS grayscale 1 + opacity 0.4）。
  */
 @Composable
-private fun WeekdayBulb(
-    label: String,
-    isOn: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val scale by animateFloatAsState(
-        targetValue = if (isOn) 1.05f else 1f,
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMedium),
-        label = "bulbScale"
-    )
-    Column(
-        modifier = modifier
-            .scale(scale)
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (isOn) Playful.gold.copy(alpha = 0.18f) else Color.Transparent)
-            .clickable(onClick = onClick, onClickLabel = label)
-            .padding(vertical = 7.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp)
-    ) {
-        Text(
-            "💡",
-            fontSize = 17.sp,
-            style = TextStyle(
-                shadow = if (isOn) Shadow(
-                    Playful.gold.copy(alpha = 0.85f),
-                    blurRadius = with(LocalDensity.current) { 6.dp.toPx() }
-                ) else null
-            ),
-            modifier = Modifier.alpha(if (isOn) 1f else 0.4f)
-        )
-        Text(
-            label,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = if (isOn) Playful.purple else MaterialTheme.colorScheme.onSurfaceVariant
-        )
+private fun WeekdayBulb(label:String,isOn:Boolean,onClick:()->Unit,modifier:Modifier=Modifier) {
+    Box(modifier.heightIn(min=48.dp).clip(RoundedCornerShape(12.dp)).background(if(isOn) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+        .clickable(onClick=onClick,onClickLabel=label),contentAlignment=Alignment.Center) {
+        Text(label,style=MaterialTheme.typography.labelMedium,color=if(isOn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

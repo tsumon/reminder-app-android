@@ -124,7 +124,7 @@ fun NavGraph(
                 if (uri != null) {
                     scope.launch {
                         val reminders = database.reminderDao().getAllSync()
-                        val json = com.reminderapp.service.BackupService.exportToJson(reminders)
+                        val json = com.reminderapp.service.BackupService.exportDatabase(database)
                         com.reminderapp.service.BackupService.writeToUri(context, uri, json)
                     }
                 }
@@ -140,7 +140,7 @@ fun NavGraph(
                             ?: return@launch
                         val reminders = com.reminderapp.service.BackupService.importFromJson(json)
                             ?: return@launch
-                        val result=runCatching { com.reminderapp.service.ReminderActions(context,database).importItems(reminders) }.getOrElse {
+                        val result=runCatching { com.reminderapp.service.ReminderActions(context,database).importItems(reminders,json) }.getOrElse {
                             android.widget.Toast.makeText(context,zh("数据解析失败"),android.widget.Toast.LENGTH_LONG).show();return@launch
                         }
                         val imported=result.saved.size
@@ -205,6 +205,7 @@ fun NavGraph(
                 onExport = { exportLauncher.launch("reminder_backup_${System.currentTimeMillis() / 1000}.json") },
                 onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
                 onOpenSyncSettings = { navController.navigate("sync_settings") },
+                onOpenDiagnostics = { navController.navigate("diagnostics") },
                 onOpenStats = { navController.navigate("stats") },
                 onOpenSettings = { navController.navigate("settings") },
                 onCheckUpdate = manualCheck,
@@ -313,6 +314,11 @@ fun NavGraph(
                         com.reminderapp.service.ReminderActions(com.reminderapp.ReminderApp.instance).apply(reminder,com.reminderapp.service.ReminderActions.Action.COMPLETE)
                     }
                 },
+                onCreateOnDay = { date ->
+                    val calendar=java.util.Calendar.getInstance().apply { timeInMillis=date;set(java.util.Calendar.HOUR_OF_DAY,9);set(java.util.Calendar.MINUTE,0);set(java.util.Calendar.SECOND,0);set(java.util.Calendar.MILLISECOND,0) }
+                    draft=com.reminderapp.data.entity.ReminderEntity(title="",firstTriggerAt=calendar.timeInMillis,nextTriggerAt=calendar.timeInMillis)
+                    navController.navigate("create")
+                },
                 streak = calendarPlayful?.first,
                 weekDone = calendarPlayful?.second
             )
@@ -371,7 +377,7 @@ fun NavGraph(
                 records = database.reminderRecordDao().getAll()
             }
             StatsScreen(
-                records = records,
+                allRecords = records,
                 onBack = { navController.popBackStack() }
             )
         }

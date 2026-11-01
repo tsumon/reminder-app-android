@@ -20,6 +20,17 @@ class HolidayCompletionPrecheckTest {
             when(method.name) { "getAll" -> cache; "getString" -> cache[args!![0]] ?: args[1]; else -> null }
         } as SharedPreferences
     }
+    @Test fun completingShiftedWeeklyPrimaryOrRetryConsumesOriginalHolidaySlot() {
+        val original=time("2026-10-01T09:00")
+        val shifted=next.copy(nextTriggerAt=time("2026-09-30T09:00"),scheduledOccurrenceAt=original,holidayAdjustNote="shifted")
+        val completed=ReminderEngine.confirm(shifted,time("2026-09-30T10:00"))
+        assertEquals(time("2026-10-08T09:00"),completed.nextTriggerAt)
+        assertNull(completed.scheduledOccurrenceAt)
+        assertEquals(time("2026-10-08T09:00"),ReminderEngine.skip(shifted,time("2026-09-30T10:00"))!!.nextTriggerAt)
+        assertEquals(time("2026-10-08T09:00"),ReminderEngine.confirm(shifted.copy(status="notifying",retryCount=1),time("2026-09-30T11:00")).nextTriggerAt)
+        // Upgrade fallback: 2.8 had only a holiday annotation, so infer the original anchored slot.
+        assertEquals(time("2026-10-08T09:00"),ReminderEngine.confirm(shifted.copy(scheduledOccurrenceAt=null),time("2026-09-30T10:00")).nextTriggerAt)
+    }
     @Test fun normalDayInCachedYearRequiresNoNetworkRefresh() = runBlocking {
         var refreshes=0
         val c=context(mutableMapOf("2026-01-01" to "true|New Year"))

@@ -30,7 +30,7 @@ object LocalBackupService {
     /** 立即备份，返回文件名（失败返回 null） */
     fun backupNow(context: Context): String? {
         val reminders = AppDatabase.getInstance(context).reminderDao().getAllSyncBlocking()
-        val json = BackupService.exportToJson(reminders)
+        val json = kotlinx.coroutines.runBlocking { BackupService.exportDatabase(AppDatabase.getInstance(context)) }
         val name = "$PREFIX${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.json"
 
         val ok = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

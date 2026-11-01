@@ -41,7 +41,13 @@ fun ReminderAppTheme(
     }
 
     val palette = Tokens.Palettes.getOrElse(ThemeStore.colorIndex(context)) { Tokens.Palettes.first() }
-    Tokens.BrandPrimary = palette.primary
+    Tokens.StatusReminding=if(effectiveDark) Color(0xFFFF8A80) else Color(0xFFBD4436)
+    Tokens.StatusWaiting=if(effectiveDark) Color(0xFF8DBEF0) else Color(0xFF25669A)
+    Tokens.StatusCompleted=if(effectiveDark) Color(0xFF66D99E) else Color(0xFF237A49)
+    Tokens.StatusOverdue=if(effectiveDark) Color(0xFFFF8A80) else Color(0xFFC0392B)
+    Tokens.StatusSnoozed=if(effectiveDark) Color(0xFFF9B649) else Color(0xFF9A5D08)
+    Tokens.BrandPrimary = if(effectiveDark) palette.gradient else palette.primary
+    Tokens.OnStrong = if(effectiveDark) Tokens.Dark.Canvas else Color.White
     Tokens.BrandPrimaryDark = palette.dark
     Tokens.BrandPrimaryContainer = palette.container
     Tokens.BrandGradientStart = palette.gradient
@@ -49,11 +55,13 @@ fun ReminderAppTheme(
     // 皮肤压过 Material You：不用 dynamicLight/DarkColorScheme
     val colorScheme = if (effectiveDark) {
         darkColorScheme(
-            primary = palette.primary,
-            onPrimary = Color.White,
+            primary = palette.gradient,
+            onPrimary = Tokens.Dark.Canvas,
             primaryContainer = palette.dark,
             onPrimaryContainer = Color.White,
             secondary = palette.primary,
+            secondaryContainer = palette.dark,
+            onSecondaryContainer = Color.White,
             background = Tokens.Dark.Canvas,
             surface = Tokens.Dark.Surface,
             surfaceVariant = Tokens.Dark.Elevated,
@@ -70,6 +78,8 @@ fun ReminderAppTheme(
             primaryContainer = palette.container,
             onPrimaryContainer = palette.dark,
             secondary = palette.primary,
+            secondaryContainer = palette.container,
+            onSecondaryContainer = palette.dark,
             background = Tokens.Light.Canvas,
             surface = Tokens.Light.Surface,
             surfaceVariant = Tokens.Light.Elevated,

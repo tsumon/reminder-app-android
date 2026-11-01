@@ -30,7 +30,7 @@ object ReminderEditorMapper {
             holidayName=proposed.holidayName,holidayId=proposed.holidayId,holidayAware=proposed.holidayAware,
             rulePeriod=proposed.rulePeriod,ruleWeek=proposed.ruleWeek,ruleWeekday=proposed.ruleWeekday,
             weeklyWeekday=proposed.weeklyWeekday,reminderHour=proposed.reminderHour,reminderMinute=proposed.reminderMinute,
-            firstTriggerAt=proposed.firstTriggerAt,status="pending",retryCount=0,holidayAdjustNote=null)
+            firstTriggerAt=proposed.firstTriggerAt,status="pending",retryCount=0,holidayAdjustNote=null,scheduledOccurrenceAt=null)
         val next=if(configured.kind=="cycle" && configured.firstTriggerAt>now && configured.recurrenceMode!="afterCompletion") configured.firstTriggerAt else resolveNextTrigger(configured,now)
         return configured.copy(nextTriggerAt=next)
     }

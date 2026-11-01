@@ -6,10 +6,10 @@ val Primary = Tokens.BrandPrimary
 val PrimaryVariant = Color(0xFF0E6E70)
 val Secondary = Color(0xFFFFA07A)
 
-val StatusReminding = Tokens.StatusReminding
-val StatusWaiting = Tokens.StatusWaiting
-val StatusCompleted = Tokens.StatusCompleted
-val StatusOverdue = Tokens.StatusOverdue
+val StatusReminding: Color get() = Tokens.StatusReminding
+val StatusWaiting: Color get() = Tokens.StatusWaiting
+val StatusCompleted: Color get() = Tokens.StatusCompleted
+val StatusOverdue: Color get() = Tokens.StatusOverdue
 
 val Surface = Tokens.Light.Surface
 val Background = Tokens.Light.Canvas

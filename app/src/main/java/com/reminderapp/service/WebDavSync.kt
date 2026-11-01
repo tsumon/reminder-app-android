@@ -92,12 +92,16 @@ object WebDavSync {
             if(decision==ReminderSyncCoordinator.Decision.CONFLICT && resolution==null) return SyncResult.Conflict(remoteJson,localVer,remote?.etag).also { pendingConflict.value=it }
             if(resolution!=null) {
                 snapshotLocal(localItems,localVer)
-                if(resolution.useLocal) return uploadCaptured(coordinator.prepareLocalResolution(captured,remoteGeneration))
+                if(resolution.useLocal) {
+                    val withDeletions=coordinator.acceptDeletions(captured,remoteJson)
+                    coordinator.restoreSchedules()
+                    return uploadCaptured(coordinator.prepareLocalResolution(withDeletions,remoteGeneration))
+                }
             }
             if(resolution!=null || decision==ReminderSyncCoordinator.Decision.DOWNLOAD) {
                 val items=BackupService.importFromJson(remoteJson) ?: return SyncResult.Error(zh("远程文件解析失败"))
                 if(resolution==null) snapshotLocal(localItems,localVer)
-                coordinator.merge(captured,items,remoteGeneration,remoteTimestamp,publishSelected=resolution!=null)
+                coordinator.merge(captured,items,remoteGeneration,remoteTimestamp,publishSelected=resolution!=null,remoteJson=remoteJson)
                 // Generation acknowledgement is already committed. A later completion stays dirty during restoration.
                 coordinator.restoreSchedules()
                 val merged=coordinator.capture()
@@ -175,10 +179,10 @@ object WebDavSync {
     }
 
     /** 阶段2: 合并前把当前本地全量导出为 JSON 快照（可恢复；保留最近 5 份） */
-    private fun snapshotLocal(localItems: List<com.reminderapp.data.entity.ReminderEntity>, generation: Long) {
+    private suspend fun snapshotLocal(localItems: List<com.reminderapp.data.entity.ReminderEntity>, generation: Long) {
         val dir=java.io.File(ReminderApp.instance.filesDir,"webdav_snapshots").apply { mkdirs() }
         val file=java.io.File(dir,"before_${System.currentTimeMillis()}_${java.util.UUID.randomUUID()}.json")
-        file.writeText(BackupService.exportToJson(localItems,generation))
+        file.writeText(BackupService.exportDatabase(com.reminderapp.data.database.AppDatabase.getInstance(com.reminderapp.ReminderApp.instance)))
         check(file.length()>0) { "本地快照写入失败，同步已停止" }
         dir.listFiles()?.sortedByDescending { it.lastModified() }?.drop(5)?.forEach { it.delete() }
     }

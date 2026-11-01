@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="refresh_extra_0">新增當天提醒</string>
+    <string name="refresh_extra_1">完成記錄</string>
+    <string name="refresh_extra_2">輸入一句話建立提醒</string>
+    <string name="refresh_extra_3">已達提醒次數上限，等待手動處理</string>
+</resources>

@@ -18,6 +18,9 @@ interface ReminderRecordDao {
     @Query("DELETE FROM reminder_records WHERE id = :id AND action = 'notified'")
     suspend fun deleteNotification(id: Long)
 
+    @Query("DELETE FROM reminder_records WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
     @Insert
     suspend fun insert(record: ReminderRecordEntity): Long
 

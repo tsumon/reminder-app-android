@@ -41,10 +41,11 @@ fun CalendarScreen(
     reminders: List<ReminderEntity>,
     onReminderClick: (Long) -> Unit,
     onConfirm: (ReminderEntity) -> Unit = {},
+    onCreateOnDay: (Long) -> Unit = {},
     streak: Int? = null,
     weekDone: Int? = null
 ) {
-    var selectedDate by remember { mutableStateOf<Long?>(null) }
+    var selectedDate by remember { mutableStateOf<Long?>(System.currentTimeMillis()) }
     val todayCal = remember { Calendar.getInstance() }
     var displayYear by remember { mutableIntStateOf(todayCal.get(Calendar.YEAR)) }
     var displayMonth by remember { mutableIntStateOf(todayCal.get(Calendar.MONTH)) }
@@ -135,6 +136,8 @@ fun CalendarScreen(
                     )
                 }
             }
+
+            item { OutlinedButton(onClick={onCreateOnDay(selectedDate ?: System.currentTimeMillis())},modifier=Modifier.fillMaxWidth()) { Text(zh("添加当天提醒")) } }
 
             // 当日任务列表
             if (ts != null) {

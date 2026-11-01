@@ -23,7 +23,9 @@ data class ReminderRecordEntity(
 
     // action 取值见 companion 常量（统计口径用；存储值勿改——已有历史数据落库）
     @ColumnInfo(name = "action") val action: String,
-    @ColumnInfo(name = "timestamp") val timestamp: Long = System.currentTimeMillis()
+    @ColumnInfo(name = "timestamp") val timestamp: Long = System.currentTimeMillis(),
+    @ColumnInfo(name = "sync_id", defaultValue = "''") val syncId: String = java.util.UUID.randomUUID().toString(),
+    @ColumnInfo(name = "note", defaultValue = "''") val note: String = ""
 ) {
     companion object {
         /** 操作记录 action 常量（v2.0.16 枚举化，防 "notifying" 式拼写漂移；值与历史存储一致） */

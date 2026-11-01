@@ -1,202 +1,94 @@
-[🇨🇳 简体中文](README.md) · [🇺🇸 English](README.en.md) · [🇹🇼 繁體中文](README.zh-TW.md) · [🇯🇵 日本語](README.ja.md) · [🇰🇷 한국어](README.ko.md)
+[简体中文](README.md) · [English](README.en.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
----
+<img src="assets/readme/hero.svg" width="100%" alt="Reminder — a calmer rhythm">
 
-# 循環提醒 — Android
+# 循環提醒
 
-一套功能完整的 Android 原生提醒應用，支援循環提醒、日期提醒、農曆生日、節假日提醒，以及 **AI 語音助理**。
+**把待確認的事，放在第一眼。**
 
-[![Platform](https://img.shields.io/badge/Platform-Android-brightgreen.svg)](https://developer.android.com)
-[![Language](https://img.shields.io/badge/Language-Kotlin-purple.svg)](https://kotlinlang.org/)
-[![Min SDK](https://img.shields.io/badge/Min%20SDK-26-orange.svg)](https://developer.android.com/about/versions/oreo)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+原生 iOS 與 Android 提醒工具。確認後進入下一週期；尚未確認時，依你設定的強度與間隔再次提醒。資料先留在本機，同步由你選擇。
 
-![Home](docs/screenshots/home.png)
+原始碼 **2.9.0 / 71** · 開發分支，尚未發佈。公開下載版本以 Releases 為準。
 
-![Calendar](docs/screenshots/calendar.png)
+[**下載與版本記錄 ↗**](https://github.com/tsumon/reminder-app-android/releases/latest) · [另一平台](https://github.com/tsumon/reminder-app-ios)
 
-![Stats](docs/screenshots/stats.png)
+## 能做什麼
 
----
+| 能力 | iOS | Android |
+| :--- | :---: | :---: |
+| 週期、日期、農曆生日、節日、第 N 週規則 | ✓ | ✓ |
+| 固定週期 / 完成後重新計時 | ✓ | ✓ |
+| 輕柔 / 持續 / 重要、重試與每日勿擾 | ✓ | ✓ |
+| 確認、稍後、明天、略過、撤銷 | ✓ | ✓ |
+| 搜尋、類型組合篩選、時間 / 標題 / 優先級排序 | ✓ | ✓ |
+| 當日行程、週 / 月統計、小工具 | ✓ | ✓ |
+| 離線自然語言、語音、範本、可設定 AI 填表 | ✓ | ✓ |
+| JSON、ICS、附近分享、本機備份、WebDAV | ✓ | ✓ |
 
-## 🌐 多語言支援 / Multi-language Support
+## 三步開始
 
-本應用（Android 與 iOS 雙端）內建多語言支援，跟隨系統語言自動切換。
+1. 建立提醒，或用一句話、語音與範本填寫，再檢查完整規則。
+2. 選擇強度、週期起點、重試間隔與勿擾時段，預覽未來三次安排後儲存。
+3. 開啟首頁通知自檢，檢查權限與系統設定，安排測試提醒並鎖定螢幕驗證。
 
-**支援語言：**
-- 🇨🇳 簡體中文（zh-Hans）— 預設語言 / 回退語言 (default & fallback)
-- 🇺🇸 English (en)
-- 🇹🇼 繁體中文 (zh-Hant)
-- 🇯🇵 日本語 (ja)
-- 🇰🇷 한국어 (ko)
+## 實裝畫面
 
-**實作方式 / Implementation：**
-- **Android**：`res/values/strings.xml`（簡體中文基準）+ `values-en` / `values-zh-rTW` / `values-ja` / `values-ko` 資源限定符；執行時代碼統一透過 `zh()` / `zhf()`（`com.reminderapp.i18n`）查表，Service / Receiver 等非 Compose 場景亦可呼叫。
-- **iOS**：`Localizable.xcstrings` 多語言目錄，SwiftUI 透過 `String(localized:)` 取得多語言文案。
-- 雙端共用「中文原串即 key」方案，新增 / 修改文案只需維護中文源串與譯文表，降低重複命名成本。
+只展示真實執行畫面。範例提醒屬於獨立測試裝置，並非預設使用者資料。
 
-> 多語言文案已涵蓋全部使用者可見介面（約 330 條），翻譯缺失時自動回退為簡體中文原串。
-> All user-visible strings (~330) are localized; missing translations gracefully fall back to Simplified Chinese.
+<p align="center">
+  <img src="docs/screenshots/runtime-2.9/home.png" width="280" alt="Home — Android 2.9">
+  <img src="docs/screenshots/runtime-2.9/calendar.png" width="280" alt="Calendar — Android 2.9">
+</p>
+<p align="center">
+  <img src="docs/screenshots/runtime-2.9/stats.png" width="280" alt="Statistics — Android 2.9">
+  <img src="docs/screenshots/runtime-2.9/settings.png" width="280" alt="Settings — Android 2.9">
+</p>
 
----
+[Create form](docs/screenshots/runtime-2.9/create.png) · [Capture details](docs/screenshots/runtime-2.9/README.md)
 
-## ✨ 功能
+## 提醒策略
 
-### 1. 循環提醒
-- 支援「每隔 N 分鐘 / 小時 / 天 / 週 / 月 / 年」的週期提醒
-- **錨點法計算**：基於首次觸發時間，避免日期漂移（月末對齊、閏年正確）
-- **遞增重試**（對齊 iOS）：到點未確認 → 1h → 4h → 12h → 24h → 24h，達到上限標 `overdue` 停止轟炸，等使用者手動處理
-- 可暫停 / 恢復 / 刪除
+**固定週期**保留原定安排；假日前移後提前完成會消耗原定週期。**完成後重算**依實際確認時間重新計時。舊提醒保留原策略。
 
-### 2. 日期提醒
-- 一次性日期提醒：設定具體日期，當天準時通知
-- **提前預告**：提前 N 天每日 9:00 推送預告通知
-- 支援農曆生日、陽曆生日
-- 內建 13 個中國法定節假日
+**輕柔**只自動提醒一次；**持續**預設 60 → 240 → 720 → 1440 分鐘，最多 5 次（含首次），可逐項編輯；**重要**仍由系統權限決定。重試遵守勿擾。
 
-### 3. AI 語音助理 🤖
-- 自然語言建立提醒：「每天晚上 8 點提醒我遛狗」
-- 支援 3 種模式：
+依裝置日曆與既有錨點時間戳計算。切換時區不會改寫舊錨點，請檢查下次提醒。預覽假設準時確認，假日資料更新後可能調整。
 
-| 模式 | 說明 |
-|------|------|
-| **免費 API** | 註冊取得免費 Key，填入設定即可（含註冊指引） |
-| **自訂 API** | 使用自己的 OpenAI 相容 API |
+完成與略過依操作次數分開計數；漏掉依出現重試的日期計數，不代表系統已送達通知。
 
-- 語音輸入 (`SpeechRecognizer`)
-- Function Calling 自動解析建立 / 查詢 / 刪除 / 延後提醒
-- 內建 5 個 API 模板（OpenAI / DeepSeek / 千問 / 豆包 / 通用）
+## 同步與恢復
 
----
+WebDAV 使用你自己的伺服器。雙方修改時暫停並等待選擇；寫入前保留私有本機快照，以上傳 ETag 條件避免覆蓋新版本。協定 v4 依穩定 ID 合併歷史，以刪除標記防止舊提醒或已撤銷的記錄回流。
 
-## 🏗️ 技術堆疊
+完整歷史與刪除同步需要雙端升級。v1–v3 備份仍可讀，但舊客戶端會丟棄新資料；無穩定 ID 的古老檔案無法可靠辨識刪除。標記長期保留，恢復需複製為新 ID，請保留 v4 完整備份。單條分享卡片不攜帶全域刪除標記。
 
-| 類別 | 技術 |
-|------|------|
-| UI | Jetpack Compose + Material 3 |
-| 資料持久化 | Room Database |
-| 背景排程 | WorkManager |
-| 通知 | NotificationCompat + NotificationChannel |
-| 網路 | OkHttp 4 + Gson |
-| 語音 | Android SpeechRecognizer |
-| 架構 | MVVM + Repository |
+## 安裝與覆蓋升級
 
----
+Android 8.0+。以原正式管道 APK 直接覆蓋安裝，保留套件名稱與原憑證。不要解除安裝或清除資料。原始碼建置不等於已驗證的正式簽名套件。
 
-## 📁 專案結構
+## 通知的真實邊界
 
-```
-app/src/main/java/com/reminderapp/
-├── data/
-│   ├── entity/          # Room 實體 (ReminderEntity, ReminderRecordEntity)
-│   ├── dao/             # DAO 介面
-│   └── database/        # AppDatabase (含遷移)
-├── service/
-│   ├── ReminderEngine.kt        # 核心提醒引擎（週期 / 確認 / 遞增重試 / 遺漏檢查）
-│   ├── ReminderWorker.kt        # WorkManager 背景任務
-│   ├── ReminderScheduler.kt     # WorkManager 排程器
-│   ├── NotificationManager.kt   # 通知發送與頻道管理
-│   ├── LunarCalendar.kt        # 農曆轉換 (1900-2100)
-│   ├── HolidayService.kt       # 節假日服務
-│   ├── AIService.kt            # AI API 呼叫 + Function Calling
-│   ├── AITools.kt              # AI 工具定義
-│   ├── AISettings.kt           # AI 設定儲存
-│   ├── VoiceService.kt         # 語音辨識
-│   ├── BackupHelper.kt         # JSON 備份匯入匯出
-│   ├── WebDavSync.kt           # 堅果雲 / 通用 WebDAV 雙向同步
-│   ├── NearbyShareService.kt   # 區域網路 TCP 互傳（47823）
-│   └── QrCodeUtils.kt          # QR Code 生成與掃碼
-├── ui/
-│   ├── screen/                  # HomeScreen / CalendarScreen / StatsScreen / AIChatScreen / NearbyShareScreen / Settings / ...
-│   ├── theme/                   # 設計令牌（與 iOS 主題色一致）
-│   └── viewmodel/               # HomeViewModel / ReminderDetailViewModel / ...
-├── receiver/
-│   ├── NotificationActionReceiver.kt  # 通知確認 / 稍後按鈕處理
-│   └── BootReceiver.kt               # 開機重註冊 WorkManager 任務
-├── widget/                      # 桌面小工具
-├── MainActivity.kt
-└── ReminderApp.kt
+權限與排程數量表示設定狀態，不代表已送達。靜音、專注 / 勿擾、通知管道、電源政策與廠商背景限制都可能影響提醒。請在真機鎖屏、重新啟動與背景狀態測試。
+
+Android 使用 AlarmManager；已授權時精確排程，否則採用可能延遲的非精確方式。WorkManager 負責週報等延後背景工作。
+
+## 本機建置
+
+JDK 17 · Gradle 8.11.1 · AGP 8.10.1 · SDK 36 · minSdk 26
+
+```sh
+./gradlew testDebugUnitTest assembleDebug lintDebug assembleDebugAndroidTest
+./gradlew connectedDebugAndroidTest
 ```
 
----
+`applicationId / namespace`: `com.reminderapp`
 
-## 🚀 建構與執行
+Release: `KEYSTORE_PATH`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
 
-### 前置需求
+Certificate SHA-256: `0ea509a1dc9461c291a2db47caf5f055d83e4108fb28c3e87ed4fa62bead7038`
 
-- [Android Studio](https://developer.android.com/studio) Hedgehog (2023.1.1) 或更新版本
-- Android SDK 34
-- JDK 17
+## 隱私
 
-### 建構步驟
+提醒與歷史保存在本機。AI 對話與相關內容會傳送到你設定的模型服務；WebDAV、附近分享與匯出檔案包含提醒資料，請選擇可信端點並妥善保管備份。
 
-```bash
-# 1. 複製儲存庫
-git clone https://github.com/tsumon/reminder-app-android.git
-cd reminder-app-android
-
-# 2. 用 Android Studio 開啟專案
-#    會自動下載 Gradle 與依賴
-
-# 3. 建構 APK
-./gradlew assembleDebug          # Debug APK
-./gradlew assembleRelease        # Release APK（需要簽署設定）
-
-# 4. 安裝到裝置
-./gradlew installDebug
-```
-
-### 產生 Release APK
-
-在 `app/build.gradle.kts` 中設定簽署：
-
-```kotlin
-android {
-    signingConfigs {
-        create("release") {
-            storeFile = file("keystore.jks")
-            storePassword = "your_password"
-            keyAlias = "your_alias"
-            keyPassword = "your_password"
-        }
-    }
-    buildTypes {
-        release {
-            signingConfig = signingConfigs.getByName("release")
-        }
-    }
-}
-```
-
-接著：
-
-```bash
-./gradlew assembleRelease
-# APK 路徑: app/build/outputs/apk/release/app-release.apk
-```
-
----
-
-## 📱 系統需求
-
-- Android 8.0 (API 26) 及以上
-- 通知權限 (Android 13+ 需要手動授權)
-- 麥克風權限 (AI 語音功能)
-- 網路權限 (AI 功能)
-
----
-
-## 🔄 版本歷史
-
-| 版本 | 日期 | 更新內容 |
-|------|------|----------|
-| v2.7.1 | 2026-09 | soft-ui chrome：锤子立体软影、底栏铺物理底（DockH 48 / 选中圆 32）、设置行高 52 |
-| v2.7.0 | 2026-09 | soft-ui 纸面软影；首页今日卡+待处理环；统计 donut + 本月打卡热力 |
-| v2.6.0 | 2026-09 | 行内确认、日历当天任务、统计空完成率 0% |
-| v2.4.14 | 2026-08 | AI 一次只问一事；公历+农历生日合并显示 |
-| v2.4.10 | 2026-08 | 避开节假日/周末自动顺延到下一工作日 |
-| v2.4.0 | 2026-08 | 首页时间线 + 六色主题 |
-| v2.3.0 | 2026-08 | 品牌色改青碧 Teal |
-
-
-Earlier: [https://github.com/tsumon/reminder-app-android/releases](https://github.com/tsumon/reminder-app-android/releases).
+[**驗證與協定 →**](docs/upgrade-2.9.md) · [Validation](docs/validation-2.9.md)

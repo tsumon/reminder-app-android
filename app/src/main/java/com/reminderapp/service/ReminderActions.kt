@@ -53,6 +53,9 @@ class ReminderActions(private val context: Context, private val db: AppDatabase 
             if (!ReminderPolicy.canUndo(current, token.after, SyncStore.localVersion, token.localVersion)) return@withTransaction
             val prior = token.before.copy(revision=current.revision+1)
             db.reminderDao().update(prior)
+            db.reminderRecordDao().getAll().firstOrNull { it.id==token.recordId }?.let {
+                db.syncDeletionDao().insert(SyncDeletion("record",it.syncId.lowercase()))
+            }
             db.reminderRecordDao().deleteCompletion(token.recordId)
             restored = prior
         }
@@ -64,7 +67,7 @@ class ReminderActions(private val context: Context, private val db: AppDatabase 
         db.withTransaction {
             val current=db.reminderDao().getById(expected.id) ?: return@withTransaction
             if(ReminderPolicy.canUndo(current,expected,SyncStore.localVersion,expectedVersion)) {
-                db.reminderDao().softDelete(expected.id);deleted=true
+                db.reminderDao().softDelete(expected.id);current.syncId?.let { db.syncDeletionDao().insert(SyncDeletion("reminder",it.lowercase())) };deleted=true
             }
         }
         if(deleted) { SyncStore.touchLocalChange();refresh(expected.copy(isActive=false)) }
@@ -99,12 +102,13 @@ class ReminderActions(private val context: Context, private val db: AppDatabase 
         Created(saved,generation)
     }
 
-    suspend fun delete(expected: ReminderEntity,removeRecords: Boolean=false): Boolean = ReminderMutationGate.serialized {
+    suspend fun delete(expected: ReminderEntity,removeRecords: Boolean=true): Boolean = ReminderMutationGate.serialized {
         var deleted: ReminderEntity?=null
         db.withTransaction {
             val current=db.reminderDao().getById(expected.id) ?: return@withTransaction
             if(!ReminderPolicy.matches(current,expected)) return@withTransaction
             deleted=current.copy(isActive=false,revision=current.revision+1)
+            current.syncId?.let { db.syncDeletionDao().insert(SyncDeletion("reminder",it.lowercase())) }
             db.reminderDao().update(deleted!!)
             if(removeRecords) db.reminderRecordDao().deleteByReminderId(current.id)
         }
@@ -112,12 +116,14 @@ class ReminderActions(private val context: Context, private val db: AppDatabase 
         deleted!=null
     }
     data class Imported(val saved: List<ReminderEntity>,val skipped: Int)
-    suspend fun importItems(items: List<ReminderEntity>): Imported = ReminderMutationGate.serialized {
+    suspend fun importItems(items: List<ReminderEntity>, json: String? = null): Imported = ReminderMutationGate.serialized {
         val saved=mutableListOf<ReminderEntity>()
         var skipped=0
         db.withTransaction {
             val local=db.reminderDao().getAllIncludingInactive().toMutableList()
+            val deletedIds=(db.syncDeletionDao().all() + (json?.let { BackupService.deletions(it) } ?: emptyList())).filter { it.kind=="reminder" }.map { it.syncId.lowercase() }.toSet()
             items.forEach { remote ->
+                if(remote.syncId?.lowercase() in deletedIds) { skipped++;return@forEach }
                 val index=SyncMergePolicy.matchIndex(local,remote)
                 val old=local.getOrNull(index)
                 if(old!=null) {
@@ -131,10 +137,15 @@ class ReminderActions(private val context: Context, private val db: AppDatabase 
                     local.add(next);saved.add(next)
                 }
             }
+            if(json!=null) BackupService.mergeMetadata(json,db)
         }
-        if(saved.isNotEmpty()) {
+        if(saved.isNotEmpty() || json!=null) {
             SyncStore.touchLocalChange()
             saved.forEach { QuietHoursStore.set(context,it.id,it.quietStartMinute,it.quietEndMinute);refresh(it) }
+            if(json!=null) {
+                db.reminderDao().getAllIncludingInactive().filter { !it.isActive }.forEach { refresh(it) }
+                ReminderScheduler(context).rescheduleAll(db.reminderDao().getAllSync())
+            }
         }
         Imported(saved,skipped)
     }
@@ -172,7 +183,7 @@ class ReminderActions(private val context: Context, private val db: AppDatabase 
                 deferred=r.copy(nextTriggerAt=quiet,revision=r.revision+1)
                 db.reminderDao().update(deferred!!); return@withTransaction
             }
-            val next = ReminderEngine.escalate(r,now)
+            val next = ReminderEngine.escalate(r.copy(scheduledOccurrenceAt=r.scheduledOccurrenceAt ?: r.nextTriggerAt),now)
             db.reminderDao().update(next)
             deliveryRecordId=db.reminderRecordDao().insert(ReminderRecordEntity(reminderId=id, action="notified",timestamp=now))
             deliveryBefore=r

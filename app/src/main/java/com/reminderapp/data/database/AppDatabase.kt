@@ -12,11 +12,12 @@ import com.reminderapp.data.entity.ReminderEntity
 import com.reminderapp.data.entity.ReminderRecordEntity
 
 @Database(
-    entities = [ReminderEntity::class, ReminderRecordEntity::class],
-    version = 9,
+    entities = [ReminderEntity::class, ReminderRecordEntity::class, com.reminderapp.data.entity.SyncDeletion::class],
+    version = 10,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
+    abstract fun syncDeletionDao(): com.reminderapp.data.entity.SyncDeletionDao
     abstract fun reminderDao(): ReminderDao
     abstract fun reminderRecordDao(): ReminderRecordDao
 
@@ -104,6 +105,18 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE reminders ADD COLUMN scheduled_occurrence_at INTEGER")
+                db.execSQL("ALTER TABLE reminder_records ADD COLUMN sync_id TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE reminder_records ADD COLUMN note TEXT NOT NULL DEFAULT ''")
+                db.execSQL("UPDATE reminder_records SET sync_id = lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-8' || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))")
+                db.execSQL("CREATE TABLE IF NOT EXISTS sync_deletions (kind TEXT NOT NULL, syncId TEXT NOT NULL, PRIMARY KEY(kind,syncId))")
+                // Historical inactive rows were soft-deleted, never paused.
+                db.execSQL("INSERT OR IGNORE INTO sync_deletions SELECT 'reminder', lower(sync_id) FROM reminders WHERE is_active=0 AND sync_id IS NOT NULL")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -114,7 +127,7 @@ abstract class AppDatabase : RoomDatabase() {
                     // v1.9.6 fix: 原来靠 fallbackToDestructiveMigration 兜底，
                     // 老用户(v1.1/v1.2/v1.5)升级会整库 DROP 重建 → 全部提醒清空。
                     // 补 Migration 后 schema 不匹配时明确报错，绝不静默清库。
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                     .build()
                     .also { INSTANCE = it }
             }

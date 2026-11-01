@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="refresh_extra_0">Add reminder for this day</string>
+    <string name="refresh_extra_1">Completion history</string>
+    <string name="refresh_extra_2">Create with a sentence</string>
+    <string name="refresh_extra_3">Alert limit reached; waiting for your action</string>
+</resources>

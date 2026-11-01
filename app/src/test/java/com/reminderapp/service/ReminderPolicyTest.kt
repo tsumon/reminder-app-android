@@ -37,7 +37,7 @@ class ReminderPolicyTest {
         assertEquals(listOf(60,240,720,1440),ReminderPolicy.intervals(old))
         val r=daily().copy(recurrenceMode="afterCompletion",reminderStyle="important",retryIntervalsMinutes="5,15",maxReminderAttempts=3,quietStartMinute=1320,quietEndMinute=480,nextTriggerAt=12345,retryCount=2)
         val json=BackupService.exportToJson(listOf(r),0)
-        assertEquals(3,BackupService.schemaVersionOf(json)); val imported=BackupService.importFromJson(json)!!.single()
+        assertEquals(4,BackupService.schemaVersionOf(json)); val imported=BackupService.importFromJson(json)!!.single()
         assertEquals(r,imported)
     }
     @Test fun sharedV3FixtureRetainsSnoozeAndPolicy() {

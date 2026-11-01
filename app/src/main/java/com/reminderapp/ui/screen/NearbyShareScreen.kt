@@ -190,7 +190,7 @@ fun NearbyShareScreen(
                                 jsonProvider = {
                                     // 每次请求拉最新数据（DAO 是挂起函数，这里同步拉取）
                                     kotlinx.coroutines.runBlocking(Dispatchers.IO) {
-                                        BackupService.exportToJson(database.reminderDao().getAllSync())
+                                        BackupService.exportDatabase(database)
                                     }
                                 },
                                 onEvent = { msg, isErr ->
@@ -363,7 +363,7 @@ private fun receive(
             setResult(zh("数据解析失败"), true)
             return@launch
         }
-        val result=runCatching { com.reminderapp.service.ReminderActions(context,database).importItems(entities) }.getOrElse {
+        val result=runCatching { com.reminderapp.service.ReminderActions(context,database).importItems(entities,json) }.getOrElse {
             setResult(zh("数据解析失败"),true);return@launch
         }
         val imported=result.saved.size

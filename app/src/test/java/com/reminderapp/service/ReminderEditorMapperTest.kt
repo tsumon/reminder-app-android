@@ -9,6 +9,12 @@ class ReminderEditorMapperTest {
     private fun t(s:String)=LocalDateTime.parse(s).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
     private fun monthly()=ReminderEntity(id=42,title="Filter",cycle="monthly",firstTriggerAt=t("2026-01-31T09:00"),nextTriggerAt=t("2026-11-30T09:00"),status="pending",revision=4)
     private fun rename(r:ReminderEntity)=ReminderEditorMapper.map(r,r.copy(title="Renamed",firstTriggerAt=t("2026-11-01T11:00"),nextTriggerAt=t("2026-11-01T11:00"),status="idle",retryCount=0,lastConfirmedAt=null),false,t("2026-10-16T11:00"))
+    @Test fun nominalOccurrenceSurvivesMetadataButResetsWithAnIntentionalScheduleChange() {
+        val old=monthly().copy(scheduledOccurrenceAt=t("2026-11-30T09:00"))
+        assertEquals(old.scheduledOccurrenceAt,rename(old).scheduledOccurrenceAt)
+        val edited=ReminderEditorMapper.map(old,old.copy(firstTriggerAt=t("2026-12-01T09:00")),true,t("2026-11-01T09:00"))
+        assertNull(edited.scheduledOccurrenceAt)
+    }
     @Test fun monthlyTitleOnlyPreservesAnchorAndRuntime() { val old=monthly();assertEquals(old.copy(title="Renamed",revision=5),rename(old)) }
     @Test fun retryTitleOnlyPreservesRetryAndSnoozedOccurrence() { val old=monthly().copy(status="notifying",retryCount=3,nextTriggerAt=t("2026-10-16T11:00"));assertEquals(old.copy(title="Renamed",revision=5),rename(old)) }
     @Test fun completionRelativeEditKeepsActualCompletionAnchor() { val old=monthly().copy(recurrenceMode="afterCompletion",lastConfirmedAt=t("2026-10-15T14:00"));assertEquals(old.copy(title="Renamed",revision=5),rename(old)) }

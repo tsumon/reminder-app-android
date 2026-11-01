@@ -348,13 +348,13 @@ object ReminderEngine {
      */
     fun confirm(reminder: ReminderEntity, now: Long = System.currentTimeMillis()): ReminderEntity {
         if (reminder.kind == "cycle" && reminder.cycle == "once") return reminder.copy(
-            status = "confirmed", lastConfirmedAt = now, retryCount = 0, holidayAdjustNote = null, revision = reminder.revision + 1)
+            status = "confirmed", lastConfirmedAt = now, retryCount = 0, holidayAdjustNote = null, scheduledOccurrenceAt = null, revision = reminder.revision + 1)
         val completed = reminder.copy(lastConfirmedAt = now)
         val reference = if (reminder.kind == "cycle" && reminder.recurrenceMode == "fixed")
             primaryOccurrenceReference(reminder, now) else now
         val next = calculateNextTrigger(completed, reference)
         return completed.copy(status = "pending", nextTriggerAt = next, retryCount = 0,
-            holidayAdjustNote = null, revision = reminder.revision + 1)
+            holidayAdjustNote = null, scheduledOccurrenceAt = null, revision = reminder.revision + 1)
     }
 
     fun skip(reminder: ReminderEntity, now: Long = System.currentTimeMillis()): ReminderEntity? {
@@ -365,13 +365,18 @@ object ReminderEngine {
         val reference = if (relative) now else primaryOccurrenceReference(reminder, now)
         val next = calculateNextTrigger(schedule, reference)
         return reminder.copy(status = "pending", nextTriggerAt = next, retryCount = 0,
-            holidayAdjustNote = null, revision = reminder.revision + 1)
+            holidayAdjustNote = null, scheduledOccurrenceAt = null, revision = reminder.revision + 1)
     }
 
     /** Only an untriggered primary identifies a future occurrence; retry/snooze dates do not. */
-    private fun primaryOccurrenceReference(reminder: ReminderEntity, now: Long): Long =
-        if (reminder.status in setOf("pending", "idle") && reminder.retryCount == 0)
+    private fun primaryOccurrenceReference(reminder: ReminderEntity, now: Long): Long {
+        // A holiday-shifted occurrence still consumes its original calendar slot, including retries.
+        val nominal=reminder.scheduledOccurrenceAt ?: if(!reminder.holidayAdjustNote.isNullOrBlank())
+            calculateNextTrigger(reminder,reminder.nextTriggerAt-1) else null
+        if(nominal!=null) return maxOf(now,nominal)
+        return if (reminder.status in setOf("pending", "idle") && reminder.retryCount == 0)
             maxOf(now, reminder.nextTriggerAt) else now
+    }
 
     /**
      * 稍后提醒 → N 分钟后重推（v1.9.7 对齐 iOS：不动 retryCount，

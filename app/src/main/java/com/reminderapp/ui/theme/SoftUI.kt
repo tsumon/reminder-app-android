@@ -74,52 +74,9 @@ enum class SoftKind { Sm, Card, Elevated }
 
 private data class SoftDrop(val offsetY: Dp, val blur: Dp, val color: Color, val spread: Dp = 0.dp)
 
-private fun softDrops(kind: SoftKind, dark: Boolean): List<SoftDrop> {
-    val ink = Color(0xFF111111)
-    return if (dark) {
-        when (kind) {
-            SoftKind.Sm -> listOf(
-                SoftDrop(1.dp, 2.dp, Color.Black.copy(alpha = 0.40f)),
-                SoftDrop(0.dp, 0.dp, Color.White.copy(alpha = 0.05f), spread = 1.dp)
-            )
-            SoftKind.Card -> listOf(
-                SoftDrop(12.dp, 32.dp, Color.Black.copy(alpha = 0.50f)),
-                SoftDrop(4.dp, 8.dp, Color.Black.copy(alpha = 0.45f)),
-                SoftDrop(0.dp, 0.dp, Color.White.copy(alpha = 0.08f), spread = 1.dp)
-            )
-            SoftKind.Elevated -> listOf(
-                SoftDrop(16.dp, 40.dp, Color.Black.copy(alpha = 0.55f)),
-                SoftDrop(6.dp, 12.dp, Color.Black.copy(alpha = 0.50f)),
-                SoftDrop(0.dp, 0.dp, Color.White.copy(alpha = 0.10f), spread = 1.dp)
-            )
-        }
-    } else {
-        when (kind) {
-            SoftKind.Sm -> listOf(
-                SoftDrop(2.dp, 4.dp, ink.copy(alpha = 0.05f)),
-                SoftDrop(1.dp, 1.dp, ink.copy(alpha = 0.05f))
-            )
-            SoftKind.Card -> listOf(
-                SoftDrop(14.dp, 32.dp, ink.copy(alpha = 0.08f)),
-                SoftDrop(6.dp, 12.dp, ink.copy(alpha = 0.06f)),
-                SoftDrop(1.dp, 2.dp, ink.copy(alpha = 0.06f))
-            )
-            SoftKind.Elevated -> listOf(
-                SoftDrop(16.dp, 40.dp, ink.copy(alpha = 0.08f)),
-                SoftDrop(8.dp, 16.dp, ink.copy(alpha = 0.07f)),
-                SoftDrop(2.dp, 4.dp, ink.copy(alpha = 0.06f))
-            )
-        }
-    }
-}
-
-private fun insetAlpha(kind: SoftKind, dark: Boolean): Float = when {
-    kind == SoftKind.Sm -> 0f
-    dark && kind == SoftKind.Elevated -> 0.14f
-    dark -> 0.10f
-    kind == SoftKind.Elevated -> 0.95f
-    else -> 0.85f
-}
+private fun softDrops(kind: SoftKind, dark: Boolean): List<SoftDrop> = listOf(
+    SoftDrop(2.dp, 5.dp, Color.Black.copy(alpha=if(dark) 0.12f else 0.035f)))
+private fun insetAlpha(kind: SoftKind, dark: Boolean): Float = 0f
 
 @Composable
 fun Modifier.softCard(
@@ -257,61 +214,9 @@ fun SoftCircleButton(
     val pressed by interaction.collectIsPressedAsState()
     Box(
         modifier = modifier
-            .size(size)
-            .drawBehind {
-                val r = size.toPx() / 2f
-                if (dark) {
-                    drawCircle(Color.White.copy(alpha = 0.10f), radius = r + 1.dp.toPx())
-                    val paint = Paint()
-                    val fp = paint.asFrameworkPaint()
-                    fp.isAntiAlias = true
-                    fp.color = android.graphics.Color.TRANSPARENT
-                    fp.setShadowLayer(20.dp.toPx(), 0f, 8.dp.toPx(), Color.Black.copy(alpha = 0.50f).toArgb())
-                    drawIntoCanvas { it.drawCircle(center, r, paint) }
-                } else {
-                    val ink = Color(0xFF111111)
-                    listOf(
-                        Triple(16.dp.toPx(), 6.dp.toPx(), ink.copy(alpha = 0.10f)),
-                        Triple(2.dp.toPx(), 1.dp.toPx(), ink.copy(alpha = 0.06f))
-                    ).forEach { (blur, y, color) ->
-                        val paint = Paint()
-                        val fp = paint.asFrameworkPaint()
-                        fp.isAntiAlias = true
-                        fp.color = android.graphics.Color.TRANSPARENT
-                        fp.setShadowLayer(blur, 0f, y, color.toArgb())
-                        drawIntoCanvas { it.drawCircle(center, r, paint) }
-                    }
-                }
-            }
+            .size(if(size<48.dp) 48.dp else size)
             .clip(CircleShape)
-            .background(fill)
-            .drawWithContent {
-                drawContent()
-                drawCircle(
-                    brush = Brush.verticalGradient(
-                        if (dark) listOf(
-                            Color.White.copy(alpha = 0.16f),
-                            Color.White.copy(alpha = 0.06f),
-                            Color.Transparent
-                        )
-                        else listOf(
-                            Color.White.copy(alpha = 0.95f),
-                            Color.White.copy(alpha = 0.50f),
-                            Color.Transparent
-                        )
-                    )
-                )
-                if (pressed) {
-                    drawCircle(
-                        brush = Brush.verticalGradient(
-                            listOf(
-                                Color.Transparent,
-                                Color(0xFF111111).copy(alpha = if (dark) 0.35f else 0.08f)
-                            )
-                        )
-                    )
-                }
-            }
+            .background(if(pressed) fill.copy(alpha=0.75f) else fill)
             .clickable(
                 interactionSource = interaction,
                 indication = null,
@@ -544,7 +449,7 @@ fun CheckInHeatmap(counts: Map<String, Int>, weeks: Int = 16, modifier: Modifier
     val rowLabels = listOf("一", "", "三", "", "五", "", "日")
     Column(modifier = modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(zh("本月打卡"), fontSize = Tokens.SectionSize, lineHeight = Tokens.SectionLine, fontWeight = FontWeight.SemiBold, color = softText())
+            Text(zh("完成记录"), fontSize = Tokens.SectionSize, lineHeight = Tokens.SectionLine, fontWeight = FontWeight.SemiBold, color = softText())
             Spacer(Modifier.weight(1f))
             Text("${weeks} 周", fontSize = 11.sp, color = softMuted())
         }

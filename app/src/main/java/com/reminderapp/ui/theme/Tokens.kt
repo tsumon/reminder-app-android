@@ -13,17 +13,17 @@ import androidx.compose.ui.unit.sp
  * `--strong` = 六色皮肤，默认青碧。皮肤压过 Material You。
  */
 object Tokens {
-    var BrandPrimary = Color(0xFF159A9C)
-    var BrandPrimaryDark = Color(0xFF0E6E70)
-    var BrandPrimaryContainer = Color(0xFFB2EBE4)
-    var BrandGradientStart = Color(0xFF4DB6AC)
+    var BrandPrimary = Color(0xFF087F7A)
+    var BrandPrimaryDark = Color(0xFF08635F)
+    var BrandPrimaryContainer = Color(0xFFDDEEE8)
+    var BrandGradientStart = Color(0xFF53B9AD)
 
     data class Palette(
         val primary: Color, val dark: Color, val gradient: Color, val container: Color
     )
 
     val Palettes = listOf(
-        Palette(Color(0xFF159A9C), Color(0xFF0E6E70), Color(0xFF4DB6AC), Color(0xFFB2EBE4)),
+        Palette(Color(0xFF087F7A), Color(0xFF08635F), Color(0xFF53B9AD), Color(0xFFDDEEE8)),
         Palette(Color(0xFF3B82F6), Color(0xFF1E5BC4), Color(0xFF7FB5FF), Color(0xFFC9E0FF)),
         Palette(Color(0xFFE0457B), Color(0xFFB02E5C), Color(0xFFF58FB0), Color(0xFFFCD3E1)),
         Palette(Color(0xFFF07B2F), Color(0xFFC05A16), Color(0xFFF7B27D), Color(0xFFFDE3CC)),
@@ -31,24 +31,24 @@ object Tokens {
         Palette(Color(0xFF6C5CE7), Color(0xFF4A3FB8), Color(0xFFA69CF5), Color(0xFFE1DDFC))
     )
 
-    val StatusReminding = Color(0xFFE74C3C)
-    val StatusWaiting = Color(0xFF3498DB)
-    val StatusCompleted = Color(0xFF27AE60)
-    val StatusOverdue = Color(0xFFC0392B)
-    val StatusSnoozed = Color(0xFFF39C12)
+    var StatusReminding = Color(0xFFE74C3C)
+    var StatusWaiting = Color(0xFF3498DB)
+    var StatusCompleted = Color(0xFF27AE60)
+    var StatusOverdue = Color(0xFFC0392B)
+    var StatusSnoozed = Color(0xFFF39C12)
 
     val HolidayRest = Color(0xFFD32F2F)
     val HolidayWork = Color(0xFFEF6C00)
 
-    val OnStrong = Color.White
+    var OnStrong = Color.White
 
     val RadiusShallow = 12.dp
     val RadiusCard = 16.dp
     val RadiusElevated = 18.dp
     val RadiusChip = 16.dp
-    val BtnCircle = 44.dp
+    val BtnCircle = 48.dp
     val BtnInner = 6.dp
-    val ChipH = 32.dp
+    val ChipH = 48.dp
     val RowBadge = 44.dp
     val Gutter = 16.dp
     val CardPad = 14.dp
@@ -73,7 +73,7 @@ object Tokens {
     val SpaceL = 16.dp
     val SpaceXL = 24.dp
 
-    val DockH = 48.dp
+    val DockH = 56.dp
     val DockSelected = 32.dp
     val DockPadTop = 3.dp
     val DockPadBottom = 4.dp
@@ -89,14 +89,14 @@ object Tokens {
     val SettingsThemeDot = 28.dp
 
     object Light {
-        val Canvas = Color(0xFFF5F5F3)
-        val Surface = Color(0xFFFBFBFA)
+        val Canvas = Color(0xFFF6F7F2)
+        val Surface = Color(0xFFFFFFFF)
         val Elevated = Color(0xFFFFFFFF)
-        val Text = Color(0xFF1A1A1C)
-        val Muted = Color(0xFF5E5E66)
-        val Track = Color(0x141A1A1C)
-        val Warn = Color(0xFFC47A12)
-        val Ok = Color(0xFF1F8A4C)
+        val Text = Color(0xFF142D30)
+        val Muted = Color(0xFF596D70)
+        val Track = Color(0x14142D30)
+        val Warn = Color(0xFF9A5D08)
+        val Ok = Color(0xFF237A49)
         val Danger = Color(0xFFC0392B)
         val Heat = listOf(
             Color(0xFFE8E4DC), Color(0xFFC8EBD4), Color(0xFF86D4A4),
@@ -105,11 +105,11 @@ object Tokens {
     }
 
     object Dark {
-        val Canvas = Color(0xFF12121A)
-        val Surface = Color(0xFF1C1C26)
-        val Elevated = Color(0xFF2A2A36)
+        val Canvas = Color(0xFF101D20)
+        val Surface = Color(0xFF192A2D)
+        val Elevated = Color(0xFF22373B)
         val Text = Color(0xFFEDEDF0)
-        val Muted = Color(0xFF8E8E9A)
+        val Muted = Color(0xFFA7BABD)
         val Track = Color(0x14FFFFFF)
         val Warn = Color(0xFFF39C12)
         val Ok = Color(0xFF27AE60)
@@ -122,9 +122,9 @@ object Tokens {
 
     // 旧热力名保留，避免其它调用点崩；统计页用 Heat()
     val Heatmap0 = Color(0x1F9E9E9E)
-    val Heatmap1 = Color(0x40159A9C)
-    val Heatmap2 = Color(0x8C159A9C)
-    val Heatmap3 = Color(0xFF159A9C)
+    val Heatmap1 = Color(0x40087F7A)
+    val Heatmap2 = Color(0x8C087F7A)
+    val Heatmap3 = Color(0xFF087F7A)
 }
 
 @Composable

@@ -1,234 +1,94 @@
-[🇨🇳 简体中文](README.md) · [🇺🇸 English](README.en.md) · [🇹🇼 繁體中文](README.zh-TW.md) · [🇯🇵 日本語](README.ja.md) · [🇰🇷 한국어](README.ko.md)
+[简体中文](README.md) · [English](README.en.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
----
+<img src="assets/readme/hero.svg" width="100%" alt="Reminder — a calmer rhythm">
 
-# Recurring Reminder — Android
+# Reminder
 
-A full-featured native Android reminder app supporting recurring reminders, date reminders, lunar birthdays, holiday reminders, and an **AI voice assistant**.
+**Keep what needs a confirmation in view.**
 
-[![Platform](https://img.shields.io/badge/Platform-Android-brightgreen.svg)](https://developer.android.com)
-[![Language](https://img.shields.io/badge/Language-Kotlin-purple.svg)](https://kotlinlang.org/)
-[![Min SDK](https://img.shields.io/badge/Min%20SDK-26-orange.svg)](https://developer.android.com/about/versions/oreo)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+Native reminders for iOS and Android. Confirm to move to the next cycle; use your chosen retry style and intervals while a task remains unconfirmed. Local data first, optional sync.
 
-| Home | Calendar | Stats | Settings |
-|:---:|:---:|:---:|:---:|
-| ![Home](docs/screenshots/home.png) | ![Calendar](docs/screenshots/calendar.png) | ![Stats](docs/screenshots/stats.png) | ![Settings](docs/screenshots/settings.png) |
+Source **2.9.0 / 71** · development branch, not released. See Releases for public downloads.
 
-## Current UI (v2.7.1)
+[**Downloads & releases ↗**](https://github.com/tsumon/reminder-app-android/releases/latest) · [Other platform](https://github.com/tsumon/reminder-app-ios)
 
-Hammer-paper soft-shadow: light paper canvas / dark elevated surfaces. Cards have no stroke; actions are soft round buttons. Dock fills to the physical bottom (48dp). Four bottom tabs. Settings rows 52dp. AI lives in Settings, not as its own tab. Android has a 44dp FAB sitting on the dock.
+## What it does
 
-- **Home** (title 「提醒事项」): inset search; chips 全部 / 今天 / 本周; today card + soft ring for pending count; groups 提醒中 / 等待中. Due rows confirm in-line (no large confirm dialog). Retry subtitle 「还没确认 · HH:MM 再响」. 44 emoji wells; light-blue wash cycle badges.
-- **Calendar**: month as one elevated card; today as a vertical capsule + 🦊; solar + lunar + 班/休; selecting a date lists that day's tasks. No weekly progress bar.
-- **Stats**: three tiles (this-month done / streak / completion rate) + thick-stroke soft donut (rate / confirmed / missed) + monthly check-in heatmap + check-in castle + most-forgotten hours. Weekly garden is a caption line on the heatmap card.
-- **Settings**: skins, etc.
+| Capability | iOS | Android |
+| :--- | :---: | :---: |
+| Cycles, dates, lunar birthdays, holidays, nth-week rules | ✓ | ✓ |
+| Fixed schedule / restart from completion | ✓ | ✓ |
+| Gentle / persistent / important, retries and quiet hours | ✓ | ✓ |
+| Complete, snooze, tomorrow, skip and undo | ✓ | ✓ |
+| Search, combined type filters, due / title / priority sorting | ✓ | ✓ |
+| Day agenda, week / month statistics, widgets | ✓ | ✓ |
+| Offline natural language, voice, templates, configurable AI | ✓ | ✓ |
+| JSON, ICS, nearby transfer, local backups, WebDAV | ✓ | ✓ |
 
-```mermaid
-flowchart TB
-  app[Recurring Reminder]
-  app --> home[Home]
-  app --> cal[Calendar]
-  app --> stats[Stats]
-  app --> set[Settings]
+## Start in three steps
+
+1. Create a reminder manually or fill the editable form with a sentence, voice or a template. Review the complete rule.
+2. Choose the style, recurrence anchor, retry intervals and quiet hours. Review the next three occurrences before saving.
+3. Open the notification check on Home, inspect permissions and system settings, then schedule a test and lock your device.
+
+## Running app
+
+Only actual runtime captures are shown. Example reminders belong to an isolated test device, not default user data.
+
+<p align="center">
+  <img src="docs/screenshots/runtime-2.9/home.png" width="280" alt="Home — Android 2.9">
+  <img src="docs/screenshots/runtime-2.9/calendar.png" width="280" alt="Calendar — Android 2.9">
+</p>
+<p align="center">
+  <img src="docs/screenshots/runtime-2.9/stats.png" width="280" alt="Statistics — Android 2.9">
+  <img src="docs/screenshots/runtime-2.9/settings.png" width="280" alt="Settings — Android 2.9">
+</p>
+
+[Create form](docs/screenshots/runtime-2.9/create.png) · [Capture details](docs/screenshots/runtime-2.9/README.md)
+
+## How reminders repeat
+
+**Fixed** preserves the original schedule after a late completion; an early completion of a holiday-shifted reminder consumes its original slot. **After completion** starts a new interval from your confirmation. Existing reminders keep their policy.
+
+**Gentle** sends one automatic alert. **Persistent** defaults to 60 → 240 → 720 → 1440 minutes, up to 5 alerts including the first, with individually editable intervals. **Important** uses only capabilities granted by the OS. Retries respect quiet hours.
+
+Calculations use the device calendar and stored anchor timestamps. A time-zone change does not rewrite existing anchors: review the next alert. Previews assume on-time confirmation and may change with holiday data.
+
+Completed and skipped count actions separately. Missed counts dates with retries; it does not prove notification delivery.
+
+## Sync & recovery
+
+Use your own WebDAV server. Conflicting edits pause for an explicit choice. Private local snapshots are saved first, and uploads retain ETag preconditions. Schema v4 merges history by stable ID and keeps deletion markers for reminders and undone records.
+
+Upgrade both devices for full history and deletion sync. v1–v3 backups remain readable, but older clients discard the new metadata. Ancient files without stable IDs cannot reliably identify deletions. Markers do not expire; restore a deleted reminder under a new ID and keep complete v4 backups. Single-item share cards do not carry global deletions.
+
+## Install & upgrade in place
+
+Android 8.0+. Install an APK from the original release channel over the existing app, retaining its package and signing certificate. Do not uninstall or clear data. A source build is not a verified release-signed artifact.
+
+## What delivery status means
+
+Permissions and scheduled counts describe configuration, not confirmed delivery. Silent mode, Focus / Do Not Disturb, notification channels, power policies and vendor background restrictions can affect alerts. Test on a locked physical device, after reboot and in the background.
+
+Android uses AlarmManager: exact alarms when allowed, otherwise an inexact fallback that may be delayed. WorkManager handles deferred jobs such as weekly reports.
+
+## Build locally
+
+JDK 17 · Gradle 8.11.1 · AGP 8.10.1 · SDK 36 · minSdk 26
+
+```sh
+./gradlew testDebugUnitTest assembleDebug lintDebug assembleDebugAndroidTest
+./gradlew connectedDebugAndroidTest
 ```
 
-```mermaid
-flowchart LR
-  waiting[Waiting] --> due[Due]
-  due -->|Confirm| next[Next cycle]
-  due -->|Unconfirmed| retry[Escalating retry]
-  retry -->|Confirm| next
-  retry -->|Cap| overdue[Overdue]
-  overdue -->|Manual confirm| next
-```
+`applicationId / namespace`: `com.reminderapp`
 
-Retry engine remains 1h → 4h → 12h → 24h → overdue (then stops auto-ringing). Notification actions are Confirm and Later.
+Release: `KEYSTORE_PATH`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
 
----
+Certificate SHA-256: `0ea509a1dc9461c291a2db47caf5f055d83e4108fb28c3e87ed4fa62bead7038`
 
-## 🌐 Multi-language Support
+## Privacy
 
-This app (Android & iOS) has built-in multi-language support that follows the system language automatically.
+Reminders and history stay on-device. AI sends conversations and relevant content to your configured model service. WebDAV, nearby sharing and exported files contain reminder data. Choose trusted endpoints and protect your backups.
 
-**Supported languages:**
-- 🇨🇳 Simplified Chinese (zh-Hans) — default & fallback
-- 🇺🇸 English (en)
-- 🇹🇼 Traditional Chinese (zh-Hant)
-- 🇯🇵 Japanese (ja)
-- 🇰🇷 Korean (ko)
-
-**Implementation:**
-- **Android**: `res/values/strings.xml` (zh-Hans base) + `values-en` / `values-zh-rTW` / `values-ja` / `values-ko` resource qualifiers; runtime code resolves strings through `zh()` / `zhf()` (`com.reminderapp.i18n`), which also works in non-Compose contexts such as `Service` / `Receiver`.
-- **iOS**: `Localizable.xcstrings` localization catalog; SwiftUI retrieves strings via `String(localized:)`.
-- Both platforms share the "Chinese source string as key" approach — adding or modifying a string only requires maintaining the Chinese source and the translation table, lowering duplication cost.
-
-> All user-visible strings (~330) are localized; missing translations gracefully fall back to Simplified Chinese.
-
----
-
-## ✨ Features
-
-### 1. Recurring Reminders
-- Supports "every N minutes / hours / days / weeks / months / years" periodic reminders
-- **Anchor-based calculation**: based on the first trigger time, avoiding date drift (month-end alignment, correct leap years)
-- **Escalating retry** (aligned with iOS): if not acknowledged at due time → 1h → 4h → 12h → 24h → 24h; once the cap is reached it is marked `overdue` and stops nagging, waiting for manual handling
-- Can be paused / resumed / deleted
-
-### 2. Date Reminders
-- One-time date reminders: set a specific date and get notified on time that day
-- **Early preview**: pushes a preview notification daily at 9:00 AM, N days in advance
-- Supports lunar birthdays and solar birthdays
-- 13 built-in Chinese statutory holidays
-
-### 3. AI Voice Assistant 🤖
-- Create reminders in natural language: "Remind me to walk the dog every evening at 8"
-- Supports 3 modes:
-
-| Mode | Description |
-|------|------|
-| **Free API** | Register to get a free key, then fill it into Settings (registration guide included) |
-| **Custom API** | Use your own OpenAI-compatible API |
-
-- Voice input (`SpeechRecognizer`)
-- Function Calling automatically parses create / query / delete / postpone reminders
-- 5 built-in API templates (OpenAI / DeepSeek / Qwen / Doubao / Generic)
-
----
-
-## 🏗️ Tech Stack
-
-| Category | Technology |
-|----------|------------|
-| UI | Jetpack Compose + Material 3 |
-| Persistence | Room Database |
-| Background scheduling | WorkManager |
-| Notifications | NotificationCompat + NotificationChannel |
-| Networking | OkHttp 4 + Gson |
-| Voice | Android SpeechRecognizer |
-| Architecture | MVVM + Repository |
-
----
-
-## 📁 Project Structure
-
-```
-app/src/main/java/com/reminderapp/
-├── data/
-│   ├── entity/          # Room entities (ReminderEntity, ReminderRecordEntity)
-│   ├── dao/             # DAO interfaces
-│   └── database/        # AppDatabase (with migrations)
-├── service/
-│   ├── ReminderEngine.kt        # Core reminder engine (cycle / confirm / escalating retry / missed check)
-│   ├── ReminderWorker.kt        # WorkManager background task
-│   ├── ReminderScheduler.kt     # WorkManager scheduler
-│   ├── NotificationManager.kt   # Notification sending & channel management
-│   ├── LunarCalendar.kt        # Lunar calendar conversion (1900-2100)
-│   ├── HolidayService.kt       # Holiday service
-│   ├── AIService.kt            # AI API calls + Function Calling
-│   ├── AITools.kt              # AI tool definitions
-│   ├── AISettings.kt           # AI config storage
-│   ├── VoiceService.kt         # Speech recognition
-│   ├── BackupHelper.kt         # JSON backup import / export
-│   ├── WebDavSync.kt           # Nutstore / generic WebDAV two-way sync
-│   ├── NearbyShareService.kt   # LAN TCP transfer (port 47823)
-│   └── QrCodeUtils.kt          # QR code generation & scanning
-├── ui/
-│   ├── screen/                  # HomeScreen / CalendarScreen / StatsScreen / AIChatScreen / NearbyShareScreen / Settings / ...
-│   ├── theme/                   # Design tokens (matching iOS theme colors)
-│   └── viewmodel/               # HomeViewModel / ReminderDetailViewModel / ...
-├── receiver/
-│   ├── NotificationActionReceiver.kt  # Notification confirm / later button handling
-│   └── BootReceiver.kt               # Re-register WorkManager tasks on boot
-├── widget/                      # Home screen widget
-├── MainActivity.kt
-└── ReminderApp.kt
-```
-
----
-
-## 🚀 Build & Run
-
-### Prerequisites
-
-- [Android Studio](https://developer.android.com/studio) Hedgehog (2023.1.1) or newer
-- Android SDK 34
-- JDK 17
-
-### Build Steps
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/tsumon/reminder-app-android.git
-cd reminder-app-android
-
-# 2. Open the project in Android Studio
-#    Gradle and dependencies will be downloaded automatically
-
-# 3. Build the APK
-./gradlew assembleDebug          # Debug APK
-./gradlew assembleRelease        # Release APK (requires signing config)
-
-# 4. Install to device
-./gradlew installDebug
-```
-
-### Generate a Release APK
-
-Configure signing in `app/build.gradle.kts`:
-
-```kotlin
-android {
-    signingConfigs {
-        create("release") {
-            storeFile = file("keystore.jks")
-            storePassword = "your_password"
-            keyAlias = "your_alias"
-            keyPassword = "your_password"
-        }
-    }
-    buildTypes {
-        release {
-            signingConfig = signingConfigs.getByName("release")
-        }
-    }
-}
-```
-
-Then:
-
-```bash
-./gradlew assembleRelease
-# APK path: app/build/outputs/apk/release/app-release.apk
-```
-
----
-
-## 📱 System Requirements
-
-- Android 8.0 (API 26) and above
-- Notification permission (manual grant required on Android 13+)
-- Microphone permission (AI voice feature)
-- Network permission (AI feature)
-
----
-
-## 🔄 Changelog
-
-| Version | Date | Changes |
-|---------|------|---------|
-| v2.7.2 | 2026-09 | AI dock 修复；模型列表/测连通；模板；分享 ICS；小组件确认 |
-| v2.7.1 | 2026-09 | soft-ui chrome: hammer 3D soft-shadow, dock fill to physical bottom (DockH 48 / selected 32), settings row 52 |
-| v2.7.0 | 2026-09 | soft-ui paper elevation; today card + pending ring; stats donut + monthly heatmap |
-| v2.6.0 | 2026-09 | In-row confirm, calendar day tasks, empty completion rate shows 0% |
-| v2.4.14 | 2026-08 | AI asks one question at a time; solar+lunar birthday rows merged |
-| v2.4.10 | 2026-08 | Skip weekends/holidays to next workday |
-| v2.4.0 | 2026-08 | Home timeline + 6-color themes |
-| v2.3.0 | 2026-08 | Brand color → teal |
-
-
-Earlier releases: [https://github.com/tsumon/reminder-app-android/releases](https://github.com/tsumon/reminder-app-android/releases).
-
-## 📄 License
-
-MIT
+[**Validation & protocol →**](docs/upgrade-2.9.md) · [Validation](docs/validation-2.9.md)

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="refresh_000">再通知間隔を追加</string>
+    <string name="refresh_001">この間隔を削除</string>
+    <string name="refresh_002">削除</string>
+    <string name="refresh_003">再通知 %1$d · %2$d 分</string>
+    <string name="refresh_004">再通知 %1$s（分）</string>
+    <string name="refresh_005">初回を含め最大 %1$s 回</string>
+    <string name="refresh_006">通知が許可されています</string>
+    <string name="refresh_007">通知設定を確認</string>
+    <string name="refresh_008">%1$d 件を予約済み · 診断を開く</string>
+    <string name="refresh_009">許可や予約は配信の確認ではありません</string>
+    <string name="refresh_010">通知が遅れる可能性があります</string>
+    <string name="refresh_011">通知と正確なアラームが許可済み</string>
+    <string name="refresh_012">チャンネル・権限・テスト通知を確認。許可は配信の確認ではありません</string>
+    <string name="refresh_013">すべての種類</string>
+    <string name="refresh_014">並び順</string>
+    <string name="refresh_015">期限順</string>
+    <string name="refresh_016">確認を記録に残す</string>
+    <string name="refresh_017">完了・スキップ・未確認を分けて表示</string>
+    <string name="refresh_018">スキップ</string>
+    <string name="refresh_019">未確認</string>
+    <string name="refresh_020">完了した日数</string>
+    <string name="refresh_021">未確認は再通知のあった日数、完了とスキップは操作回数です。</string>
+    <string name="refresh_022">通知プレビュー</string>
+    <string name="refresh_023">周期 %1$d</string>
+    <string name="refresh_024">周期 %1$s · %2$s</string>
+    <string name="refresh_025">再通知 %1$d · %2$s</string>
+    <string name="refresh_026">再通知はおやすみ時間に合わせて延期されます</string>
+    <string name="refresh_027">端末の暦で計算します。時区変更では保存時刻を書き換えません。次の通知を確認してください。プレビューは定刻の確認を想定し、休日データで変わる場合があります。</string>
+    <string name="refresh_028">元の予定 %1$s</string>
+    <string name="refresh_029">元の予定 %1$s</string>
+    <string name="refresh_030">次の通知 %1$s</string>
+    <string name="refresh_031">次の通知 %1$s</string>
+    <string name="refresh_032">両端に変更があるため同期を停止しました。選択前にローカル保存します。削除同期には両端の更新が必要です。</string>
+    <string name="refresh_033">競合時は選択を待ちます。非公開のローカル履歴を保持し、削除同期には両端の更新が必要です。</string>
+    <string name="refresh_034">今週</string>
+    <string name="refresh_035">今月</string>
+    <string name="refresh_036">すべて</string>
+</resources>

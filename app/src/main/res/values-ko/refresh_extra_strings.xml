@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="refresh_extra_0">이 날짜에 알림 추가</string>
+    <string name="refresh_extra_1">완료 기록</string>
+    <string name="refresh_extra_2">한 문장으로 알림 만들기</string>
+    <string name="refresh_extra_3">알림 한도에 도달했습니다. 직접 처리하세요</string>
+</resources>

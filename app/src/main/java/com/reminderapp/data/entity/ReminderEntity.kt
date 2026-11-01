@@ -73,6 +73,8 @@ data class ReminderEntity(
     @ColumnInfo(name = "quiet_end_minute") val quietEndMinute: Int? = null,
     @ColumnInfo(name = "revision", defaultValue = "0") val revision: Long = 0,
 
+    @ColumnInfo(name = "scheduled_occurrence_at") val scheduledOccurrenceAt: Long? = null,
+
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "is_active") val isActive: Boolean = true
 )

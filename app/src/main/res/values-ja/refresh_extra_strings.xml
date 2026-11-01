@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="refresh_extra_0">この日に通知を追加</string>
+    <string name="refresh_extra_1">完了履歴</string>
+    <string name="refresh_extra_2">ひとことで通知を作成</string>
+    <string name="refresh_extra_3">通知上限に達しました。操作を待っています</string>
+</resources>

@@ -329,7 +329,7 @@ private fun DayCell(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height((56 * androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceAtMost(2f)).dp)
             .clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -338,13 +338,12 @@ private fun DayCell(
             Column(
                 modifier = Modifier
                     .width(32.dp)
-                    .height(48.dp)
+                    .height((48 * androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceAtMost(2f)).dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(Tokens.BrandPrimary),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Text("🦊", fontSize = 11.sp)
                 Text(
                     "$day",
                     fontSize = 14.sp,
