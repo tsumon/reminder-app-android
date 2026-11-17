@@ -62,9 +62,11 @@ fun ReminderDetailScreen(
     // 原实现 reminder == null 直接 return，页面既无标题栏也无返回按钮
     if (reminder == null) {
         Scaffold(
+            containerColor = softCanvas(),
             topBar = {
                 TopAppBar(
                     title = { Text(zh("提醒详情")) },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(Icons.Default.ArrowBack, contentDescription = zh("返回"))
@@ -166,9 +168,11 @@ fun ReminderDetailScreen(
     }
 
     Scaffold(
+        containerColor = softCanvas(),
         topBar = {
             TopAppBar(
                 title = { Text(zh("提醒详情")) },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = zh("返回"))
@@ -205,11 +209,13 @@ fun ReminderDetailScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Row {
-                TextButton(onClick={onEdit(currentReminder)}) { Text(zh("编辑提醒")) }
-                if(!(currentReminder.kind=="cycle" && currentReminder.cycle=="once") && currentReminder.status!="confirmed") TextButton(onClick={viewModel.skip()}) { Text(zh("跳过本次")) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(onClick = { onEdit(currentReminder) }) { Text(zh("编辑提醒")) }
+                if (!(currentReminder.kind == "cycle" && currentReminder.cycle == "once") && currentReminder.status != "confirmed") {
+                    OutlinedButton(onClick = { viewModel.skip() }) { Text(zh("跳过本次")) }
+                }
                 val undo by viewModel.undo.collectAsState()
-                if(undo!=null) TextButton(onClick={viewModel.undoCompletion()}) { Text(zh("撤销完成")) }
+                if (undo != null) OutlinedButton(onClick = { viewModel.undoCompletion() }) { Text(zh("撤销完成")) }
             }
             // 状态大卡片（v1.9.8 设计图风格：状态色渐变 + 大图标 + 阴影，入场动画）
             AnimatedVisibility(

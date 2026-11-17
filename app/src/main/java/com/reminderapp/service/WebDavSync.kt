@@ -85,6 +85,15 @@ object WebDavSync {
             if(raw<=0) return SyncResult.Error(zh("远程文件解析失败：缺少 exportedAt（文件可能已损坏），未覆盖本地数据"))
             val remoteTimestamp=if(raw<1_000_000_000_000L) raw*1000 else raw
             val remoteGeneration=BackupService.dataVersionOf(remoteJson)
+            val localFp=BackupService.contentFingerprint(captured.items,captured.records,captured.deletions)
+            val remoteFp=BackupService.contentFingerprintOfJson(remoteJson)
+            if(resolution==null && !captured.pendingUpload && remoteFp!=null && localFp==remoteFp) {
+                if(!coordinator.acceptEqualRemote(captured,remoteGeneration,remoteTimestamp)) {
+                    return SyncResult.Error(zh("本地数据已变更，请重试"))
+                }
+                pendingConflict.value=null
+                return SyncResult.Success()
+            }
             val decision=ReminderSyncCoordinator.decide(captured,remoteGeneration,remoteTimestamp,BackupService.remindersCountOf(remoteJson)>0)
             if(resolution!=null && (resolution.conflict.localVersion!=localVer || resolution.conflict.remoteJson!=remoteJson))
                 return SyncResult.Error(zh("数据已有新变更，请重新同步后选择"))

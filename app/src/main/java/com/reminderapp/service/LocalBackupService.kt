@@ -1,6 +1,7 @@
 package com.reminderapp.service
 
 import com.reminderapp.data.database.AppDatabase
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.os.Build
@@ -20,10 +21,10 @@ object LocalBackupService {
     private const val MAX_KEEP = 5
     private const val PREFIX = "reminder_backup_"
 
-    /** 启动时调用：当日同名文件已存在则跳过 */
+    /** 启动时调用：当日备份文件已存在则跳过 */
     fun backupOnLaunch(context: Context) {
-        val name = "$PREFIX${SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())}.json"
-        if (hasBackupNamed(context, name)) return
+        val prefix = "$PREFIX${SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())}"
+        if (hasBackupWithPrefix(context, prefix)) return
         backupNow(context)
     }
 
@@ -75,6 +76,27 @@ object LocalBackupService {
         }
     }
 
+    private fun hasBackupWithPrefix(context: Context, prefix: String): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val projection = arrayOf(MediaStore.MediaColumns.DISPLAY_NAME)
+                context.contentResolver.query(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    projection,
+                    "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?",
+                    arrayOf("$prefix%"),
+                    null
+                )?.use { return it.count > 0 }
+                false
+            } else {
+                val dir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS) ?: return false
+                dir.listFiles()?.any { it.isFile && it.name.startsWith(prefix) } == true
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     private fun hasBackupNamed(context: Context, name: String): Boolean {
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -94,6 +116,64 @@ object LocalBackupService {
             }
         } catch (e: Exception) {
             false
+        }
+    }
+
+    data class BackupEntry(
+        val name: String,
+        val sizeBytes: Long,
+        val readJson: () -> String?
+    )
+
+    /** 列出下载目录或应用文档目录中的本地备份（按时间倒序） */
+    fun listBackups(context: Context): List<BackupEntry> {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val projection = arrayOf(
+                    MediaStore.MediaColumns._ID,
+                    MediaStore.MediaColumns.DISPLAY_NAME,
+                    MediaStore.MediaColumns.SIZE
+                )
+                val uri = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                val results = mutableListOf<BackupEntry>()
+                context.contentResolver.query(
+                    uri,
+                    projection,
+                    "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?",
+                    arrayOf("$PREFIX%"),
+                    "${MediaStore.MediaColumns.DATE_ADDED} DESC"
+                )?.use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val id = cursor.getLong(0)
+                        val name = cursor.getString(1) ?: continue
+                        val size = cursor.getLong(2)
+                        val itemUri = ContentUris.withAppendedId(uri, id)
+                        results.add(
+                            BackupEntry(name = name, sizeBytes = size) {
+                                try {
+                                    context.contentResolver.openInputStream(itemUri)?.bufferedReader()?.use { it.readText() }
+                                } catch (_: Exception) {
+                                    null
+                                }
+                            }
+                        )
+                    }
+                }
+                results
+            } else {
+                val dir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS) ?: return emptyList()
+                dir.listFiles()
+                    ?.filter { it.isFile && it.name.startsWith(PREFIX) && it.name.endsWith(".json") }
+                    ?.sortedByDescending { it.lastModified() }
+                    ?.map { file ->
+                        BackupEntry(name = file.name, sizeBytes = file.length()) {
+                            try { file.readText() } catch (_: Exception) { null }
+                        }
+                    }
+                    ?: emptyList()
+            }
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 

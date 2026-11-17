@@ -8,11 +8,20 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Cake
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.EventRepeat
+import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -42,6 +52,13 @@ import com.reminderapp.service.LunarCalendar
 import com.reminderapp.service.NaturalDateParser
 import com.reminderapp.service.ReminderEngine
 import com.reminderapp.ui.theme.Playful
+import com.reminderapp.ui.theme.Tokens
+import com.reminderapp.ui.theme.isSoftDark
+import com.reminderapp.ui.theme.softBorder
+import com.reminderapp.ui.theme.softCanvas
+import com.reminderapp.ui.theme.softMuted
+import com.reminderapp.ui.theme.softSurface
+import com.reminderapp.ui.theme.softText
 import java.util.*
 import com.reminderapp.i18n.zh
 import com.reminderapp.i18n.zhf
@@ -62,7 +79,8 @@ import android.provider.Settings
 fun CreateReminderScreen(
     onSave: (ReminderEntity) -> Unit,
     onBack: () -> Unit,
-    initial: ReminderEntity? = null
+    initial: ReminderEntity? = null,
+    onSaveAll: ((List<ReminderEntity>) -> Unit)? = null
 ) {
     val scrollState = rememberScrollState()
     var saving by remember { mutableStateOf(false) }
@@ -80,9 +98,27 @@ fun CreateReminderScreen(
     var weeklyWeekday by remember { mutableStateOf(seeded?.weeklyWeekday ?: 0) }
     var weeklyWeekdayExpanded by remember { mutableStateOf(false) }
     var customDays by remember { mutableIntStateOf(seeded?.customDays?.coerceAtLeast(1) ?: 1) }
+    var customDaysText by remember(initial?.id) { mutableStateOf(customDays.toString()) }
+    LaunchedEffect(customDays) {
+        if (customDaysText.toIntOrNull() != customDays && customDaysText.isNotEmpty()) {
+            customDaysText = customDays.toString()
+        }
+    }
     var selectedDateType by remember { mutableStateOf<DateReminderType?>(DateReminderType.values().find { it.name.lowercase()==seeded?.dateType }) }
     var targetMonth by remember { mutableIntStateOf(seeded?.targetMonth ?: 1) }
+    var targetMonthText by remember(initial?.id) { mutableStateOf(targetMonth.toString()) }
+    LaunchedEffect(targetMonth) {
+        if (targetMonthText.toIntOrNull() != targetMonth && targetMonthText.isNotEmpty()) {
+            targetMonthText = targetMonth.toString()
+        }
+    }
     var targetDay by remember { mutableIntStateOf(seeded?.targetDay ?: 1) }
+    var targetDayText by remember(initial?.id) { mutableStateOf(targetDay.toString()) }
+    LaunchedEffect(targetDay) {
+        if (targetDayText.toIntOrNull() != targetDay && targetDayText.isNotEmpty()) {
+            targetDayText = targetDay.toString()
+        }
+    }
     var selectedHolidayName by remember { mutableStateOf<String?>(seeded?.holidayName) }
     var advanceDays by remember { mutableIntStateOf(seeded?.advanceDays ?: 3) }
     // 规则提醒字段
@@ -219,9 +255,11 @@ fun CreateReminderScreen(
     }
 
     Scaffold(
+        containerColor = softCanvas(),
         topBar = {
             TopAppBar(
-                title = { Text(zh("新建提醒")) },
+                title = { Text(zh(if (initial != null && initial.id > 0L) "编辑提醒" else "新建提醒")) },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = zh("返回"))
@@ -308,44 +346,58 @@ fun CreateReminderScreen(
                                 )
                             }
 
-                            // v2.4.9: 新历+旧历并存 → 保存时拆两条（先主后农历补充）
-                            if (nlDualBirthday && entity.kind == "date" && entity.dateType == "solar_birthday") {
-                                val lm = Regex("""(?:农历|旧历|阴历)\s*(\d{1,2})\s*月\s*(\d{1,2})""").find(nlText)
-                                if (lm != null) {
-                                    val lmM = lm.groupValues[1].toInt().coerceIn(1, 12)
-                                    val lmD = lm.groupValues[2].toInt().coerceIn(1, 30)
-                                    val lunarCal = java.util.Calendar.getInstance()
-                                    lunarCal.set(java.util.Calendar.HOUR_OF_DAY, triggerHour)
-                                    lunarCal.set(java.util.Calendar.MINUTE, triggerMinute)
-                                    lunarCal.set(java.util.Calendar.SECOND, 0)
-                                    lunarCal.set(java.util.Calendar.MILLISECOND, 0)
-                                    val solar = com.reminderapp.service.LunarCalendar.lunarToSolar(
-                                        lunarCal.get(java.util.Calendar.YEAR), lmM, lmD
-                                    ) ?: lunarCal.timeInMillis
-                                    lunarCal.timeInMillis = solar
-                                    if (lunarCal.timeInMillis <= System.currentTimeMillis()) {
-                                        lunarCal.add(java.util.Calendar.YEAR, 1)
-                                    }
-                                    nlExtraLunar = entity.copy(
-                                        title = entity.title + "（农历）",
-                                        dateType = "lunar_birthday",
-                                        targetMonth = lmM,
-                                        targetDay = lmD,
-                                        firstTriggerAt = lunarCal.timeInMillis,
-                                        nextTriggerAt = lunarCal.timeInMillis
-                                    )
-                                }
+                            val baseTitle = title.trim()
+                            val cleanTitle = baseTitle.removeSuffix("（公历）").removeSuffix("(公历)").trim().ifBlank { baseTitle }
+                            val lunarPair = if (nlDualBirthday) parseLunarMonthDayFromText(nlText) else null
+                            val isDualSave = nlDualBirthday && entity.kind == "date" && entity.dateType == "solar_birthday" && lunarPair != null && (initial == null || initial.id <= 0L)
+                            val primaryBase = if (isDualSave && !baseTitle.endsWith("（公历）")) "$cleanTitle（公历）" else baseTitle
+                            val proposed = entity.copy(
+                                title = primaryBase,
+                                reminderHour = triggerHour,
+                                reminderMinute = triggerMinute,
+                                recurrenceMode = policy.recurrenceMode,
+                                reminderStyle = policy.reminderStyle,
+                                isCritical = policy.reminderStyle == "important",
+                                retryIntervalsMinutes = policy.retryIntervalsMinutes,
+                                maxReminderAttempts = policy.maxReminderAttempts,
+                                quietStartMinute = policy.quietStartMinute,
+                                quietEndMinute = policy.quietEndMinute
+                            )
+                            val mappedPrimary = com.reminderapp.service.ReminderEditorMapper.map(
+                                initial,
+                                proposed,
+                                scheduleValues() != originalSchedule,
+                                System.currentTimeMillis()
+                            ) { reminder, from ->
+                                com.reminderapp.service.ReminderEngine.calculateNextTrigger(reminder, context, from)
+                            }
+                            if (isDualSave && lunarPair != null) {
+                                val (lmM, lmD) = lunarPair
+                                val lunarDraft = proposed.copy(
+                                    id = 0L,
+                                    syncId = null,
+                                    title = "$cleanTitle（农历）",
+                                    dateType = "lunar_birthday",
+                                    targetMonth = lmM,
+                                    targetDay = lmD
+                                )
+                                val lunarTrigger = com.reminderapp.service.ReminderEngine.calculateNextTrigger(lunarDraft, context)
+                                nlExtraLunar = lunarDraft.copy(
+                                    firstTriggerAt = lunarTrigger,
+                                    nextTriggerAt = lunarTrigger
+                                )
+                            } else {
+                                nlExtraLunar = null
                             }
                             saving = true
-                            val proposed=entity.copy(reminderHour=triggerHour,reminderMinute=triggerMinute,
-                                recurrenceMode=policy.recurrenceMode,reminderStyle=policy.reminderStyle,
-                                isCritical=policy.reminderStyle=="important",retryIntervalsMinutes=policy.retryIntervalsMinutes,
-                                maxReminderAttempts=policy.maxReminderAttempts,quietStartMinute=policy.quietStartMinute,quietEndMinute=policy.quietEndMinute)
-                            onSave(com.reminderapp.service.ReminderEditorMapper.map(initial,proposed,
-                                scheduleValues()!=originalSchedule,System.currentTimeMillis()) { reminder, from ->
-                                com.reminderapp.service.ReminderEngine.calculateNextTrigger(reminder,context,from)
-                            })
-                            nlExtraLunar?.let { extra -> onSave(extra); nlExtraLunar = null }
+                            val extra = nlExtraLunar
+                            nlExtraLunar = null
+                            if (extra != null && onSaveAll != null) {
+                                onSaveAll(listOf(mappedPrimary, extra))
+                            } else {
+                                onSave(mappedPrimary)
+                                if (extra != null) onSave(extra)
+                            }
                         },
                         enabled = title.isNotBlank() && !saving && policyValid
                     ) {
@@ -500,10 +552,10 @@ fun CreateReminderScreen(
                                     // v2.4.9: 对齐 AI——事务类自动开启「避开节假日/周末」
                                     holidayAware = p.holidayAware
                                     // v2.4.9: 对齐 AI——新历+旧历并存时提示将拆两条创建
-                                    val hasSolar = Regex("""(\d{1,2})\s*月\s*(\d{1,2})\s*[号日]""").containsMatchIn(nlText)
-                                    val hasLunar = Regex("""(?:农历|旧历|阴历)\s*(\d{1,2})\s*月\s*(\d{1,2})""").containsMatchIn(nlText)
-                                    nlDualBirthday = hasSolar && hasLunar
-                                    nlHint = "「${p.title}」· $cycleText · ${p.label}" + if (nlDualBirthday) " · " + zh("检测到新旧历两个生日，将创建两条") else "" + if (p.holidayAware) " · " + zh("已开启避开节假日/周末") else ""
+                                    val hasSolar = Regex("""(\d{1,2}|[正冬腊一二三四五六七八九十]{1,3})\s*月\s*(\d{1,2}|[初十廿卅一二三四五六七八九]{1,3})\s*[号日]""").containsMatchIn(nlText)
+                                    val hasLunar = parseLunarMonthDayFromText(nlText) != null
+                                    nlDualBirthday = hasSolar && hasLunar && (initial == null || initial.id <= 0L)
+                                    nlHint = "「${p.title}」· $cycleText · ${p.label}" + (if (nlDualBirthday) " · " + zh("检测到新旧历两个生日，将创建两条") else "") + (if (p.holidayAware) " · " + zh("已开启避开节假日/周末") else "")
                                 }
                             },
                             enabled = nlText.isNotBlank()
@@ -638,21 +690,21 @@ fun CreateReminderScreen(
                 // v2.5.0 治愈游戏化：emoji 卡片网格（选中=彩虹描边+紫渐变底+spring 放大）
                 Text(zh("周期"), style = MaterialTheme.typography.labelLarge)
                 val cycleOptions = listOf(
-                    Cycle.ONCE to "1️⃣",
-                    Cycle.DAILY to "☀️",
-                    Cycle.WEEKLY to "📆",
-                    Cycle.BIWEEKLY to "🌗",
-                    Cycle.MONTHLY to "🌙",
-                    Cycle.QUARTERLY to "🧭",
-                    Cycle.YEARLY to "🎂",
-                    Cycle.CUSTOM to "🪄"
+                    Cycle.ONCE to Icons.Default.Alarm,
+                    Cycle.DAILY to Icons.Default.WbSunny,
+                    Cycle.WEEKLY to Icons.Default.DateRange,
+                    Cycle.BIWEEKLY to Icons.Default.EventRepeat,
+                    Cycle.MONTHLY to Icons.Default.CalendarMonth,
+                    Cycle.QUARTERLY to Icons.Default.Explore,
+                    Cycle.YEARLY to Icons.Default.Cake,
+                    Cycle.CUSTOM to Icons.Default.Tune
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     cycleOptions.chunked(4).forEach { rowOptions ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            rowOptions.forEach { (option, emoji) ->
+                            rowOptions.forEach { (option, icon) ->
                                 CycleOptionCard(
-                                    emoji = emoji,
+                                    icon = icon,
                                     label = if (option == Cycle.CUSTOM) zh("自定义") else option.label,
                                     isSelected = selectedCycle == option,
                                     onClick = { selectedCycle = option },
@@ -731,9 +783,12 @@ fun CreateReminderScreen(
                 }
                 if (selectedCycle == Cycle.CUSTOM) {
                     OutlinedTextField(
-                        value = customDays.toString(),
-                        // C2: 用户直接输 0 时 toIntOrNull()=0 非 null，会被原写法放行 → 周期锚点退回过去；兜底为 1
-                        onValueChange = { customDays = maxOf(1, it.toIntOrNull() ?: 1) },
+                        value = customDaysText,
+                        onValueChange = { input ->
+                            val filtered = input.filter(Char::isDigit).take(4)
+                            customDaysText = filtered
+                            filtered.toIntOrNull()?.let { customDays = maxOf(1, it) }
+                        },
                         label = { Text(zh("自定义天数")) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
@@ -804,15 +859,23 @@ fun CreateReminderScreen(
                         Text(zh("农历月日"), style = MaterialTheme.typography.labelLarge)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(
-                                value = targetMonth.toString(),
-                                onValueChange = { targetMonth = it.toIntOrNull()?.coerceIn(1, 12) ?: 1 },
+                                value = targetMonthText,
+                                onValueChange = { input ->
+                                    val filtered = input.filter(Char::isDigit).take(2)
+                                    targetMonthText = filtered
+                                    filtered.toIntOrNull()?.let { targetMonth = it.coerceIn(1, 12) }
+                                },
                                 label = { Text(zh("月")) },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
                             OutlinedTextField(
-                                value = targetDay.toString(),
-                                onValueChange = { targetDay = it.toIntOrNull()?.coerceIn(1, 30) ?: 1 },
+                                value = targetDayText,
+                                onValueChange = { input ->
+                                    val filtered = input.filter(Char::isDigit).take(2)
+                                    targetDayText = filtered
+                                    filtered.toIntOrNull()?.let { targetDay = it.coerceIn(1, 30) }
+                                },
                                 label = { Text(zh("日")) },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
@@ -835,15 +898,23 @@ fun CreateReminderScreen(
                         Text(zh("月日"), style = MaterialTheme.typography.labelLarge)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(
-                                value = targetMonth.toString(),
-                                onValueChange = { targetMonth = it.toIntOrNull()?.coerceIn(1, 12) ?: 1 },
+                                value = targetMonthText,
+                                onValueChange = { input ->
+                                    val filtered = input.filter(Char::isDigit).take(2)
+                                    targetMonthText = filtered
+                                    filtered.toIntOrNull()?.let { targetMonth = it.coerceIn(1, 12) }
+                                },
                                 label = { Text(zh("月")) },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
                             OutlinedTextField(
-                                value = targetDay.toString(),
-                                onValueChange = { targetDay = it.toIntOrNull()?.coerceIn(1, 31) ?: 1 },
+                                value = targetDayText,
+                                onValueChange = { input ->
+                                    val filtered = input.filter(Char::isDigit).take(2)
+                                    targetDayText = filtered
+                                    filtered.toIntOrNull()?.let { targetDay = it.coerceIn(1, 31) }
+                                },
                                 label = { Text(zh("日")) },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
@@ -867,24 +938,26 @@ fun CreateReminderScreen(
 
             // 优先级
             Text(zh("优先级"), style = MaterialTheme.typography.labelLarge)
-            Row {
-                FilterChip(
-                    selected = priority == "high",
-                    onClick = { priority = "high" },
-                    label = { Text(zh("🔴 高")) },
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-                FilterChip(
-                    selected = priority == "normal",
-                    onClick = { priority = "normal" },
-                    label = { Text(zh("🟢 中")) },
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-                FilterChip(
-                    selected = priority == "low",
-                    onClick = { priority = "low" },
-                    label = { Text(zh("⚪ 低")) }
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    Triple("high", "高", Color(0xFFDC2626)),
+                    Triple("normal", "中", Tokens.BrandPrimary),
+                    Triple("low", "低", Color(0xFF9CA3AF))
+                ).forEach { (key, label, dotColor) ->
+                    FilterChip(
+                        selected = priority == key,
+                        onClick = { priority = key },
+                        leadingIcon = {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(dotColor)
+                            )
+                        },
+                        label = { Text(zh(label)) }
+                    )
+                }
             }
 
             // v2.4.8: 避开节假日/周末自动顺延（报税/缴费等工作日事务）
@@ -981,7 +1054,8 @@ fun CreateReminderScreen(
                     val gaps=com.reminderapp.service.ReminderPolicy.intervals(previewDraft)
                     for(index in 0 until minOf(3,previewDraft.maxReminderAttempts-1)) {
                         retryAt=com.reminderapp.service.ReminderPolicy.adjustQuiet(previewDraft,retryAt+gaps[minOf(index,gaps.lastIndex)]*60000L)
-                        Text(com.reminderapp.i18n.zhf("下次提醒 %s",java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM,java.text.DateFormat.SHORT).format(java.util.Date(retryAt))),style=MaterialTheme.typography.bodySmall)
+                        val formatted = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(retryAt))
+                        Text(formatted + com.reminderapp.i18n.zhf(" · 第%s次重试", index + 1), style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 Text(zh("按设备日历计算；更换时区不改写原始时间戳，请检查下次时间。预览假设按时确认，节假日数据更新后可能调整。"),style=MaterialTheme.typography.bodySmall)
@@ -1088,12 +1162,66 @@ fun CreateReminderScreen(
  * 仅展示层，选择仍写原 selectedCycle 状态。
  */
 @Composable
-private fun CycleOptionCard(emoji:String,label:String,isSelected:Boolean,onClick:()->Unit,modifier:Modifier=Modifier) {
-    Column(modifier.clip(RoundedCornerShape(14.dp)).background(if(isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
-        .clickable(onClick=onClick,onClickLabel=label).padding(vertical=12.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(5.dp)) {
-        Text(emoji,fontSize=20.sp)
-        Text(label,style=MaterialTheme.typography.labelMedium,color=if(isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,maxLines=2)
+private fun CycleOptionCard(icon: ImageVector, label: String, isSelected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (isSelected) Tokens.BrandPrimary.copy(alpha = if (isSoftDark()) 0.22f else 0.12f) else softSurface())
+            .border(
+                width = 1.dp,
+                color = if (isSelected) Tokens.BrandPrimary else softBorder(),
+                shape = RoundedCornerShape(14.dp)
+            )
+            .clickable(onClick = onClick, onClickLabel = label)
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (isSelected) Tokens.BrandPrimary else softMuted(),
+            modifier = Modifier.size(20.dp)
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (isSelected) Tokens.BrandPrimary else softText(),
+            maxLines = 2
+        )
     }
+}
+
+private fun parseLunarMonthDayFromText(text: String): Pair<Int, Int>? {
+    val m = Regex("""(?:农历|旧历|阴历)\s*(?:闰)?\s*([正冬腊一二三四五六七八九十\d]{1,3})\s*月\s*([初十廿卅一二三四五六七八九\d]{1,3})\s*[日号]?""").find(text)
+        ?: return null
+    val month = parseChineseNumeral(m.groupValues[1], isMonth = true)?.coerceIn(1, 12) ?: return null
+    val day = parseChineseNumeral(m.groupValues[2], isMonth = false)?.coerceIn(1, 30) ?: return null
+    return month to day
+}
+
+private fun parseChineseNumeral(raw: String, isMonth: Boolean): Int? {
+    val token = raw.trim()
+    token.toIntOrNull()?.let { return it }
+    if (isMonth) {
+        when (token) {
+            "正" -> return 1
+            "冬" -> return 11
+            "腊" -> return 12
+        }
+    }
+    val digits = mapOf('零' to 0, '一' to 1, '二' to 2, '三' to 3, '四' to 4, '五' to 5, '六' to 6, '七' to 7, '八' to 8, '九' to 9)
+    if (token == "十" || token == "初十") return 10
+    if (token == "二十") return 20
+    if (token == "三十" || token == "卅") return 30
+    if (token.startsWith("初") && token.length == 2) return digits[token[1]]
+    if (token.startsWith("廿")) {
+        if (token.length == 1) return 20
+        if (token.length == 2) return 20 + (digits[token[1]] ?: return null)
+    }
+    if (token.startsWith("十") && token.length == 2) return 10 + (digits[token[1]] ?: return null)
+    if (token.startsWith("二十") && token.length == 3) return 20 + (digits[token[2]] ?: return null)
+    return if (token.length == 1) digits[token[0]] else null
 }
 
 /**

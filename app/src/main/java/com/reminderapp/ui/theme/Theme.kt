@@ -41,13 +41,13 @@ fun ReminderAppTheme(
     }
 
     val palette = Tokens.Palettes.getOrElse(ThemeStore.colorIndex(context)) { Tokens.Palettes.first() }
-    Tokens.StatusReminding=if(effectiveDark) Color(0xFFFF8A80) else Color(0xFFBD4436)
-    Tokens.StatusWaiting=if(effectiveDark) Color(0xFF8DBEF0) else Color(0xFF25669A)
-    Tokens.StatusCompleted=if(effectiveDark) Color(0xFF66D99E) else Color(0xFF237A49)
-    Tokens.StatusOverdue=if(effectiveDark) Color(0xFFFF8A80) else Color(0xFFC0392B)
-    Tokens.StatusSnoozed=if(effectiveDark) Color(0xFFF9B649) else Color(0xFF9A5D08)
-    Tokens.BrandPrimary = if(effectiveDark) palette.gradient else palette.primary
-    Tokens.OnStrong = if(effectiveDark) Tokens.Dark.Canvas else Color.White
+    Tokens.StatusReminding = if (effectiveDark) Color(0xFFF87171) else Color(0xFFBD4436)
+    Tokens.StatusWaiting = if (effectiveDark) Color(0xFF7DD3FC) else Color(0xFF25669A)
+    Tokens.StatusCompleted = if (effectiveDark) Color(0xFF34D399) else Color(0xFF059669)
+    Tokens.StatusOverdue = if (effectiveDark) Color(0xFFF87171) else Color(0xFFDC2626)
+    Tokens.StatusSnoozed = if (effectiveDark) Color(0xFFF59E0B) else Color(0xFFD97706)
+    Tokens.BrandPrimary = if (effectiveDark) palette.gradient else palette.primary
+    Tokens.OnStrong = if (effectiveDark) Color(0xFF091917) else Color.White
     Tokens.BrandPrimaryDark = palette.dark
     Tokens.BrandPrimaryContainer = palette.container
     Tokens.BrandGradientStart = palette.gradient
@@ -56,7 +56,7 @@ fun ReminderAppTheme(
     val colorScheme = if (effectiveDark) {
         darkColorScheme(
             primary = palette.gradient,
-            onPrimary = Tokens.Dark.Canvas,
+            onPrimary = Color(0xFF091917),
             primaryContainer = palette.dark,
             onPrimaryContainer = Color.White,
             secondary = palette.primary,
@@ -68,7 +68,7 @@ fun ReminderAppTheme(
             onBackground = Tokens.Dark.Text,
             onSurface = Tokens.Dark.Text,
             onSurfaceVariant = Tokens.Dark.Muted,
-            outline = Tokens.Dark.Track,
+            outline = Tokens.Dark.Border,
             error = Tokens.Dark.Danger
         )
     } else {
@@ -86,7 +86,7 @@ fun ReminderAppTheme(
             onBackground = Tokens.Light.Text,
             onSurface = Tokens.Light.Text,
             onSurfaceVariant = Tokens.Light.Muted,
-            outline = Tokens.Light.Track,
+            outline = Tokens.Light.Border,
             error = Tokens.Light.Danger
         )
     }
@@ -96,6 +96,7 @@ fun ReminderAppTheme(
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = colorScheme.background.toArgb()
+            window.navigationBarColor = (if (effectiveDark) Tokens.Dark.Elevated else Tokens.Light.Elevated).toArgb()
             WindowCompat.getInsetsController(window, view).apply {
                 isAppearanceLightStatusBars = !effectiveDark
                 isAppearanceLightNavigationBars = !effectiveDark

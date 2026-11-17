@@ -1014,7 +1014,11 @@ private suspend fun handleStatsContext(database: AppDatabase): String {
         c.set(Calendar.HOUR_OF_DAY, 0); c.set(Calendar.MINUTE, 0); c.set(Calendar.SECOND, 0); c.set(Calendar.MILLISECOND, 0)
         c.timeInMillis
     }
-    val weekMissed = records.filter { it.action == com.reminderapp.data.entity.ReminderRecordEntity.ACTION_NOTIFIED && it.timestamp >= weekStart }
+    val weekMissed = records.filter {
+        it.action == com.reminderapp.data.entity.ReminderRecordEntity.ACTION_NOTIFIED &&
+            it.note != "primary" &&
+            it.timestamp >= weekStart
+    }
         .map { startOfDayLocal(it.timestamp) }.toSet().size
     val rate = if (weekConfirm + weekMissed > 0) {
         (weekConfirm.toDouble() / (weekConfirm + weekMissed) * 100).toInt()

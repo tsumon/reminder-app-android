@@ -44,6 +44,8 @@
     <string name="no_reminders">No reminders</string>
     <string name="empty_hint">Tap + at the bottom right to create one</string>
     <string name="widget_description">Shows pending count and upcoming reminders</string>
+    <string name="widget_unhandled_title">Pending</string>
+    <string name="widget_next_label">Up next</string>
 
     <!-- 自动生成：中文原串即 key，通过 i18n/L.kt 查表 -->
     <string name="s_0001">" · %s holiday"</string>

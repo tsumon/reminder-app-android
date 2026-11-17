@@ -3,6 +3,7 @@ package com.reminderapp.ui.theme
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -142,26 +143,7 @@ fun Modifier.softCard(
             }
         }
         .background(fill, shape)
-        .drawWithContent {
-            drawContent()
-            if (highlight > 0f) {
-                val topCr = radius.toPx()
-                val botCr = bottomRadius.toPx()
-                val clip = softRoundPath(
-                    width = size.width,
-                    height = size.height,
-                    topRadius = topCr,
-                    bottomRadius = botCr
-                )
-                clipPath(clip) {
-                    drawRect(
-                        color = Color.White.copy(alpha = highlight),
-                        topLeft = Offset(0f, 0f),
-                        size = Size(size.width, 1.dp.toPx())
-                    )
-                }
-            }
-        }
+        .border(1.dp, softBorder(), shape)
         .clip(shape)
 }
 
@@ -217,6 +199,7 @@ fun SoftCircleButton(
             .size(if(size<48.dp) 48.dp else size)
             .clip(CircleShape)
             .background(if(pressed) fill.copy(alpha=0.75f) else fill)
+            .border(1.dp, softBorder(), CircleShape)
             .clickable(
                 interactionSource = interaction,
                 indication = null,
@@ -235,17 +218,18 @@ fun SoftInsetSearch(
     placeholder: String = zh("搜索提醒、日期...")
 ) {
     val dark = isSoftDark()
-    val well = if (dark) Color.Black.copy(alpha = 0.35f) else Color(0xFFE8E8E4)
+    val well = softSurface()
+    val borderColor = softBorder()
     val muted = softMuted()
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(40.dp)
+            .height(44.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(well)
             .drawBehind {
                 drawRoundRect(
-                    color = Color.Black.copy(alpha = if (dark) 0.45f else 0.06f),
+                    color = borderColor,
                     cornerRadius = CornerRadius(14.dp.toPx()),
                     style = Stroke(1.dp.toPx())
                 )

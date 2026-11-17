@@ -326,10 +326,19 @@ private fun DayCell(
     onClick: () -> Unit
 ) {
     val holidayMark = holidayStatus?.let { if (it.isHoliday) zh("休") else zh("班") }
+    val densityScale = androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceAtMost(2f)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height((56 * androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceAtMost(2f)).dp)
+            .height((56 * densityScale).dp)
+            .clip(RoundedCornerShape(12.dp))
+            .then(
+                if (isSelected && !isToday) {
+                    Modifier
+                        .background(Tokens.BrandPrimary.copy(alpha = if (com.reminderapp.ui.theme.isSoftDark()) 0.18f else 0.10f))
+                        .border(1.dp, Tokens.BrandPrimary.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
+                } else Modifier
+            )
             .clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center

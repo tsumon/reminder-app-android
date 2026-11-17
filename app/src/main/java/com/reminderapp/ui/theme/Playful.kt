@@ -32,6 +32,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -102,30 +107,18 @@ object Playful {
  */
 @Composable
 fun Modifier.clayCard(radiusDp: Dp = 20.dp): Modifier {
-    val dark = isSystemInDarkTheme()
+    val dark = isSoftDark()
     val shape = RoundedCornerShape(radiusDp)
-    val withShadows = if (dark) {
-        shadow(3.dp, shape, spotColor = Color.Black.copy(alpha = 0.06f), ambientColor = Color.Black.copy(alpha = 0.06f))
-    } else {
-        shadow(8.dp, shape, spotColor = Playful.purple.copy(alpha = 0.10f), ambientColor = Playful.purple.copy(alpha = 0.10f))
-            .shadow(3.dp, shape, spotColor = Color.Black.copy(alpha = 0.06f), ambientColor = Color.Black.copy(alpha = 0.06f))
-    }
-    return withShadows
-        .then(
-            if (dark) Modifier.background(Color(0xFF2A2735), shape)
-            else Modifier.background(
-                Brush.linearGradient(listOf(Color.White, Playful.cream)),
-                shape
-            )
-        )
-        .border(
-            width = 1.5.dp,
-            brush = Brush.verticalGradient(
-                if (dark) listOf(Color.White.copy(alpha = 0.10f), Color.White.copy(alpha = 0.03f))
-                else listOf(Color.White.copy(alpha = 0.85f), Color.White.copy(alpha = 0.25f))
-            ),
-            shape = shape
-        )
+    val fill = softElevated()
+    val border = softBorder()
+    return shadow(
+        elevation = if (dark) 4.dp else 6.dp,
+        shape = shape,
+        spotColor = Color.Black.copy(alpha = if (dark) 0.25f else 0.05f),
+        ambientColor = Color.Black.copy(alpha = if (dark) 0.20f else 0.03f)
+    )
+        .background(fill, shape)
+        .border(width = 1.dp, color = border, shape = shape)
 }
 
 // MARK: - 桃粉薰衣草渐变背景 + 漂浮装饰
@@ -155,41 +148,12 @@ private val pastelDecors = listOf(
  */
 @Composable
 fun PastelBackground(modifier: Modifier = Modifier) {
-    val dark = isSystemInDarkTheme()
-    BoxWithConstraints(
+    val dark = isSoftDark()
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .background(
-                Brush.linearGradient(
-                    if (dark) listOf(Color(0xFF272333), Color(0xFF1C1A26))
-                    else listOf(Playful.peach, Playful.lavender)
-                )
-            )
-    ) {
-        val w = maxWidth
-        val h = maxHeight
-        pastelDecors.forEachIndexed { idx, d ->
-            val transition = rememberInfiniteTransition(label = "pastel$idx")
-            val dy by transition.animateFloat(
-                initialValue = 7f,
-                targetValue = -7f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(d.durationMs, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "float$idx"
-            )
-            val decorAlpha = if (dark) d.opacity * 0.45f else d.opacity
-            Text(
-                text = d.emoji,
-                fontSize = d.sizeSp.sp,
-                modifier = Modifier
-                    // 以 (x, y) 为中心漂浮（偏移半个字号居中）
-                    .offset(x = w * d.x - (d.sizeSp / 2).dp, y = h * d.y + dy.dp - (d.sizeSp / 2).dp)
-                    .alpha(decorAlpha)
-            )
-        }
-    }
+            .background(if (dark) Tokens.Dark.Canvas else Tokens.Light.Canvas)
+    )
 }
 
 // MARK: - 3D 吉祥物
@@ -285,76 +249,72 @@ object StreakCastle {
             verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             if (streakDays > 0) {
-                // 「🔥 第 N 天」coral→gold 渐变胶囊
                 Text(
-                    text = "🔥 第 $streakDays 天",
+                    text = com.reminderapp.i18n.zhf("第 %s 天", streakDays),
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = Tokens.OnStrong,
                     modifier = Modifier
-                        .shadow(2.dp, CircleShape, spotColor = Playful.coral.copy(alpha = 0.35f))
                         .clip(CircleShape)
-                        .background(
-                            Brush.horizontalGradient(listOf(Playful.coral, Playful.gold))
-                        )
-                        .border(1.dp, Color.White.copy(alpha = 0.7f), CircleShape)
-                        .padding(horizontal = 7.dp, vertical = 3.dp)
+                        .background(Tokens.BrandPrimary)
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
                 )
             } else {
-                Text("🌱", fontSize = if (compact) 14.sp else 18.sp)
+                Box(
+                    modifier = Modifier
+                        .size(if (compact) 16.dp else 20.dp)
+                        .clip(CircleShape)
+                        .background(Tokens.BrandPrimary.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(Modifier.size(6.dp).clip(CircleShape).background(Tokens.BrandPrimary))
+                }
             }
 
             // 城堡主体
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                if (floors >= 7) {
-                    Text("👑", fontSize = if (compact) 13.sp else 17.sp)
-                } else {
-                    Text("🚩", fontSize = if (compact) 11.sp else 13.sp)
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(if (compact) 10.dp else 12.dp)
+                        .clip(CircleShape)
+                        .background(if (floors >= 7) Tokens.StatusSnoozed else Tokens.BrandPrimary)
+                )
+                Spacer(Modifier.height(2.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     val visible = max(1, animatedFloors.roundToInt())
                     repeat(visible) { i ->
-                        val floor = visible - i // 顶层（floor=1）最窄
+                        val floor = visible - i
                         val isTop = floor == 1
                         val ratio = if (floors > 1) (floor - 1).toFloat() / (floors - 1) else 0f
-                        val tint = androidx.compose.ui.graphics.lerp(Playful.mint, Playful.gold, ratio.coerceIn(0f, 1f))
+                        val tint = Tokens.BrandPrimary.copy(alpha = 0.35f + 0.55f * (1f - ratio * 0.5f))
                         Box(
                             modifier = Modifier
                                 .width(towerWidth * (if (isTop) 0.72f else 1f))
                                 .height(floorHeight)
-                                .background(
-                                    Brush.verticalGradient(listOf(tint.copy(alpha = 0.95f), tint.copy(alpha = 0.7f))),
-                                    RoundedCornerShape(4.dp)
-                                ),
+                                .background(tint, RoundedCornerShape(4.dp)),
                             contentAlignment = Alignment.Center
                         ) {
-                            // 小圆窗
                             Box(
                                 modifier = Modifier
-                                    .padding(bottom = 1.dp)
-                                    .size(5.dp)
-                                    .background(Playful.ink.copy(alpha = 0.55f), CircleShape)
+                                    .size(4.dp)
+                                    .background(softCanvas().copy(alpha = 0.85f), CircleShape)
                             )
                         }
                     }
                 }
-                // 底座 + 城门
                 Box(
                     modifier = Modifier
-                        .width(towerWidth + 14.dp)
+                        .width(towerWidth + 12.dp)
                         .height(floorHeight + 4.dp)
-                        .background(
-                            Brush.horizontalGradient(listOf(Playful.gold, Playful.coral.copy(alpha = 0.85f))),
-                            RoundedCornerShape(6.dp)
-                        ),
+                        .background(Tokens.BrandPrimary.copy(alpha = 0.25f), RoundedCornerShape(6.dp)),
                     contentAlignment = Alignment.BottomCenter
                 ) {
                     Box(
                         modifier = Modifier
                             .padding(bottom = 1.dp)
-                            .width(12.dp)
+                            .width(11.dp)
                             .height(floorHeight - 1.dp)
-                            .background(Playful.ink, RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp, bottomStart = 0.dp, bottomEnd = 0.dp))
+                            .background(Tokens.BrandPrimary, RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
                     )
                 }
             }
@@ -381,17 +341,14 @@ private val confettiParticles: List<ConfettiParticle> = run {
         seed = seed * 6364136223846793005L + 1442695040888963407L
         return ((seed ushr 33) and 0xFFFFFF).toDouble() / 0xFFFFFF.toDouble()
     }
-    val palette = listOf(Playful.gold, Playful.coral, Playful.mint, Playful.purple, Color(0xFFFFD9E8))
-    // v2.5.1: 必须与 iOS 一致为 5 元素（末位 null=纯彩纸矩形）——原 4 元素配
-    // (rand()*4.99).toInt() 会在静态初始化越界（index=4），首页加载即闪退
-    val emojis: List<String?> = listOf("⭐️", "✨", "🎉", "💫", null)
-    (0 until 46).map { i ->
+    val palette = listOf(Color(0xFF0F766E), Color(0xFF2DD4BF), Color(0xFF059669), Color(0xFFF59E0B), Color(0xFF94A3B8))
+    (0 until 38).map {
         ConfettiParticle(
             angle = Math.PI / 2 + (rand() - 0.5) * Math.PI * 1.3,
             speed = (320 + rand() * 360).toFloat(),
             spin = (rand() - 0.5) * 12,
-            size = (6 + rand() * 8).toFloat(),
-            emoji = if (i % 3 == 0) emojis[(rand() * 4.99).toInt()] else null,
+            size = (6 + rand() * 7).toFloat(),
+            emoji = null,
             color = palette[(rand() * 4.99).toInt()],
             delay = rand() * 0.12
         )
@@ -472,35 +429,34 @@ fun OrbCheckButton(
     sizeDp: Dp = 34.dp
 ) {
     val scale by animateFloatAsState(
-        targetValue = if (done) 1.12f else 1f,
-        animationSpec = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium),
+        targetValue = if (done) 1.08f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium),
         label = "orbScale"
     )
+    val dark = isSoftDark()
+    val brand = Tokens.BrandPrimary
+    val doneFill = softOk()
+    val idleSurface = softSurface()
+    val idleBorder = softBorder()
     Box(
         modifier = modifier
             .size(sizeDp)
             .scale(scale)
-            .shadow(                if (done) 6.dp else 3.dp, CircleShape,
-                spotColor = if (done) Playful.gold.copy(alpha = 0.75f) else Playful.purple.copy(alpha = 0.12f),
-                ambientColor = if (done) Playful.gold.copy(alpha = 0.75f) else Playful.purple.copy(alpha = 0.12f)
+            .shadow(
+                elevation = if (done) 4.dp else 1.dp,
+                shape = CircleShape,
+                spotColor = if (done) doneFill.copy(alpha = 0.35f) else brand.copy(alpha = 0.12f),
+                ambientColor = if (done) doneFill.copy(alpha = 0.25f) else Color.Black.copy(alpha = 0.06f)
             )
             .clip(CircleShape)
             .background(
-                if (done) Brush.linearGradient(listOf(Playful.mint, Playful.gold))
-                else Brush.linearGradient(listOf(Color.White, Playful.cream.copy(alpha = 0.9f)))
+                if (done) doneFill else idleSurface
             )
-            .drawBehind {
-                if (!done) {
-                    drawCircle(
-                        color = Playful.purple.copy(alpha = 0.35f),
-                        radius = (size.minDimension - 3.dp.toPx()) / 2f,
-                        style = Stroke(
-                            width = 1.6.dp.toPx(),
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))
-                        )
-                    )
-                }
-            }
+            .border(
+                width = if (done) 1.dp else 1.5.dp,
+                color = if (done) doneFill else if (dark) brand.copy(alpha = 0.55f) else idleBorder,
+                shape = CircleShape
+            )
             .clickable(
                 onClick = onClick,
                 onClickLabel = if (done) "已完成" else "打卡"
@@ -509,16 +465,26 @@ fun OrbCheckButton(
         contentAlignment = Alignment.Center
     ) {
         if (done) {
-            Text("✓", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(18.dp)
+            )
         } else {
-            Text("✨", fontSize = 10.sp)
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(brand.copy(alpha = if (dark) 0.28f else 0.14f))
+            )
         }
     }
 }
 
-// MARK: - 本周彩虹跑道进度条
+// MARK: - 本周进度条
 
-/** 本周进度彩虹跑道：「本周进度 | N/7 🎯」，跑道头挂一颗星星 */
+/** 本周进度条：「本周进度 | N/7」，BrandPrimary 渐变 */
 @Composable
 fun WeeklyProgressTrack(
     done: Int,
@@ -537,27 +503,26 @@ fun WeeklyProgressTrack(
                 "本周进度",
                 style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                color = softMuted()
             )
             Spacer(modifier = Modifier.weight(1f))
             Text(
-                "$done/$total 🎯",
+                "$done/$total",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                color = Playful.purple
+                color = Tokens.BrandPrimary
             )
         }
-        BoxWithConstraints(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(14.dp)
+                .height(10.dp)
         ) {
-            val trackWidth = maxWidth
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(CircleShape)
-                    .background(Playful.purple.copy(alpha = 0.10f))
+                    .background(Tokens.BrandPrimary.copy(alpha = 0.12f))
             )
             Box(
                 modifier = Modifier
@@ -565,25 +530,9 @@ fun WeeklyProgressTrack(
                     .fillMaxWidth(maxOf(0.04f, progress))
                     .clip(CircleShape)
                     .background(
-                        Brush.horizontalGradient(listOf(Playful.mint, Playful.gold, Playful.coral))
+                        Brush.horizontalGradient(listOf(Tokens.BrandPrimary, Tokens.BrandGradientStart))
                     )
-                    .border(1.dp, Color.White.copy(alpha = 0.6f), CircleShape)
             )
-            if (targetProgress > 0.02f) {
-                Text(
-                    "⭐️",
-                    fontSize = 13.sp,
-                    style = androidx.compose.ui.text.TextStyle(
-                        shadow = Shadow(
-                            Playful.gold.copy(alpha = 0.6f),
-                            blurRadius = with(LocalDensity.current) { 4.dp.toPx() }
-                        )
-                    ),
-                    modifier = Modifier
-                        .offset(x = trackWidth * progress - 9.dp)
-                        .align(Alignment.CenterStart)
-                )
-            }
         }
     }
 }
@@ -779,79 +728,63 @@ fun weekDayConfirmCounts(records: List<ReminderRecordEntity>): IntArray {
 /** 空状态：小狐狸挥手「今天想做什么呀？」 */
 @Composable
 fun WavingEmptyMascot(onCreate: () -> Unit, modifier: Modifier = Modifier) {
-    val waveTransition = rememberInfiniteTransition(label = "wave")
-    val wave by waveTransition.animateFloat(
-        initialValue = -12f,
-        targetValue = 18f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "waveAngle"
-    )
-    val waveBounce by waveTransition.animateFloat(
-        initialValue = 4f,
-        targetValue = -4f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "waveY"
-    )
-    val floatTransition = rememberInfiniteTransition(label = "emptyFloat")
-    val floatUp by floatTransition.animateFloat(
-        initialValue = 3f,
-        targetValue = -3f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "emptyFloatY"
-    )
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 36.dp),
+            .padding(horizontal = 16.dp)
+            .softCard(SoftKind.Card, Tokens.RadiusElevated)
+            .padding(horizontal = 20.dp, vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Box(
-            modifier = Modifier.offset { IntOffset(0, floatUp.roundToInt()) }
+            modifier = Modifier
+                .size(68.dp)
+                .clip(CircleShape)
+                .background(Tokens.BrandPrimary.copy(alpha = if (isSoftDark()) 0.20f else 0.12f)),
+            contentAlignment = Alignment.Center
         ) {
-            MascotBadge(mood = MascotMood.SLEEPY, sizeDp = 92.dp)
-            Text(
-                "👋",
-                fontSize = 30.sp,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = 16.dp)
-                    .offset { IntOffset(0, waveBounce.roundToInt()) }
-                    .graphicsLayer { rotationZ = wave }
+            androidx.compose.material3.Icon(
+                imageVector = androidx.compose.material.icons.Icons.Filled.NotificationsActive,
+                contentDescription = null,
+                tint = Tokens.BrandPrimary,
+                modifier = Modifier.size(30.dp)
             )
         }
         Text(
-            "今天想做什么呀？",
+            com.reminderapp.i18n.zh("今天想做什么呀？"),
             style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            "创建你的第一个循环提醒，小狐狸帮你记住",
-            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            "✨ 创建提醒",
-            style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            color = Color.White,
-            modifier = Modifier
-                .padding(top = 6.dp)
-                .shadow(5.dp, CircleShape, spotColor = Playful.purple.copy(alpha = 0.35f), ambientColor = Playful.purple.copy(alpha = 0.35f))
-                .clip(CircleShape)
-                .background(Brush.horizontalGradient(listOf(Playful.purple, Playful.coral)))
-                .border(1.5.dp, Color.White.copy(alpha = 0.5f), CircleShape)
-                .clickable(onClickLabel = "创建提醒", onClick = onCreate)
-                .padding(horizontal = 26.dp, vertical = 13.dp)
+            color = softText()
         )
+        Text(
+            com.reminderapp.i18n.zh("创建你的第一个循环提醒，到点准时记住每件重要的事"),
+            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+            color = softMuted(),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        Row(
+            modifier = Modifier
+                .padding(top = 4.dp)
+                .clip(CircleShape)
+                .background(Tokens.BrandPrimary)
+                .clickable(onClickLabel = com.reminderapp.i18n.zh("创建提醒"), onClick = onCreate)
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            androidx.compose.material3.Icon(
+                imageVector = androidx.compose.material.icons.Icons.Filled.Add,
+                contentDescription = null,
+                tint = Tokens.OnStrong,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                com.reminderapp.i18n.zh("创建提醒"),
+                style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = Tokens.OnStrong
+            )
+        }
     }
 }

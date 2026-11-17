@@ -265,6 +265,130 @@ object BackupService {
         }
     }
 
+    /**
+     * 计算同步数据的语义内容指纹（SHA-256）：
+     * 忽略本机数据库 id、revision、exportedAt 与 dataVersion，仅对活跃提醒、关联记录和删除墓碑排序哈希。
+     */
+    fun contentFingerprint(
+        reminders: List<ReminderEntity>,
+        records: List<com.reminderapp.data.entity.ReminderRecordEntity> = emptyList(),
+        deletions: List<com.reminderapp.data.entity.SyncDeletion> = emptyList()
+    ): String {
+        val active = reminders.filter { it.isActive }
+        val syncIdByLocalId = active.associate { it.id to (it.syncId?.trim()?.lowercase() ?: "") }
+        val normalizedRecords = records.mapNotNull { rec ->
+            val parentSyncId = syncIdByLocalId[rec.reminderId] ?: return@mapNotNull null
+            val recType = when (rec.action) {
+                "confirmed" -> "confirm"
+                "notified" -> "trigger"
+                "snoozed" -> "snooze"
+                else -> rec.action
+            }
+            Triple(parentSyncId, rec.syncId.trim().lowercase(), "$recType|${rec.timestamp}|${rec.note}")
+        }
+        return digestCanonical(active, normalizedRecords, deletions)
+    }
+
+    /** 从 BackupService 导出的 JSON 计算语义内容指纹（格式无效时返回 null） */
+    fun contentFingerprintOfJson(json: String): String? {
+        val items = importFromJson(json) ?: return null
+        val active = items.filter { it.isActive }
+        val parsedRecords = mutableListOf<Triple<String, String, String>>()
+        val root = try {
+            JSONObject(json)
+        } catch (_: Exception) {
+            return null
+        }
+        val arr = root.optJSONArray("reminders")
+        if (arr != null) {
+            for (i in 0 until arr.length()) {
+                val row = arr.optJSONObject(i) ?: continue
+                if (!row.optBoolean("isActive", true)) continue
+                val sid = (row.optString("syncId").takeIf { it.isNotBlank() } ?: row.optString("id")).trim().lowercase()
+                val recArr = row.optJSONArray("records") ?: continue
+                for (j in 0 until recArr.length()) {
+                    val rec = recArr.optJSONObject(j) ?: continue
+                    val rid = rec.optString("id").trim().lowercase()
+                    if (rid.isEmpty()) continue
+                    val type = rec.optString("type")
+                    val performedAt = rec.optLong("performedAt", 0L)
+                    val note = rec.optString("note", "")
+                    parsedRecords.add(Triple(sid, rid, "$type|$performedAt|$note"))
+                }
+            }
+        }
+        val dels = deletions(json)
+        return digestCanonical(active, parsedRecords, dels)
+    }
+
+    private fun digestCanonical(
+        active: List<ReminderEntity>,
+        records: List<Triple<String, String, String>>,
+        deletions: List<com.reminderapp.data.entity.SyncDeletion>
+    ): String {
+        val reminderLines = active.map { r ->
+            listOf(
+                r.syncId?.trim()?.lowercase() ?: "",
+                r.title,
+                r.note,
+                r.kind,
+                r.cycle,
+                r.customDays.toString(),
+                r.dateType ?: "",
+                r.targetMonth?.toString() ?: "",
+                r.targetDay?.toString() ?: "",
+                r.holidayId ?: "",
+                r.holidayName ?: "",
+                r.advanceDays.toString(),
+                r.reminderHour.toString(),
+                r.reminderMinute.toString(),
+                r.rulePeriod ?: "",
+                r.ruleWeek?.toString() ?: "",
+                r.ruleWeekday?.toString() ?: "",
+                r.priority,
+                r.firstTriggerAt.toString(),
+                r.nextTriggerAt.toString(),
+                r.status,
+                r.retryCount.toString(),
+                r.lastConfirmedAt?.toString() ?: "",
+                r.createdAt.toString(),
+                r.holidayAdjustNote ?: "",
+                r.isCritical.toString(),
+                r.holidayAware.toString(),
+                r.recurrenceMode,
+                r.reminderStyle,
+                ReminderPolicy.intervals(r).joinToString(","),
+                r.maxReminderAttempts.coerceIn(1, 10).toString(),
+                r.quietStartMinute?.toString() ?: "",
+                r.quietEndMinute?.toString() ?: "",
+                r.weeklyWeekday?.toString() ?: "",
+                r.scheduledOccurrenceAt?.toString() ?: ""
+            ).joinToString("\u001F")
+        }.sorted()
+
+        val recordLines = records
+            .map { (parent, rid, body) -> "$parent\u001F$rid\u001F$body" }
+            .distinct()
+            .sorted()
+
+        val deletionLines = deletions
+            .map { "${it.kind.trim().lowercase()}\u001F${it.syncId.trim().lowercase()}" }
+            .distinct()
+            .sorted()
+
+        val payload = buildString {
+            append("R\n")
+            reminderLines.forEach { append(it).append('\n') }
+            append("H\n")
+            recordLines.forEach { append(it).append('\n') }
+            append("D\n")
+            deletionLines.forEach { append(it).append('\n') }
+        }
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(payload.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
     /** 将 JSON 字符串写入 Uri（SAF） */
     fun writeToUri(context: Context, uri: Uri, json: String): Boolean {
         return try {

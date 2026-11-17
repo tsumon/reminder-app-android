@@ -98,12 +98,20 @@ class ReminderWidgetProvider : AppWidgetProvider() {
             context, 0, openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
         views.setOnClickPendingIntent(R.id.widget_icon, pendingIntent)
         views.setOnClickPendingIntent(R.id.widget_unhandled_title, pendingIntent)
+        views.setOnClickPendingIntent(R.id.widget_unhandled_count, pendingIntent)
+        views.setOnClickPendingIntent(R.id.widget_lunar, pendingIntent)
         views.setOnClickPendingIntent(R.id.widget_next_label, pendingIntent)
         views.setOnClickPendingIntent(R.id.widget_next_title, pendingIntent)
         views.setOnClickPendingIntent(R.id.widget_next_time, pendingIntent)
 
+        val locCtx = com.reminderapp.i18n.LocaleManager.wrap(context)
+        views.setTextViewText(R.id.widget_unhandled_title, locCtx.getString(R.string.widget_unhandled_title))
+        views.setTextViewText(R.id.widget_next_label, locCtx.getString(R.string.widget_next_label))
+        views.setTextViewText(R.id.widget_complete_btn, locCtx.getString(R.string.confirm_action))
+        views.setTextViewText(R.id.widget_snooze_btn, locCtx.getString(R.string.snooze_action))
         views.setTextViewText(R.id.widget_unhandled_count, data.unhandledCount.toString())
         views.setTextViewText(R.id.widget_lunar, data.lunarText)
 
@@ -111,12 +119,18 @@ class ReminderWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widget_next_title, data.nextTitle)
             views.setTextViewText(R.id.widget_next_time, data.nextTimeText ?: "")
         } else {
-            views.setTextViewText(R.id.widget_next_title, zh("暂无提醒"))
+            views.setTextViewText(R.id.widget_next_title, locCtx.getString(R.string.no_reminders))
             views.setTextViewText(R.id.widget_next_time, "")
         }
 
-        // 快捷完成/稍后按钮：只有存在「即将到来的提醒」时才显示（v2.0.16 加稍后按钮）
+        // 快捷完成/稍后按钮：完成对即将到来/待处理提醒可用；稍后仅在已到点或通知/逾期中显示
         val completeId = data.completeReminderId
+        val snap = data.snapshot
+        val canSnooze = snap != null && (
+            snap.status == "notifying" ||
+                snap.status == "overdue" ||
+                snap.nextTriggerAt <= System.currentTimeMillis()
+            )
         if (completeId != null) {
             val completeIntent = Intent(context, WidgetActionReceiver::class.java).apply {
                 action = WidgetActionReceiver.ACTION_COMPLETE
@@ -134,21 +148,25 @@ class ReminderWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.widget_complete_btn, completePi)
             views.setViewVisibility(R.id.widget_complete_btn, android.view.View.VISIBLE)
 
-            val snoozeIntent = Intent(context, WidgetActionReceiver::class.java).apply {
-                action = WidgetActionReceiver.ACTION_SNOOZE
-                putExtra(WidgetActionReceiver.EXTRA_REMINDER_ID, completeId)
-                val snapshot = data.snapshot
-                snapshot?.let { putExtra("expected_at",it.nextTriggerAt); putExtra("revision",it.revision);putExtra("expected_state",it.toString()) }
-                this.data = android.net.Uri.parse("reminder://widget/$completeId/${snapshot?.revision}/$action")
+            if (canSnooze) {
+                val snoozeIntent = Intent(context, WidgetActionReceiver::class.java).apply {
+                    action = WidgetActionReceiver.ACTION_SNOOZE
+                    putExtra(WidgetActionReceiver.EXTRA_REMINDER_ID, completeId)
+                    val snapshot = data.snapshot
+                    snapshot?.let { putExtra("expected_at", it.nextTriggerAt); putExtra("revision", it.revision); putExtra("expected_state", it.toString()) }
+                    this.data = android.net.Uri.parse("reminder://widget/$completeId/${snapshot?.revision}/$action")
+                }
+                val snoozePi = PendingIntent.getBroadcast(
+                    context,
+                    (completeId.toInt() and 0x7FFFFFFF) xor 0x40000000,
+                    snoozeIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                views.setOnClickPendingIntent(R.id.widget_snooze_btn, snoozePi)
+                views.setViewVisibility(R.id.widget_snooze_btn, android.view.View.VISIBLE)
+            } else {
+                views.setViewVisibility(R.id.widget_snooze_btn, android.view.View.GONE)
             }
-            val snoozePi = PendingIntent.getBroadcast(
-                context,
-                (completeId.toInt() and 0x7FFFFFFF) xor 0x40000000,
-                snoozeIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            views.setOnClickPendingIntent(R.id.widget_snooze_btn, snoozePi)
-            views.setViewVisibility(R.id.widget_snooze_btn, android.view.View.VISIBLE)
         } else {
             views.setViewVisibility(R.id.widget_complete_btn, android.view.View.GONE)
             views.setViewVisibility(R.id.widget_snooze_btn, android.view.View.GONE)

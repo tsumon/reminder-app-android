@@ -1,31 +1,52 @@
 package com.reminderapp.ui.theme
 
 import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 
 /**
  * 手动主题（v2.1.1）：0=跟随系统 1=浅色 2=深色
- * 与 iOS ThemeStore 对齐；自签环境系统外观可能不可控，手动切换是最稳的兜底。
+ * v2.10.0: 由 Compose Snapshot State 驱动，切换主题色或深浅色后整树即时重组。
  */
 object ThemeStore {
     private const val PREFS = "theme_settings"
     private const val KEY_MODE = "theme_mode"
+    private const val KEY_COLOR = "theme_color"
 
-    fun mode(context: Context): Int =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_MODE, 0)
+    private var loaded = false
+    private var modeState by mutableIntStateOf(0)
+    private var colorState by mutableIntStateOf(0)
+
+    private fun ensureLoaded(context: Context) {
+        if (loaded) return
+        val sp = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        modeState = sp.getInt(KEY_MODE, 0)
+        colorState = sp.getInt(KEY_COLOR, 0)
+        loaded = true
+    }
+
+    fun mode(context: Context): Int {
+        ensureLoaded(context)
+        return modeState
+    }
 
     fun setMode(context: Context, mode: Int) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        ensureLoaded(context)
+        modeState = mode
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putInt(KEY_MODE, mode).apply()
     }
 
-    // v2.4.0: 主题色板索引（0=青碧默认）
-    private const val KEY_COLOR = "theme_color"
-
-    fun colorIndex(context: Context): Int =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_COLOR, 0)
+    fun colorIndex(context: Context): Int {
+        ensureLoaded(context)
+        return colorState
+    }
 
     fun setColorIndex(context: Context, index: Int) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        ensureLoaded(context)
+        colorState = index
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putInt(KEY_COLOR, index).apply()
     }
 }

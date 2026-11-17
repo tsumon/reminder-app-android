@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
@@ -30,15 +31,21 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.reminderapp.BuildConfig
+import com.reminderapp.data.database.AppDatabase
 import com.reminderapp.i18n.LocaleManager
 import com.reminderapp.i18n.zh
 import com.reminderapp.i18n.zhf
+import com.reminderapp.service.BackupService
+import com.reminderapp.service.LocalBackupService
+import com.reminderapp.service.ReminderActions
 import com.reminderapp.service.UpdateService
 import com.reminderapp.ui.theme.Tokens
 import com.reminderapp.ui.theme.softCard
 import com.reminderapp.ui.theme.softCanvas
 import com.reminderapp.ui.theme.softText
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 设置页：同步/AI/关于（版本号 + 检查更新 + 更新日志）
@@ -57,6 +64,8 @@ fun SettingsScreen(
     var checking by remember { mutableStateOf(false) }
     var updateInfo by remember { mutableStateOf<UpdateService.UpdateInfo?>(null) }
     var showChangelog by remember { mutableStateOf(false) }
+    var showLocalBackupDialog by remember { mutableStateOf(false) }
+    var localBackups by remember { mutableStateOf<List<LocalBackupService.BackupEntry>>(emptyList()) }
     // 批次3 功能4: 日历订阅链接
     var icsBusy by remember { mutableStateOf(false) }
     var icsResult by remember { mutableStateOf<com.reminderapp.service.WebDavSync.IcsUploadResult?>(null) }
@@ -183,7 +192,6 @@ fun SettingsScreen(
                                     .background(palette.primary)
                                     .clickableItem {
                                         com.reminderapp.ui.theme.ThemeStore.setColorIndex(context, index)
-                                        (context as? android.app.Activity)?.recreate()
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -301,6 +309,34 @@ fun SettingsScreen(
                             Text(zh("立即备份"), style = MaterialTheme.typography.bodyLarge)
                             Text(
                                 zh("备份到下载目录（保留最近 5 份）"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    HorizontalDivider()
+                    Row(
+                        modifier = Modifier
+                            .settingsDualRow()
+                            .clickableItem {
+                                showLocalBackupDialog = true
+                                scope.launch {
+                                    localBackups = withContext(Dispatchers.IO) {
+                                        LocalBackupService.listBackups(context)
+                                    }
+                                }
+                            },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.FileDownload, contentDescription = null,
+                            tint = Tokens.BrandPrimary, modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(zh("恢复本地备份"), style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                zh("从下载目录导入已备份的提醒"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -516,11 +552,74 @@ fun SettingsScreen(
             }
         )
     }
+    if (showLocalBackupDialog) {
+        AlertDialog(
+            onDismissRequest = { showLocalBackupDialog = false },
+            title = { Text(zh("恢复本地备份")) },
+            text = {
+                if (localBackups.isEmpty()) {
+                    Text(zh("未找到本地备份文件"), style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        localBackups.forEach { entry ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        showLocalBackupDialog = false
+                                        scope.launch {
+                                            val json = withContext(Dispatchers.IO) { entry.readJson() }
+                                            val parsed = json?.let { BackupService.importFromJson(it) }
+                                            if (parsed == null) {
+                                                android.widget.Toast.makeText(context, zh("数据解析失败"), android.widget.Toast.LENGTH_SHORT).show()
+                                                return@launch
+                                            }
+                                            val imported = runCatching {
+                                                ReminderActions(context, AppDatabase.getInstance(context)).importItems(parsed, json)
+                                            }.getOrNull()
+                                            android.widget.Toast.makeText(
+                                                context,
+                                                if (imported != null) zhf("导入完成：新增 %1\$s 条，跳过重复 %2\$s 条", imported.saved.size, imported.skipped) else zh("恢复失败"),
+                                                android.widget.Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(entry.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                    Text("${(entry.sizeBytes / 1024L).coerceAtLeast(1L)} KB", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Text(zh("恢复"), color = Tokens.BrandPrimary, style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLocalBackupDialog = false }) { Text(zh("关闭")) }
+            }
+        )
+    }
     }
 }
 
 /** 更新日志数据（与 iOS 一致） */
 private val changelog: List<Pair<String, List<String>>> = listOf(
+    "v2.10.0" to listOf(
+        "全新 Warm-Paper & Deep-Teal 设计语言，切换主题色与深浅模式实时生效",
+        "修复日期农历跨年与闰日触发、调休补班顺延、规则周期日历标点与统计漏掉口径",
+        "优化首页双层操作栏与列表底部留白，新增卡片快捷跳过与本地备份/同步快照恢复",
+        "WebDAV 增量内容指纹去重（内容一致零冲突）并完善桌面小组件深色模式适配"
+    ),
+    "v2.9.0" to listOf(
+        "双端对齐增量同步代际、删除墓碑与并发动作防护",
+        "支持自定义重试间隔与勿扰时段"
+    ),
+    "v2.5.0" to listOf(
+        "升级多套主题色板、统计热力图、连续打卡追踪与智能频率建议"
+    ),
     "v1.9.2" to listOf(
         "修复收不到更新提示（GitHub API 国内超时）",
         "WebDAV 坚果云友好错误提示 + 测试连接按钮"

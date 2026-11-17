@@ -45,13 +45,14 @@ fun DiagnosticsScreen(
     var upcoming by remember { mutableStateOf<List<com.reminderapp.data.entity.ReminderEntity>>(emptyList()) }
 
     LaunchedEffect(refreshKey) {
-        val all = db.reminderDao().getAllSync()
-        total = all.size
-        unconfirmed = all.count { it.status != "confirmed" }
+        val all = db.reminderDao().getAllIncludingInactive()
+        val active = all.filter { it.isActive }
+        total = active.size
+        unconfirmed = active.count { it.status != "confirmed" }
         disabled = all.count { !it.isActive }
-        critical = all.count { it.isCritical }
-        upcoming = all
-            .filter { it.isActive && it.status != "confirmed" }
+        critical = active.count { it.isCritical }
+        upcoming = active
+            .filter { it.status != "confirmed" }
             .sortedBy { it.nextTriggerAt }
             .take(5)
     }

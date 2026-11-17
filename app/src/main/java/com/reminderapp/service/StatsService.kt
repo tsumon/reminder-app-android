@@ -32,7 +32,10 @@ object StatsService {
 
     fun summarize(records: List<ReminderRecordEntity>): Summary {
         val confirmTimes = records.filter { it.action == com.reminderapp.data.entity.ReminderRecordEntity.ACTION_CONFIRMED }.map { it.timestamp }
-        val missed = records.filter { it.action == com.reminderapp.data.entity.ReminderRecordEntity.ACTION_NOTIFIED }
+        val missed = records.filter {
+            it.action == com.reminderapp.data.entity.ReminderRecordEntity.ACTION_NOTIFIED &&
+                it.note != "primary"
+        }
 
         val confirmDays = confirmTimes.map { startOfDay(it) }.toSet()
         val confirmCount = confirmDays.size

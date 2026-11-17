@@ -185,19 +185,19 @@ class ReminderActions(private val context: Context, private val db: AppDatabase 
             }
             val next = ReminderEngine.escalate(r.copy(scheduledOccurrenceAt=r.scheduledOccurrenceAt ?: r.nextTriggerAt),now)
             db.reminderDao().update(next)
-            deliveryRecordId=db.reminderRecordDao().insert(ReminderRecordEntity(reminderId=id, action="notified",timestamp=now))
+            val triggerNote = if (r.retryCount <= 0) "primary" else "retry:${r.retryCount}"
+            deliveryRecordId=db.reminderRecordDao().insert(ReminderRecordEntity(reminderId=id, action="notified",timestamp=now,note=triggerNote))
             deliveryBefore=r
             delivered=next
         }
         deferredAdvance?.let { (r,at) -> ReminderScheduler(context).scheduleAdvance(r,advanceDays,at) }
-        deferred?.let { SyncStore.touchLocalChange();ReminderScheduler(context).schedule(it) }
+        deferred?.let { ReminderScheduler(context).schedule(it) }
         val r = delivered ?: return
         val notifications=NotificationManager(context)
         if (advanceDays > 0) {
             try { notifications.sendAdvanceNotification(id,r.title,"$advanceDays 天后 · ${r.note}") }
             catch(_: SecurityException) { ReminderScheduler(context).scheduleAdvance(r,advanceDays,ReminderPolicy.adjustQuiet(r,now+3_600_000)) }
         } else {
-            SyncStore.touchLocalChange()
             try {
                 if (r.reminderStyle == "important") notifications.sendCriticalReminderNotification(id,r.title,r.note,r)
                 else notifications.sendReminderNotification(id,r.title,r.note,r)
@@ -213,7 +213,6 @@ class ReminderActions(private val context: Context, private val db: AppDatabase 
                     }
                     deliveryRecordId?.let { db.reminderRecordDao().deleteNotification(it) }
                 }
-                SyncStore.touchLocalChange()
                 retry?.let { ReminderScheduler(context).schedule(it) }
                 return
             }

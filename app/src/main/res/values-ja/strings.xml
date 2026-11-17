@@ -44,6 +44,8 @@
     <string name="no_reminders">リマインダーはありません</string>
     <string name="empty_hint">右下の + から新規作成</string>
     <string name="widget_description">未処理件数と直近のリマインダーを表示</string>
+    <string name="widget_unhandled_title">未処理</string>
+    <string name="widget_next_label">次のリマインダー</string>
 
     <!-- 自动生成：中文原串即 key，通过 i18n/L.kt 查表 -->
     <string name="s_0001">" · %s休み"</string>

@@ -44,6 +44,8 @@
     <string name="no_reminders">暂无提醒</string>
     <string name="empty_hint">点击右下角 + 创建新提醒</string>
     <string name="widget_description">显示未处理提醒数和最近提醒</string>
+    <string name="widget_unhandled_title">未处理提醒</string>
+    <string name="widget_next_label">最近提醒</string>
 
     <!-- 自动生成：中文原串即 key，通过 i18n/L.kt 查表 -->
     <string name="s_0001">" · %s休"</string>

@@ -60,11 +60,13 @@ fun NavGraph(
     deepLinkHighlightConfirm: Boolean = false,
     onDeepLinkConsumed: () -> Unit = {}
 ) {
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
     val pendingSyncConflict by com.reminderapp.service.WebDavSync.pendingConflict.collectAsState()
-    if(pendingSyncConflict!=null && navController.currentDestination?.route!="sync_settings") {
+    if(pendingSyncConflict!=null && currentRoute!="sync_settings") {
         AlertDialog(onDismissRequest={com.reminderapp.service.WebDavSync.pendingConflict.value=null},title={Text(zh("同步冲突"))},
             text={Text(zh("双端都有修改，同步已停止。请到同步设置选择要保留的数据。"))},
-            confirmButton={TextButton(onClick={navController.navigate("sync_settings");com.reminderapp.service.WebDavSync.pendingConflict.value=null}) { Text(zh("选择数据")) }},
+            confirmButton={TextButton(onClick={navController.navigate("sync_settings")}) { Text(zh("选择数据")) }},
             dismissButton={TextButton(onClick={com.reminderapp.service.WebDavSync.pendingConflict.value=null}) { Text(zh("稍后处理")) }})
     }
     var createdUndo by remember { mutableStateOf<Pair<com.reminderapp.data.entity.ReminderEntity,Long>?>(null) }
@@ -82,8 +84,6 @@ fun NavGraph(
 
     // 安静确认：底部导航 4 Tab（首页 / 日历 / 统计 / 设置）；AI 从首页入口进入，不是 Tab。
     // chat / ai_settings / detail / create 必须全屏，否则 SoftTabDock 会盖住 AI 输入栏。
-    val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = backStackEntry?.destination?.route
     val showBottomBar = when (currentRoute) {
         "home", "calendar", "stats", "settings" -> true
         else -> false
@@ -235,7 +235,11 @@ fun NavGraph(
                             // v2.0.16: 双端都改过 → 提示已按版本覆盖
                             is com.reminderapp.service.WebDavSync.SyncResult.Success ->
                                 if (result.conflict) zh("已用最新版本覆盖（检测到双端都有修改，未合并）") else zh("同步完成")
-                            is com.reminderapp.service.WebDavSync.SyncResult.Conflict -> { navController.navigate("sync_settings"); zh("检测到同步冲突，请选择保留的数据") }
+                            is com.reminderapp.service.WebDavSync.SyncResult.Conflict -> {
+                                com.reminderapp.service.WebDavSync.pendingConflict.value = result
+                                navController.navigate("sync_settings")
+                                zh("检测到同步冲突，请选择保留的数据")
+                            }
                             is com.reminderapp.service.WebDavSync.SyncResult.Error -> result.message
                         }
                         android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
@@ -406,6 +410,24 @@ fun NavGraph(
                             val created=actions.create(entity)
                             createdUndo=created.reminder to created.generation
                             com.reminderapp.service.TelemetryService.logEvent("reminder.create",mapOf("kind" to entity.kind))
+                        }
+                        navController.popBackStack()
+                    }
+                },
+                onSaveAll = { entities ->
+                    scope.launch {
+                        val actions = com.reminderapp.service.ReminderActions(context)
+                        entities.forEach { entity ->
+                            if (entity.id > 0L) {
+                                val expected = draft ?: return@forEach
+                                if (actions.edit(expected, entity) == null) {
+                                    android.widget.Toast.makeText(context, zh("提醒已有新变更，请重新打开编辑"), android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            } else {
+                                val created = actions.create(entity)
+                                createdUndo = created.reminder to created.generation
+                                com.reminderapp.service.TelemetryService.logEvent("reminder.create", mapOf("kind" to entity.kind))
+                            }
                         }
                         navController.popBackStack()
                     }

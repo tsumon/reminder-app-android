@@ -1,5 +1,6 @@
 package com.reminderapp.ui.screen
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
@@ -34,12 +35,14 @@ import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.EventRepeat
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Timer
@@ -57,8 +60,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -224,16 +229,44 @@ fun HomeScreen(
                         }
                     },
                     trailing = {
-                        Box {
-                            SoftCircleButton(onClick = { menuExpanded = true }, size = 40.dp, contentDescription = zh("更多")) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            SoftCircleButton(
+                                onClick = { searchOpen = !searchOpen },
+                                size = 38.dp,
+                                contentDescription = zh("搜索")
+                            ) {
                                 Icon(
-                                    Icons.Default.MoreVert,
+                                    if (searchOpen || searchQuery.isNotBlank()) Icons.Default.Close else Icons.Default.Search,
                                     contentDescription = null,
-                                    tint = softText(),
+                                    tint = if (searchOpen || searchQuery.isNotBlank()) Tokens.BrandPrimary else softText(),
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
-                            DropdownMenu(
+                            SoftCircleButton(
+                                onClick = onCreateReminder,
+                                size = 38.dp,
+                                contentDescription = zh("新建提醒")
+                            ) {
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = null,
+                                    tint = Tokens.BrandPrimary,
+                                    modifier = Modifier.size(19.dp)
+                                )
+                            }
+                            Box {
+                                SoftCircleButton(onClick = { menuExpanded = true }, size = 38.dp, contentDescription = zh("更多")) {
+                                    Icon(
+                                        Icons.Default.MoreVert,
+                                        contentDescription = null,
+                                        tint = softText(),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                DropdownMenu(
                                 expanded = menuExpanded,
                                 onDismissRequest = { menuExpanded = false }
                             ) {
@@ -334,6 +367,7 @@ fun HomeScreen(
                                 )
                             }
                         }
+                        }
                     }
                 )
             } else {
@@ -398,11 +432,13 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 148.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item {
-                SoftInsetSearch(value = searchQuery, onValueChange = { searchQuery = it })
+                AnimatedVisibility(visible = searchOpen || searchQuery.isNotBlank()) {
+                    SoftInsetSearch(value = searchQuery, onValueChange = { searchQuery = it })
+                }
             }
 
             item {
@@ -410,6 +446,57 @@ fun HomeScreen(
                     selected = smartList,
                     onSelect = { smartList = it }
                 )
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .softCard(SoftKind.Sm, Tokens.RadiusShallow)
+                            .clickable { showQuickEntry = !showQuickEntry }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.AutoAwesome,
+                            contentDescription = null,
+                            tint = Tokens.BrandPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            zh("输入一句话创建提醒"),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = softMuted(),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            zh("AI / 语音"),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Tokens.BrandPrimary,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(Tokens.RadiusChip))
+                                .background(Tokens.BrandPrimary.copy(alpha = 0.10f))
+                                .clickable(onClick = onAIChat)
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                    AnimatedVisibility(visible = showQuickEntry) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .softCard(SoftKind.Card)
+                                .padding(12.dp)
+                        ) {
+                            com.reminderapp.ui.component.QuickCreate(onQuickCreate, onAIChat)
+                        }
+                    }
+                    if (canUndoCreate) {
+                        TextButton(onClick = onUndoCreate) { Text(zh("撤销刚才的创建")) }
+                    }
+                }
             }
 
             item { NotificationHealthHint(onOpenDiagnostics) }
@@ -432,14 +519,6 @@ fun HomeScreen(
                 }
             }
             item {
-                Row {
-                    TextButton(onClick={showQuickEntry=!showQuickEntry}) { Text(zh("输入一句话创建提醒")) }
-                    TextButton(onClick=onAIChat) { Text(zh("AI / 语音")) }
-                }
-                if(showQuickEntry) com.reminderapp.ui.component.QuickCreate(onQuickCreate,onAIChat)
-                if(canUndoCreate) TextButton(onClick=onUndoCreate) { Text(zh("撤销刚才的创建")) }
-            }
-            item {
                 val undo by viewModel.undo.collectAsState()
                 if(undo != null) TextButton(onClick={viewModel.undoCompletion()}) { Text(zh("撤销刚才的完成")) }
             }
@@ -447,10 +526,12 @@ fun HomeScreen(
             if (due.isNotEmpty()) {
                 item { SoftSectionHeader(zh("提醒中"), Tokens.StatusReminding, count = due.size) }
                 items(due, key = { "due-${it.id}" }) { reminder ->
+                    val haptic = LocalHapticFeedback.current
                     SwipeableReminderCard(
                         reminder = reminder,
                         statusColor = if (reminder.status == "overdue") StatusOverdue else StatusReminding,
                         onComplete = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             viewModel.confirmReminder(reminder)
                             confettiTrigger++
                         },
@@ -459,7 +540,9 @@ fun HomeScreen(
                         modifier = Modifier.animateItemPlacement(),
                         onMakeUp = { viewModel.confirmReminder(reminder, isMakeUp = true) },
                         onSnooze = { viewModel.snoozeLater(reminder,15) },
+                        onSkip = if (!(reminder.kind == "cycle" && reminder.cycle == "once")) ({ viewModel.skip(reminder) }) else null,
                         onConfirm = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             viewModel.confirmReminder(reminder)
                             confettiTrigger++
                         },
@@ -469,7 +552,6 @@ fun HomeScreen(
                             selectedIds = if (reminder.id in selectedIds) selectedIds - reminder.id else selectedIds + reminder.id
                         }
                     )
-                    if(!(reminder.kind=="cycle" && reminder.cycle=="once")) TextButton(onClick={viewModel.skip(reminder)}) { Text(zh("跳过本次")) }
                 }
             }
 
@@ -849,6 +931,7 @@ fun SwipeableReminderCard(
     onMakeUp: (() -> Unit)? = null,
     /** 到期/逾期/已推迟：行内确认 */
     onSnooze: (() -> Unit)? = null,
+    onSkip: (() -> Unit)? = null,
     onConfirm: (() -> Unit)? = null,
     /** v2.1.1: 批量管理透传 */
     selectionMode: Boolean = false,
@@ -924,6 +1007,7 @@ fun SwipeableReminderCard(
             ReminderCard(
                 reminder, statusColor, onDelete = onDelete, onClick = onClick, onMakeUp = onMakeUp,
                 onSnooze = onSnooze,
+                onSkip = onSkip,
                 onConfirm = onConfirm,
                 selectionMode = selectionMode, selected = selected, onToggleSelect = onToggleSelect
             )
@@ -1040,14 +1124,16 @@ fun TodayTimelineRow(
                 modifier = Modifier
                     .size(34.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(
-                        Brush.linearGradient(
-                            listOf(Playful.gold.copy(alpha = 0.32f), Playful.coral.copy(alpha = 0.16f))
-                        )
-                    ),
+                    .background(Tokens.BrandPrimary.copy(alpha = if (isSoftDark()) 0.18f else 0.10f))
+                    .border(1.dp, Tokens.BrandPrimary.copy(alpha = 0.22f), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(reminderEmoji(reminder), fontSize = 18.sp)
+                Icon(
+                    imageVector = reminderIcon(reminder),
+                    contentDescription = null,
+                    tint = Tokens.BrandPrimary,
+                    modifier = Modifier.size(18.dp)
+                )
             }
             Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -1235,6 +1321,23 @@ fun reminderKindColor(reminder: ReminderEntity): Color = when {
     else -> Color(0xFF3498DB)
 }
 
+/** 提醒类型 → Material 矢量图标（Warm-Paper & Deep-Teal） */
+fun reminderIcon(reminder: ReminderEntity): ImageVector = when {
+    reminder.kind == "date" && reminder.dateType == "holiday" -> Icons.Default.Celebration
+    reminder.kind == "date" && reminder.dateType == "lunar_birthday" -> Icons.Default.Bedtime
+    reminder.kind == "date" && reminder.dateType == "solar_birthday" -> Icons.Default.Cake
+    reminder.kind == "rule" -> Icons.Default.EventRepeat
+    else -> when (reminder.cycle) {
+        "once" -> Icons.Default.Alarm
+        "daily" -> Icons.Default.Repeat
+        "weekly", "biweekly" -> Icons.Default.DateRange
+        "monthly" -> Icons.Default.CalendarMonth
+        "quarterly", "yearly" -> Icons.Default.Event
+        "custom" -> Icons.Default.Timer
+        else -> Icons.Default.Notifications
+    }
+}
+
 fun reminderWellTint(reminder: ReminderEntity): Color = when {
     reminder.kind == "date" && reminder.dateType == "holiday" -> Color(0xFFFDE3CC)
     reminder.kind == "date" && reminder.dateType == "lunar_birthday" -> Color(0xFFE1DDFC)
@@ -1254,6 +1357,7 @@ fun ReminderCard(
     onMakeUp: (() -> Unit)? = null,
     /** 到期项行内确认按钮 */
     onSnooze: (() -> Unit)? = null,
+    onSkip: (() -> Unit)? = null,
     onConfirm: (() -> Unit)? = null,
     /** v2.1.1: 批量管理——选择模式标记/选择回调，非空时卡片进入多选态 */
     selectionMode: Boolean = false,
@@ -1302,19 +1406,15 @@ fun ReminderCard(
                 modifier = Modifier
                     .size(Tokens.RowBadge)
                     .clip(RoundedCornerShape(Tokens.RadiusShallow))
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(
-                                reminderWellTint(reminder).copy(alpha = if (isSoftDark()) 0.38f else 0.72f),
-                                reminderWellTint(reminder).copy(alpha = if (isSoftDark()) 0.16f else 0.38f)
-                            )
-                        )
-                    ),
+                    .background(Tokens.BrandPrimary.copy(alpha = if (isSoftDark()) 0.18f else 0.10f))
+                    .border(1.dp, Tokens.BrandPrimary.copy(alpha = 0.20f), RoundedCornerShape(Tokens.RadiusShallow)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = reminderEmoji(reminder),
-                    fontSize = 22.sp
+                Icon(
+                    imageVector = reminderIcon(reminder),
+                    contentDescription = null,
+                    tint = Tokens.BrandPrimary,
+                    modifier = Modifier.size(22.dp)
                 )
             }
             Spacer(modifier = Modifier.width(13.dp))
@@ -1397,10 +1497,38 @@ fun ReminderCard(
                             .clip(CircleShape)
                             .background(Tokens.BrandPrimary)
                             .clickable(onClick = onConfirm)
-                            .heightIn(min=48.dp)
-                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                            .heightIn(min=44.dp)
+                            .padding(horizontal = 16.dp, vertical = 11.dp)
                     )
-                    if(onSnooze!=null) TextButton(onClick=onSnooze) { Text(zh("稍后")) }
+                    if (onSnooze != null || onSkip != null) {
+                        Spacer(Modifier.height(4.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (onSnooze != null) {
+                                Text(
+                                    zh("稍后"),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = softMuted(),
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(softElevated())
+                                        .clickable(onClick = onSnooze)
+                                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
+                            if (onSkip != null) {
+                                Text(
+                                    zh("跳过"),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = softMuted(),
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(softElevated())
+                                        .clickable(onClick = onSkip)
+                                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1497,17 +1625,16 @@ private fun MergedBirthdayCard(solar: ReminderEntity, lunar: ReminderEntity, onC
                 modifier = Modifier
                     .size(Tokens.RowBadge)
                     .clip(RoundedCornerShape(Tokens.RadiusShallow))
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                Color(0xFFFCD3E1).copy(alpha = if (isSoftDark()) 0.38f else 0.72f),
-                                Color(0xFFE1DDFC).copy(alpha = if (isSoftDark()) 0.16f else 0.38f)
-                            )
-                        )
-                    ),
+                    .background(Tokens.BrandPrimary.copy(alpha = if (isSoftDark()) 0.18f else 0.10f))
+                    .border(1.dp, Tokens.BrandPrimary.copy(alpha = 0.20f), RoundedCornerShape(Tokens.RadiusShallow)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(reminderEmoji(nearest), fontSize = 22.sp)
+                Icon(
+                    imageVector = reminderIcon(nearest),
+                    contentDescription = null,
+                    tint = Tokens.BrandPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
             }
             Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -1563,8 +1690,48 @@ private fun MergedBirthdayCard(solar: ReminderEntity, lunar: ReminderEntity, onC
         exact=com.reminderapp.service.ReminderScheduler(context).canScheduleExact()
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
-    Column(Modifier.fillMaxWidth().background(Tokens.BrandPrimary.copy(alpha=0.08f),RoundedCornerShape(16.dp)).clickable(onClick=onClick).padding(16.dp)) {
-        Text(zh(if(!notifications) "通知需要设置" else if(!exact) "提醒可能延迟" else "通知与精确闹钟已授权"),style=MaterialTheme.typography.titleSmall)
-        Text(zh("点击检查渠道、权限与测试提醒；授权不代表已经送达"),style=MaterialTheme.typography.bodySmall)
+    val healthy = notifications && exact
+    val statusTint = if (healthy) Tokens.BrandPrimary else softWarn()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .softCard(SoftKind.Card)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(statusTint.copy(alpha = if (isSoftDark()) 0.20f else 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = if (healthy) Icons.Default.Notifications else Icons.Default.Warning,
+                contentDescription = null,
+                tint = statusTint,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                zh(if (!notifications) "通知需要设置" else if (!exact) "提醒可能延迟" else "通知与精确闹钟已授权"),
+                style = MaterialTheme.typography.titleSmall,
+                color = softText()
+            )
+            Text(
+                zh("点击检查渠道、权限与测试提醒；授权不代表已经送达"),
+                style = MaterialTheme.typography.bodySmall,
+                color = softMuted()
+            )
+        }
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = softMuted().copy(alpha = 0.7f),
+            modifier = Modifier.size(18.dp)
+        )
     }
 }

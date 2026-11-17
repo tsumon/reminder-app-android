@@ -8,10 +8,17 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.reminderapp.data.database.AppDatabase
+import com.reminderapp.service.BackupService
+import com.reminderapp.service.ReminderActions
 import com.reminderapp.service.SyncStore
 import com.reminderapp.service.WebDavSync
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 import com.reminderapp.i18n.zh
@@ -23,16 +30,28 @@ fun SyncSettingsScreen(
     onBack: () -> Unit,
     onSyncResult: (String) -> Unit
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var url by remember { mutableStateOf(SyncStore.url) }
     var username by remember { mutableStateOf(SyncStore.username) }
     var password by remember { mutableStateOf(SyncStore.password) }
     var autoSync by remember { mutableStateOf(SyncStore.autoSync) }
+    val globalConflict by WebDavSync.pendingConflict.collectAsState()
     var conflict by remember { mutableStateOf<WebDavSync.SyncResult.Conflict?>(null) }
+    val activeConflict = conflict ?: globalConflict
     var syncing by remember { mutableStateOf(false) }
     var testing by remember { mutableStateOf(false) }
     var resultMsg by remember { mutableStateOf("") }
     var resultIsError by remember { mutableStateOf(false) }
+    var snapshotRefresh by remember { mutableIntStateOf(0) }
+    var pendingRestoreSnapshot by remember { mutableStateOf<File?>(null) }
+    val snapshots = remember(snapshotRefresh, activeConflict) {
+        File(context.filesDir, "webdav_snapshots")
+            .listFiles()
+            ?.filter { it.isFile && it.name.endsWith(".json") }
+            ?.sortedByDescending { it.lastModified() }
+            .orEmpty()
+    }
 
     val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
 
@@ -168,20 +187,36 @@ fun SyncSettingsScreen(
                 Text(if (syncing) zh("同步中...") else zh("立即同步"))
             }
 
-            conflict?.let { pending ->
+            activeConflict?.let { pending ->
                 Text(zh("同步冲突：选择后会先保存本地快照。远程选择合并同 ID 内容，本地独有提醒仍保留。"))
                 listOf(true to "保留本地并上传", false to "使用远程并合并").forEach { (useLocal,label) ->
                     OutlinedButton(enabled=!syncing,onClick={ scope.launch {
                         syncing=true
                         when(val resolved=WebDavSync.syncNow(ReminderApp_instance(),WebDavSync.Resolution(pending,useLocal))) {
-                            is WebDavSync.SyncResult.Success -> { conflict=null;resultMsg=zh("同步完成，本地快照已保留") }
-                            is WebDavSync.SyncResult.Error -> { conflict=null;resultMsg=resolved.message }
-                            is WebDavSync.SyncResult.Conflict -> conflict=resolved
+                            is WebDavSync.SyncResult.Success -> {
+                                conflict = null
+                                WebDavSync.pendingConflict.value = null
+                                resultMsg = zh("同步完成，本地快照已保留")
+                                resultIsError = false
+                                snapshotRefresh++
+                            }
+                            is WebDavSync.SyncResult.Error -> {
+                                conflict = null
+                                WebDavSync.pendingConflict.value = null
+                                resultMsg = resolved.message
+                                resultIsError = true
+                            }
+                            is WebDavSync.SyncResult.Conflict -> {
+                                conflict = resolved
+                            }
                         }
                         syncing=false
                     } }) { Text(zh(label)) }
                 }
-                TextButton(onClick={conflict=null}) { Text(zh("取消，保留双方数据")) }
+                TextButton(onClick={
+                    conflict = null
+                    WebDavSync.pendingConflict.value = null
+                }) { Text(zh("取消，保留双方数据")) }
             }
             if (resultMsg.isNotEmpty()) {
                 Text(
@@ -190,7 +225,73 @@ fun SyncSettingsScreen(
                     color = if (resultIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                 )
             }
+
+            HorizontalDivider()
+            Text(zh("同步前本地快照"), style = MaterialTheme.typography.titleSmall)
+            if (snapshots.isEmpty()) {
+                Text(
+                    zh("发生同步冲突覆盖前会自动保存快照到这里"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                snapshots.forEach { file ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(file.name, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                dateFormat.format(Date(file.lastModified())),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        OutlinedButton(
+                            enabled = !syncing,
+                            onClick = { pendingRestoreSnapshot = file }
+                        ) { Text(zh("恢复")) }
+                    }
+                }
+            }
         }
+    }
+
+    pendingRestoreSnapshot?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingRestoreSnapshot = null },
+            title = { Text(zh("恢复同步快照")) },
+            text = { Text(target.name) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val file = target
+                    pendingRestoreSnapshot = null
+                    scope.launch {
+                        val json = withContext(Dispatchers.IO) { runCatching { file.readText() }.getOrNull() }
+                        val parsed = json?.let { BackupService.importFromJson(it) }
+                        if (parsed == null) {
+                            resultMsg = zh("数据解析失败")
+                            resultIsError = true
+                            return@launch
+                        }
+                        val imported = runCatching {
+                            ReminderActions(context, AppDatabase.getInstance(context)).importItems(parsed, json)
+                        }.getOrNull()
+                        if (imported == null) {
+                            resultMsg = zh("恢复失败")
+                            resultIsError = true
+                        } else {
+                            resultMsg = zhf("导入完成：新增 %1\$s 条，跳过重复 %2\$s 条", imported.saved.size, imported.skipped)
+                            resultIsError = false
+                        }
+                    }
+                }) { Text(zh("恢复")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRestoreSnapshot = null }) { Text(zh("取消")) }
+            }
+        )
     }
 }
 

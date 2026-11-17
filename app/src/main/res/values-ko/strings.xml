@@ -44,6 +44,8 @@
     <string name="no_reminders">알림이 없습니다</string>
     <string name="empty_hint">오른쪽 아래 + 를 눌러 새로 만드세요</string>
     <string name="widget_description">미처리 개수와 다가오는 알림 표시</string>
+    <string name="widget_unhandled_title">미처리 알림</string>
+    <string name="widget_next_label">다음 알림</string>
 
     <!-- 自动生成：中文原串即 key，通过 i18n/L.kt 查表 -->
     <string name="s_0001">" · %s 휴일"</string>

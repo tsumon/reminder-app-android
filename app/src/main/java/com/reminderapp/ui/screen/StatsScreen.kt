@@ -1,12 +1,16 @@
 package com.reminderapp.ui.screen
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -21,10 +25,12 @@ import com.reminderapp.ui.theme.SoftDonutChart
 import com.reminderapp.ui.theme.SoftScreenTitle
 import com.reminderapp.ui.theme.StreakCastle
 import com.reminderapp.ui.theme.Tokens
+import com.reminderapp.ui.theme.softBorder
 import com.reminderapp.ui.theme.softCard
 import com.reminderapp.ui.theme.softCanvas
 import com.reminderapp.ui.theme.softMuted
 import com.reminderapp.ui.theme.softOk
+import com.reminderapp.ui.theme.softSurface
 import com.reminderapp.ui.theme.softText
 import com.reminderapp.ui.theme.softWarn
 
@@ -42,7 +48,10 @@ fun StatsScreen(
     val zone=java.time.ZoneId.systemDefault()
     val records=allRecords.filter { range=="all" || (it.timestamp>=start.atStartOfDay(zone).toInstant().toEpochMilli() && it.timestamp<end.atStartOfDay(zone).toInstant().toEpochMilli()) }
     val summary = remember(records) { StatsService.summarize(records) }
+    val allTimeSummary = remember(allRecords) { StatsService.summarize(allRecords) }
     val rate = summary.completionRate ?: 0.0
+    val completedOps = records.count { it.action == "confirmed" }
+    val skippedOps = records.count { it.action == "skipped" }
 
     Box(modifier = Modifier.fillMaxSize().background(softCanvas())) {
         Scaffold(
@@ -54,7 +63,7 @@ fun StatsScreen(
         ) { padding ->
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 128.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item {
@@ -67,24 +76,53 @@ fun StatsScreen(
                         TextButton(onClick={offset++}) { Text("›") }
                     }
                 }
-                item { Text(zh("每次确认，都有记录"),style=MaterialTheme.typography.headlineSmall) }
                 item {
-                    Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                        StatMiniCard(zh("已完成"),records.count { it.action=="confirmed" }.toString(),softOk(),Modifier.weight(1f))
-                        StatMiniCard(zh("跳过"),records.count { it.action=="skipped" }.toString(),softWarn(),Modifier.weight(1f))
-                        StatMiniCard(zh("漏掉"),summary.missedCount.toString(),com.reminderapp.ui.theme.softDanger(),Modifier.weight(1f))
-                    }
-                }
-                item { Text(zh("漏掉按出现重试的日期计数；完成与跳过按操作次数计数。"),style=MaterialTheme.typography.bodySmall) }
-                item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        StatMiniCard(zh("完成天数"), summary.confirmCount.toString(), softOk(), Modifier.weight(1f))
-                        StatMiniCard(zh("连续天数"), summary.currentStreak.toString(), softWarn(), Modifier.weight(1f))
-                        StatMiniCard(
-                            zh("完成率"),
-                            summary.completionRate?.let { "${(it * 100).toInt()}%" } ?: "0%",
-                            Tokens.BrandPrimary,
-                            Modifier.weight(1f)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .softCard(SoftKind.Card)
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    zh("每次确认，都有记录"),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = softText()
+                                )
+                                Text(
+                                    zh("完成、跳过和漏掉分别统计"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = softMuted()
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    summary.completionRate?.let { "${(it * 100).toInt()}%" } ?: "—",
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Tokens.BrandPrimary
+                                )
+                                Text(zh("完成率"), fontSize = 11.sp, color = softMuted())
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            StatMiniCard(zh("已完成"), completedOps.toString(), softOk(), Modifier.weight(1f))
+                            StatMiniCard(zh("跳过"), skippedOps.toString(), softWarn(), Modifier.weight(1f))
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            StatMiniCard(zh("漏掉"), summary.missedCount.toString(), com.reminderapp.ui.theme.softDanger(), Modifier.weight(1f))
+                            StatMiniCard(zh("连续天数"), allTimeSummary.currentStreak.toString(), Tokens.BrandPrimary, Modifier.weight(1f))
+                        }
+                        Text(
+                            zh("漏掉按出现重试的日期计数；完成与跳过按操作次数计数。"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = softMuted()
                         )
                     }
                 }
@@ -95,10 +133,10 @@ fun StatsScreen(
                 }
                 item {
                     Box(Modifier.fillMaxWidth().softCard(SoftKind.Card)) {
-                        CheckInHeatmap(counts = summary.heatmap)
+                        CheckInHeatmap(counts = allTimeSummary.heatmap)
                     }
                 }
-                item { CastleCard(summary) }
+                item { CastleCard(allTimeSummary) }
                 item { ForgetHoursCard(summary) }
             }
         }
@@ -186,14 +224,26 @@ private fun ForgetHoursCard(summary: StatsService.Summary) {
         if (summary.forgetHours.isEmpty()) {
             Text(zh("坚持得很好，没有漏掉过提醒"), fontSize = Tokens.BodySize, color = softMuted())
         } else {
-            val medals = listOf("🥇", "🥈", "🥉")
             summary.forgetHours.forEachIndexed { idx, (hour, count) ->
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(medals.getOrElse(idx) { "·" })
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(Tokens.BrandPrimary.copy(alpha = 0.14f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "${idx + 1}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Tokens.BrandPrimary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
                     Text(zhf("%s:00 前后", hour), fontSize = Tokens.BodySize, fontWeight = FontWeight.Medium, color = softText())
                     Spacer(modifier = Modifier.weight(1f))
                     Text(zhf("漏 %s 次", count), fontSize = Tokens.BodySize, color = softMuted())

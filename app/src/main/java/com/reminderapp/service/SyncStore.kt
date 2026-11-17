@@ -19,6 +19,7 @@ object SyncStore {
     private const val KEY_LAST_SYNC_VERSION = "last_sync_version"
     // v2.0.21 F1: 是否成功同步过至少一次（首次同步版本不可比，需回退时间戳判新）
     private const val KEY_HAS_SYNCED_ONCE = "has_synced_once"
+    private const val KEY_PENDING_UPLOAD = "pending_upload"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -82,6 +83,10 @@ object SyncStore {
         get() = prefs(ReminderApp.instance).getBoolean(KEY_HAS_SYNCED_ONCE, false)
         set(value) = prefs(ReminderApp.instance).edit().putBoolean(KEY_HAS_SYNCED_ONCE, value).apply()
 
+    var pendingUpload: Boolean
+        get() = prefs(ReminderApp.instance).getBoolean(KEY_PENDING_UPLOAD, false)
+        set(value) = prefs(ReminderApp.instance).edit().putBoolean(KEY_PENDING_UPLOAD, value).apply()
+
     /** 是否为「首次同步」（版本不可比场景）：从未成功同步过且无历史同步版本 */
     val isFirstSync: Boolean
         get() = !hasSyncedOnce && lastSyncVersion <= 0L
@@ -97,7 +102,10 @@ object SyncStore {
     @Synchronized
     fun acknowledgeCaptured(generation: Long, uploadedAt: Long) {
         lastSyncVersion=maxOf(lastSyncVersion,generation)
-        if(localVersion==generation) lastLocalChange=maxOf(lastLocalChange,uploadedAt)
+        if(localVersion==generation) {
+            lastLocalChange=maxOf(lastLocalChange,uploadedAt)
+            pendingUpload=false
+        }
         lastSyncAt=System.currentTimeMillis()
         hasSyncedOnce=true
     }

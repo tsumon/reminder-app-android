@@ -152,11 +152,11 @@ object UpdateService {
         val dir = File(context.cacheDir, "update").apply { mkdirs() }
         val file = File(dir, "reminder-update.apk")
         val candidates = buildList {
-            add(APK_ASSET_URL)
             if (info.tag.isNotBlank()) add(taggedAssetUrl(info.tag))
+            add(APK_ASSET_URL)
             MIRROR_PREFIXES.forEach { prefix ->
-                add(prefix + APK_ASSET_URL)
                 if (info.tag.isNotBlank()) add(prefix + taggedAssetUrl(info.tag))
+                add(prefix + APK_ASSET_URL)
             }
         }
         var lastError: Exception? = null

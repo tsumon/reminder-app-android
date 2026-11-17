@@ -8,7 +8,7 @@
 
 原生 iOS 与 Android 提醒工具。确认后进入下一周期；未确认时按你设定的强度与间隔再次提醒。数据先留在本机，同步由你选择。
 
-源码 **2.9.0 / 71** · 开发分支，尚未发布。公开下载版本以 Releases 为准。
+版本 **2.10.0 / 73** · Warm-Paper & Deep-Teal。公开下载版本以 Releases 为准。[更新说明](docs/releases/v2.10.0.md)。
 
 [**下载与版本记录 ↗**](https://github.com/tsumon/reminder-app-android/releases/latest) · [另一平台](https://github.com/tsumon/reminder-app-ios)
 
@@ -36,15 +36,17 @@
 只展示真实运行截图；示例提醒属于独立测试设备，非默认用户数据。
 
 <p align="center">
-  <img src="docs/screenshots/runtime-2.9/home.png" width="280" alt="Home — Android 2.9">
-  <img src="docs/screenshots/runtime-2.9/calendar.png" width="280" alt="Calendar — Android 2.9">
+  <img src="docs/screenshots/runtime-2.10/home.png" width="280" alt="Home — Android 2.10">
+  <img src="docs/screenshots/runtime-2.10/home-dark.png" width="280" alt="Home Dark — Android 2.10">
 </p>
 <p align="center">
-  <img src="docs/screenshots/runtime-2.9/stats.png" width="280" alt="Statistics — Android 2.9">
-  <img src="docs/screenshots/runtime-2.9/settings.png" width="280" alt="Settings — Android 2.9">
+  <img src="docs/screenshots/runtime-2.10/calendar.png" width="280" alt="Calendar — Android 2.10">
+  <img src="docs/screenshots/runtime-2.10/stats.png" width="280" alt="Statistics — Android 2.10">
 </p>
-
-[Create form](docs/screenshots/runtime-2.9/create.png) · [Capture details](docs/screenshots/runtime-2.9/README.md)
+<p align="center">
+  <img src="docs/screenshots/runtime-2.10/stats-dark.png" width="280" alt="Statistics Dark — Android 2.10">
+  <img src="docs/screenshots/runtime-2.10/settings.png" width="280" alt="Settings — Android 2.10">
+</p>
 
 ## 提醒策略
 

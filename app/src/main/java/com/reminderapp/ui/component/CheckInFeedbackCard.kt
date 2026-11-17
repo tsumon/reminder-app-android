@@ -12,14 +12,20 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -74,38 +80,47 @@ fun CheckInFeedbackCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 32.dp, vertical = 16.dp),
+                .padding(horizontal = 28.dp, vertical = 14.dp),
             contentAlignment = Alignment.Center
         ) {
-            Column(
+            Row(
                 modifier = Modifier
-                    .clayCard(radiusDp = 22.dp)
-                    .padding(horizontal = 26.dp, vertical = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .clayCard(radiusDp = 18.dp)
+                    .padding(horizontal = 18.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // 庆祝小狐狸 + 🎉 弹跳
-                Box {
-                    MascotBadge(mood = MascotMood.CHEER, sizeDp = 56.dp)
-                    PartyPopper()
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = text.orEmpty(),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "+1 ⭐",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Playful.ink,
+                Box(
                     modifier = Modifier
+                        .size(44.dp)
                         .clip(CircleShape)
-                        .background(Playful.gold.copy(alpha = 0.35f))
-                        .padding(horizontal = 10.dp, vertical = 3.dp)
-                )
+                        .background(
+                            com.reminderapp.ui.theme.Tokens.BrandPrimary.copy(
+                                alpha = if (com.reminderapp.ui.theme.isSoftDark()) 0.22f else 0.14f
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        tint = com.reminderapp.ui.theme.Tokens.BrandPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Column {
+                    Text(
+                        text = text.orEmpty(),
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = com.reminderapp.ui.theme.softText()
+                    )
+                    Text(
+                        text = com.reminderapp.i18n.zh("+1 次打卡"),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = com.reminderapp.ui.theme.Tokens.BrandPrimary
+                    )
+                }
             }
         }
     }

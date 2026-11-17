@@ -58,28 +58,36 @@ object ReminderEngine {
         return deferToWorkday(raw, context)
     }
 
-    /** 顺延到下一个工作日：跳过周六日与法定节假日（最多 30 天防死循环） */
+    /** 顺延到下一个工作日：跳过周六日与法定节假日（调休补班日视作工作日，最多 30 天防死循环） */
     fun deferToWorkday(ts: Long, context: Context): Long =
-        deferToWorkdayCore(ts) { cal ->
+        deferToWorkdayWithStatus(ts) { cal ->
             HolidayRemoteService.status(
                 context,
                 cal.get(Calendar.YEAR),
                 cal.get(Calendar.MONTH) + 1,
                 cal.get(Calendar.DAY_OF_MONTH)
-            )?.isHoliday == true
+            )?.isHoliday
         }
 
     /**
      * v2.4.8: 顺延核心（纯逻辑，JVM 可单测）。
      * 从 ts 起逐日推进，跳过周六日与 isHoliday(cal) 判定的节假日，保留时分。
      */
-    internal fun deferToWorkdayCore(ts: Long, isHoliday: (Calendar) -> Boolean): Long {
+    internal fun deferToWorkdayCore(ts: Long, isHoliday: (Calendar) -> Boolean): Long =
+        deferToWorkdayWithStatus(ts) { cal -> if (isHoliday(cal)) true else null }
+
+    /**
+     * v2.10.0: 支持显式调休补班判定（`false` = 调休补班工作日，`true` = 法定节假日，`null` = 未知，按周末规则）。
+     */
+    internal fun deferToWorkdayWithStatus(ts: Long, dayStatus: (Calendar) -> Boolean?): Long {
         val cal = Calendar.getInstance().apply { timeInMillis = ts }
         var guard = 0
         while (guard < 30) {
             val dow = cal.get(Calendar.DAY_OF_WEEK)
             val isWeekend = dow == Calendar.SATURDAY || dow == Calendar.SUNDAY
-            if (!isWeekend && !isHoliday(cal)) break
+            val status = dayStatus(cal)
+            val isRestDay = status ?: isWeekend
+            if (!isRestDay) break
             cal.add(Calendar.DAY_OF_MONTH, 1)
             guard++
         }
@@ -264,9 +272,15 @@ object ReminderEngine {
      */
     private fun calculateDateNextTrigger(reminder: ReminderEntity, now: Long): Long {
         val currentYear = Calendar.getInstance().apply { timeInMillis = now }.get(Calendar.YEAR)
-        return computeDateForYear(reminder, currentYear, now)
-            ?: computeDateForYear(reminder, currentYear + 1, now)
-            ?: (now + 31536000_000L)
+        for (year in (currentYear - 1)..(currentYear + 8)) {
+            computeDateForYear(reminder, year, now, allowLunar29Fallback = false)?.let { return it }
+        }
+        if (reminder.dateType == "lunar_birthday" && (reminder.targetDay ?: 1) == 30) {
+            for (year in (currentYear - 1)..(currentYear + 8)) {
+                computeDateForYear(reminder, year, now, allowLunar29Fallback = true)?.let { return it }
+            }
+        }
+        return now + 31536000_000L
     }
 
     /**
@@ -287,7 +301,12 @@ object ReminderEngine {
         }
     }
 
-    private fun computeDateForYear(reminder: ReminderEntity, year: Int, now: Long): Long? {
+    private fun computeDateForYear(
+        reminder: ReminderEntity,
+        year: Int,
+        now: Long,
+        allowLunar29Fallback: Boolean = false
+    ): Long? {
         val hour = reminder.reminderHour.coerceIn(0, 23)
         val minute = reminder.reminderMinute.coerceIn(0, 59)
         val cal = Calendar.getInstance()
@@ -302,7 +321,12 @@ object ReminderEngine {
                 if (cal.timeInMillis > now) cal.timeInMillis else null
             }
             "lunar_birthday" -> {
-                val solar = LunarCalendar.lunarToSolar(year, reminder.targetMonth ?: 1, reminder.targetDay ?: 1)
+                val targetMonth = (reminder.targetMonth ?: 1).coerceIn(1, 12)
+                val targetDay = (reminder.targetDay ?: 1).coerceIn(1, 30)
+                val solar = LunarCalendar.lunarToSolar(year, targetMonth, targetDay)
+                    ?: if (allowLunar29Fallback && targetDay == 30) {
+                        LunarCalendar.lunarToSolar(year, targetMonth, 29)
+                    } else null
                 if (solar != null) {
                     val solarCal = Calendar.getInstance().apply { timeInMillis = solar }
                     solarCal.set(Calendar.HOUR_OF_DAY, hour)
@@ -517,21 +541,28 @@ object ReminderEngine {
         return when (reminder.dateType) {
             "solar_birthday" -> month == reminder.targetMonth && day == reminder.targetDay
             "lunar_birthday" -> {
-                val solar = LunarCalendar.lunarToSolar(year, reminder.targetMonth ?: 1, reminder.targetDay ?: 1)
-                if (solar != null) {
-                    val cal = Calendar.getInstance().apply { timeInMillis = solar }
-                    cal.get(Calendar.YEAR) == year && cal.get(Calendar.MONTH) + 1 == month && cal.get(Calendar.DAY_OF_MONTH) == day
-                } else false
+                val targetMonth = (reminder.targetMonth ?: 1).coerceIn(1, 12)
+                val targetDay = (reminder.targetDay ?: 1).coerceIn(1, 30)
+                ((year - 1)..year).any { candYear ->
+                    val solar = LunarCalendar.lunarToSolar(candYear, targetMonth, targetDay)
+                        ?: if (targetDay == 30) LunarCalendar.lunarToSolar(candYear, targetMonth, 29) else null
+                    if (solar != null) {
+                        val cal = Calendar.getInstance().apply { timeInMillis = solar }
+                        cal.get(Calendar.YEAR) == year && cal.get(Calendar.MONTH) + 1 == month && cal.get(Calendar.DAY_OF_MONTH) == day
+                    } else false
+                }
             }
             "holiday" -> {
                 val holiday = reminder.holidayId?.let { id -> HolidayService.findById(id) }
-                ?: HolidayService.allHolidays.find { it.name == reminder.holidayName }
+                    ?: HolidayService.allHolidays.find { it.name == reminder.holidayName }
                 if (holiday != null) {
-                    val d = HolidayService.getHolidaySolarDate(year, holiday)
-                    if (d != null) {
-                        val cal = Calendar.getInstance().apply { timeInMillis = d }
-                        cal.get(Calendar.YEAR) == year && cal.get(Calendar.MONTH) + 1 == month && cal.get(Calendar.DAY_OF_MONTH) == day
-                    } else false
+                    ((year - 1)..year).any { candYear ->
+                        val d = HolidayService.getHolidaySolarDate(candYear, holiday)
+                        if (d != null) {
+                            val cal = Calendar.getInstance().apply { timeInMillis = d }
+                            cal.get(Calendar.YEAR) == year && cal.get(Calendar.MONTH) + 1 == month && cal.get(Calendar.DAY_OF_MONTH) == day
+                        } else false
+                    }
                 } else false
             }
             else -> false
@@ -540,6 +571,12 @@ object ReminderEngine {
 
     private fun occursOnRule(reminder: ReminderEntity, year: Int, month: Int, day: Int): Boolean {
         val period = reminder.rulePeriod ?: "quarterly"
+        val periodMatches = when (period) {
+            "monthly" -> true
+            "yearly" -> month == 1
+            else -> (month - 1) % 3 == 0
+        }
+        if (!periodMatches) return false
         val week = (reminder.ruleWeek ?: 1).coerceIn(1, 5)
         val weekday = (reminder.ruleWeekday ?: 1).coerceIn(1, 7)
         val hour = reminder.reminderHour.coerceIn(0, 23)

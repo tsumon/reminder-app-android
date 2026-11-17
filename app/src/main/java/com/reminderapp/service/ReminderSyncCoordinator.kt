@@ -8,7 +8,7 @@ import org.json.JSONObject
 
 /** Captures and acknowledges only the state actually transferred; network IO never holds the mutation gate. */
 class ReminderSyncCoordinator(private val context: Context,private val db: AppDatabase=AppDatabase.getInstance(context)) {
-    data class Snapshot(val items: List<ReminderEntity>,val generation: Long,val lastChange: Long,val firstSync: Boolean,val lastSyncGeneration: Long,val lastSyncedAt: Long, val records: List<com.reminderapp.data.entity.ReminderRecordEntity> = emptyList(), val deletions: List<com.reminderapp.data.entity.SyncDeletion> = emptyList())
+    data class Snapshot(val items: List<ReminderEntity>,val generation: Long,val lastChange: Long,val firstSync: Boolean,val lastSyncGeneration: Long,val lastSyncedAt: Long, val records: List<com.reminderapp.data.entity.ReminderRecordEntity> = emptyList(), val deletions: List<com.reminderapp.data.entity.SyncDeletion> = emptyList(), val pendingUpload: Boolean = false)
     enum class Decision { CONFLICT, DOWNLOAD, UPLOAD, UNCHANGED }
     companion object {
         fun resolutionGeneration(local: Long, remote: Long): Long = maxOf(local,remote)+1
@@ -17,19 +17,19 @@ class ReminderSyncCoordinator(private val context: Context,private val db: AppDa
             val compare=if(!local.firstSync && remoteGeneration>0 && local.generation>0 && remoteGeneration!=local.generation)
                 remoteGeneration.compareTo(local.generation) else remoteTimestamp.compareTo(local.lastChange)
             if(compare>0) return Decision.DOWNLOAD
-            if(compare<0 || local.generation>local.lastSyncGeneration) return Decision.UPLOAD
+            if(compare<0 || local.generation>local.lastSyncGeneration || local.pendingUpload) return Decision.UPLOAD
             return Decision.UNCHANGED
         }
         fun conflicts(local: Snapshot,remoteGeneration: Long,remoteTimestamp: Long,remoteHasData: Boolean): Boolean {
-            if(local.firstSync) return local.items.isNotEmpty() && remoteHasData
-            val localDirty=local.generation>local.lastSyncGeneration || local.lastChange>local.lastSyncedAt
+            if(local.firstSync) return (local.items.isNotEmpty() || local.deletions.isNotEmpty()) && remoteHasData
+            val localDirty=local.generation>local.lastSyncGeneration || local.lastChange>local.lastSyncedAt || local.pendingUpload
             val remoteDirty=if(remoteGeneration>0) remoteGeneration>local.lastSyncGeneration else remoteTimestamp>local.lastSyncedAt
             return localDirty && remoteDirty
         }
     }
     suspend fun capture(): Snapshot = ReminderMutationGate.serialized {
         db.withTransaction {
-            Snapshot(db.reminderDao().getAllSync(),SyncStore.localVersion,SyncStore.lastLocalChange,SyncStore.isFirstSync,SyncStore.lastSyncVersion,SyncStore.lastSyncAt,db.reminderRecordDao().getAll(),db.syncDeletionDao().all())
+            Snapshot(db.reminderDao().getAllSync(),SyncStore.localVersion,SyncStore.lastLocalChange,SyncStore.isFirstSync,SyncStore.lastSyncVersion,SyncStore.lastSyncAt,db.reminderRecordDao().getAll(),db.syncDeletionDao().all(),SyncStore.pendingUpload)
         }
     }
     fun uploadJson(snapshot: Snapshot, now: Long=System.currentTimeMillis()): String {
@@ -39,6 +39,12 @@ class ReminderSyncCoordinator(private val context: Context,private val db: AppDa
     }
     suspend fun acknowledgeUpload(snapshot: Snapshot, uploadedAt: Long) = ReminderMutationGate.serialized {
         SyncStore.acknowledgeCaptured(snapshot.generation,uploadedAt)
+    }
+    suspend fun acceptEqualRemote(snapshot: Snapshot, remoteGeneration: Long, remoteTimestamp: Long): Boolean = ReminderMutationGate.serialized {
+        if (SyncStore.localVersion != snapshot.generation) return@serialized false
+        SyncStore.acceptRemote(snapshot.generation, remoteGeneration, remoteTimestamp)
+        SyncStore.pendingUpload = false
+        true
     }
     /** Persist the merge and its generation before any suspendable schedule restoration can admit a newer action. */
     suspend fun merge(snapshot: Snapshot,remote: List<ReminderEntity>,remoteGeneration: Long,remoteTimestamp: Long, publishSelected: Boolean = false, remoteJson: String? = null): Long = ReminderMutationGate.serialized {
@@ -68,6 +74,7 @@ class ReminderSyncCoordinator(private val context: Context,private val db: AppDa
         if(publishSelected || hasLocalOnly) {
             SyncStore.localVersion=resolutionGeneration(accepted,remoteGeneration)
             SyncStore.lastLocalChange=System.currentTimeMillis()
+            SyncStore.pendingUpload=true
         }
         SyncStore.localVersion
     }

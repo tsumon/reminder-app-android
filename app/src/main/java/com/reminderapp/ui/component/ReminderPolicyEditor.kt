@@ -8,25 +8,34 @@ import androidx.compose.ui.unit.dp
 import com.reminderapp.data.entity.ReminderEntity
 import com.reminderapp.i18n.zh
 
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ReminderPolicyEditor(value: ReminderEntity, onChange: (ReminderEntity) -> Unit, onValidityChange: (Boolean) -> Unit = {}) {
     var intervals by remember(value.id) { mutableStateOf(value.retryIntervalsMinutes) }
     var cap by remember(value.id) { mutableStateOf(value.maxReminderAttempts.toString()) }
     var quietStart by remember(value.id) { mutableStateOf(value.quietStartMinute?.let { String.format(java.util.Locale.ROOT,"%02d:%02d",it/60,it%60) } ?: "") }
     var quietEnd by remember(value.id) { mutableStateOf(value.quietEndMinute?.let { String.format(java.util.Locale.ROOT,"%02d:%02d",it/60,it%60) } ?: "") }
+    var showQuietStartPicker by remember { mutableStateOf(false) }
+    var showQuietEndPicker by remember { mutableStateOf(false) }
     val retryValid=com.reminderapp.service.ReminderPolicy.validEditorInput(value.reminderStyle,intervals,cap,"","")
     val quietValid=com.reminderapp.service.ReminderPolicy.validEditorInput("gentle",intervals,cap,quietStart,quietEnd)
     LaunchedEffect(retryValid,quietValid) { onValidityChange(retryValid && quietValid) }
     Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Text(zh("提醒方式"),style=MaterialTheme.typography.titleSmall)
-        Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             listOf("gentle" to "轻柔", "persistent" to "持续", "important" to "重要").forEach { (style,label) ->
                 FilterChip(selected=value.reminderStyle==style,onClick={onChange(value.copy(reminderStyle=style,isCritical=style=="important"))},label={Text(zh(label))})
             }
         }
         if(value.reminderStyle=="important") Text(zh("重要提醒使用高优先级通知；全屏和勿扰权限由系统控制。"),style=MaterialTheme.typography.bodySmall)
         if(value.kind=="cycle" && value.cycle!="once") {
-            Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 FilterChip(selected=value.recurrenceMode=="fixed",onClick={onChange(value.copy(recurrenceMode="fixed"))},label={Text(zh("固定周期"))})
                 FilterChip(selected=value.recurrenceMode=="afterCompletion",onClick={onChange(value.copy(recurrenceMode="afterCompletion"))},label={Text(zh("完成后重新计时"))})
             }
@@ -58,8 +67,61 @@ fun ReminderPolicyEditor(value: ReminderEntity, onChange: (ReminderEntity) -> Un
         }
         fun minute(text: String): Int? { val p=text.split(":").map { it.toIntOrNull() };return if(p.size==2 && p[0] in 0..23 && p[1] in 0..59) p[0]!!*60+p[1]!! else null }
         fun updateQuiet() { val start=minute(quietStart);val end=minute(quietEnd);if(start!=null && end!=null) onChange(value.copy(quietStartMinute=start,quietEndMinute=end));if(quietStart.isBlank() && quietEnd.isBlank()) onChange(value.copy(quietStartMinute=null,quietEndMinute=null)) }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            OutlinedButton(onClick = { showQuietStartPicker = true }, modifier = Modifier.weight(1f)) {
+                Text(if (quietStart.isBlank()) zh("勿扰开始") else "${zh("勿扰开始")} $quietStart")
+            }
+            OutlinedButton(onClick = { showQuietEndPicker = true }, modifier = Modifier.weight(1f)) {
+                Text(if (quietEnd.isBlank()) zh("勿扰结束") else "${zh("勿扰结束")} $quietEnd")
+            }
+            if (quietStart.isNotBlank() || quietEnd.isNotBlank()) {
+                TextButton(onClick = {
+                    quietStart = ""
+                    quietEnd = ""
+                    updateQuiet()
+                }) { Text(zh("清除")) }
+            }
+        }
         OutlinedTextField(value=quietStart,onValueChange={quietStart=it;updateQuiet()},label={Text(zh("勿扰开始 HH:mm（留空关闭）"))},isError=!quietValid,modifier=Modifier.fillMaxWidth())
         if(!retryValid || !quietValid) Text(zh("请修正标红的设置后保存"),color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
         OutlinedTextField(value=quietEnd,onValueChange={quietEnd=it;updateQuiet()},label={Text(zh("勿扰结束 HH:mm"))},isError=!quietValid,modifier=Modifier.fillMaxWidth())
+        if (showQuietStartPicker) {
+            val initMin = minute(quietStart) ?: (22 * 60)
+            val pickerState = rememberTimePickerState(initialHour = initMin / 60, initialMinute = initMin % 60)
+            AlertDialog(
+                onDismissRequest = { showQuietStartPicker = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        quietStart = String.format(java.util.Locale.ROOT, "%02d:%02d", pickerState.hour, pickerState.minute)
+                        if (quietEnd.isBlank()) quietEnd = "08:00"
+                        updateQuiet()
+                        showQuietStartPicker = false
+                    }) { Text(zh("确定")) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showQuietStartPicker = false }) { Text(zh("取消")) }
+                },
+                text = { TimePicker(state = pickerState) }
+            )
+        }
+        if (showQuietEndPicker) {
+            val initMin = minute(quietEnd) ?: (8 * 60)
+            val pickerState = rememberTimePickerState(initialHour = initMin / 60, initialMinute = initMin % 60)
+            AlertDialog(
+                onDismissRequest = { showQuietEndPicker = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        quietEnd = String.format(java.util.Locale.ROOT, "%02d:%02d", pickerState.hour, pickerState.minute)
+                        if (quietStart.isBlank()) quietStart = "22:00"
+                        updateQuiet()
+                        showQuietEndPicker = false
+                    }) { Text(zh("确定")) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showQuietEndPicker = false }) { Text(zh("取消")) }
+                },
+                text = { TimePicker(state = pickerState) }
+            )
+        }
     }
 }
