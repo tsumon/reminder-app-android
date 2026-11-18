@@ -7,6 +7,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -40,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reminderapp.data.entity.ReminderEntity
 import com.reminderapp.i18n.zh
+import com.reminderapp.i18n.zhf
 import com.reminderapp.ui.comic.ComicCard
 import com.reminderapp.ui.comic.WaitingRow
 import com.reminderapp.ui.comic.comicColors
@@ -118,25 +120,43 @@ fun HomeUpcomingCard(
                                 fontSize = 12.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 style = TextStyle(fontFeatureSettings = "tnum"),
-                                modifier = Modifier.width(72.dp)
+                                modifier = Modifier.width(74.dp)
                             )
-                            Text(
-                                text = row.solar.title.removeSuffix("（公历）"),
-                                color = colors.ink,
-                                fontSize = 14.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = "${row.solar.targetMonth}/${row.solar.targetDay} · ${lunarMonthDayLabel(row.lunar.targetMonth ?: 1, row.lunar.targetDay ?: 1)}",
-                                color = colors.muted,
-                                fontSize = 12.sp,
-                                maxLines = 1,
-                                style = TextStyle(fontFeatureSettings = "tnum")
-                            )
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = row.solar.title.removeSuffix("（公历）"),
+                                    color = colors.ink,
+                                    fontSize = 14.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = zhf("公历 %d月%d日", row.solar.targetMonth ?: 1, row.solar.targetDay ?: 1) +
+                                        " · " +
+                                        zhf("农历 %s", lunarMonthDayLabel(row.lunar.targetMonth ?: 1, row.lunar.targetDay ?: 1)),
+                                    color = colors.muted,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = TextStyle(fontFeatureSettings = "tnum")
+                                )
+                            }
+                            if (!selectionMode) {
+                                Spacer(Modifier.width(10.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = zh("确认完成"),
+                                    tint = colors.muted.copy(alpha = 0.72f),
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .clickable { onConfirm(nearest) }
+                                        .semantics { contentDescription = zh("确认完成") }
+                                )
+                            }
                         }
                     }
                     is WaitingRow.Single -> {

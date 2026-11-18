@@ -55,7 +55,8 @@ object ComicI18n {
         "点击自检" to Entry("Run check", "點擊自檢", "診断する", "점검하기"),
         "历史" to Entry("History", "歷史", "履歴", "기록"),
         "清空历史" to Entry("Clear history", "清空歷史", "履歴を消去", "기록 비우기"),
-        "思考中…" to Entry("Thinking…", "思考中…", "考え中…", "생각 중…")
+        "思考中…" to Entry("Thinking…", "思考中…", "考え中…", "생각 중…"),
+        "公历 %d月%d日" to Entry("Solar %d/%d", "公曆 %d月%d日", "新暦 %d月%d日", "양력 %d/%d")
     )
 
     fun lookup(context: Context?, src: String): String {

@@ -257,25 +257,19 @@ fun EditorDateSection(
     onAdvanceDaysChange: (Int) -> Unit
 ) {
     val colors = comicColors()
-    var dateTypeMenu by remember { mutableStateOf(false) }
     var holidayMenu by remember { mutableStateOf(false) }
 
     EditorKeyValueRow(label = zh("日期类型")) {
-        Box {
-            Text(
-                text = (selectedDateType?.label ?: zh("请选择")) + " ▾",
-                color = if (selectedDateType == null) colors.accent else colors.ink,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                modifier = Modifier.clickable { dateTypeMenu = true }
-            )
-            DropdownMenu(expanded = dateTypeMenu, onDismissRequest = { dateTypeMenu = false }) {
-                DateReminderType.entries.forEach { t ->
-                    DropdownMenuItem(
-                        text = { Text(t.label) },
-                        onClick = { onDateTypeChange(t); dateTypeMenu = false }
-                    )
-                }
+        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            DateReminderType.entries.forEach { t ->
+                val active = selectedDateType == t
+                Text(
+                    text = t.label,
+                    color = if (active) colors.accent else colors.muted,
+                    fontWeight = if (active) FontWeight.ExtraBold else FontWeight.Medium,
+                    fontSize = 13.5.sp,
+                    modifier = Modifier.clickable { onDateTypeChange(t) }
+                )
             }
         }
     }
