@@ -5,7 +5,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@drawable/widget_bg"
-    android:padding="12dp">
+    android:padding="14dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -15,8 +15,8 @@
 
         <ImageView
             android:id="@+id/widget_icon"
-            android:layout_width="18dp"
-            android:layout_height="18dp"
+            android:layout_width="17dp"
+            android:layout_height="17dp"
             android:src="@drawable/ic_widget_bell"
             android:contentDescription="@null" />
 
@@ -27,23 +27,21 @@
             android:layout_weight="1"
             android:layout_marginStart="6dp"
             android:text="@string/widget_unhandled_title"
-            android:textColor="@color/widget_primary"
-            android:textSize="13sp"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/widget_unhandled_count"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="0"
-            android:textColor="@color/widget_primary"
-            android:textSize="22sp"
+            android:text="#00"
+            android:textColor="@color/widget_hero_count"
+            android:textSize="24sp"
             android:textStyle="bold" />
     </LinearLayout>
 
-    <!-- v2.4.5 fix: RemoteViews 只支持白名单控件（TextView/ImageView/Button 等），
-         裸 <View> 不在名单内——launcher 渲染时抛 InflateException，
-         整个小组件自 v1.5.0 起添加到桌面即空白。换成 ImageView 画分隔线。 -->
+    <!-- RemoteViews whitelist safe divider: ImageView only, NEVER bare <View> -->
     <ImageView
         android:layout_width="match_parent"
         android:layout_height="1dp"
@@ -52,27 +50,35 @@
         android:background="@color/widget_divider"
         android:contentDescription="@null" />
 
-    <!-- 今天农历（v1.8.7 小组件增强） -->
-    <TextView
-        android:id="@+id/widget_lunar"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text=""
-        android:textColor="@color/widget_lunar_text"
-        android:textSize="11sp" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
-    <TextView
-        android:id="@+id/widget_next_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/widget_next_label"
-        android:textColor="@color/widget_text_secondary"
-        android:textSize="11sp" />
+        <TextView
+            android:id="@+id/widget_next_label"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/widget_next_label"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/widget_lunar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="@color/widget_lunar_text"
+            android:textSize="11sp" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/widget_next_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
         android:maxLines="1"
         android:ellipsize="end"
         android:text="@string/no_reminders"
@@ -83,6 +89,7 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
@@ -95,33 +102,31 @@
             android:textColor="@color/widget_text_secondary"
             android:textSize="11sp" />
 
-        <!-- 快捷完成按钮（v1.8.7）：点击广播确认该提醒 -->
-        <TextView
-            android:id="@+id/widget_complete_btn"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingHorizontal="10dp"
-            android:paddingVertical="4dp"
-            android:text="@string/confirm_done"
-            android:textColor="@color/widget_on_primary"
-            android:textSize="11sp"
-            android:textStyle="bold"
-            android:background="@drawable/widget_complete_bg"
-            android:visibility="gone" />
-
-        <!-- 快捷稍后提醒按钮（v2.0.16）：点击广播推迟 15 分钟 -->
         <TextView
             android:id="@+id/widget_snooze_btn"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:paddingHorizontal="10dp"
+            android:paddingHorizontal="9dp"
             android:paddingVertical="4dp"
             android:text="@string/snooze"
             android:textColor="@color/widget_snooze_text"
             android:textSize="11sp"
             android:textStyle="bold"
             android:background="@drawable/widget_snooze_bg"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/widget_complete_btn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:paddingHorizontal="11dp"
+            android:paddingVertical="4dp"
+            android:text="@string/confirm_done"
+            android:textColor="@color/widget_on_primary"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:background="@drawable/widget_complete_bg"
             android:visibility="gone" />
     </LinearLayout>
 

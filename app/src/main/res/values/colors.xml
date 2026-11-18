@@ -1,27 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="app_primary">#FF0F766E</color>
-    <color name="app_on_primary">#FFFFFFFF</color>
-    <color name="app_secondary">#FF0D9488</color>
-    <color name="app_background">#FFF6F4EF</color>
-    <!-- v2.1.0: 深色窗口背景（基础值=浅色兜底，values-night 覆盖） -->
-    <color name="app_background_dark">#FFF6F4EF</color>
-    <color name="app_surface">#FFFFFFFF</color>
-    <color name="app_on_surface">#FF1A1A1A</color>
-    <color name="status_reminding">#FFE74C3C</color>
-    <color name="status_waiting">#FF3498DB</color>
-    <color name="status_completed">#FF27AE60</color>
-    <!-- Launcher adaptive icon background (teal, matches the icon design's median teal).
-         Kept separate from app_primary (red brand color) so app branding is untouched. -->
+    <color name="app_primary">#FFF06A29</color>
+    <color name="app_on_primary">#FF27140B</color>
+    <color name="app_secondary">#FF774501</color>
+    <color name="app_background">#FFF6E5C8</color>
+    <color name="app_background_dark">#FFF6E5C8</color>
+    <color name="app_surface">#FFFFF5DF</color>
+    <color name="app_on_surface">#FF472714</color>
+    <color name="status_reminding">#FFF06A29</color>
+    <color name="status_waiting">#FF6D503B</color>
+    <color name="status_completed">#FF2F7D4A</color>
     <color name="ic_launcher_background">#41A7A3</color>
-    <color name="widget_bg">#FFF6F4EF</color>
-    <color name="widget_stroke">#FFE7E2D8</color>
-    <color name="widget_divider">#FFE7E2D8</color>
-    <color name="widget_primary">#FF0F766E</color>
-    <color name="widget_on_primary">#FFFFFFFF</color>
-    <color name="widget_text_primary">#FF18181B</color>
-    <color name="widget_text_secondary">#FF71717A</color>
-    <color name="widget_lunar_text">#FF0F766E</color>
-    <color name="widget_snooze_bg">#FFE7E2D8</color>
-    <color name="widget_snooze_text">#FF18181B</color>
+    <color name="widget_bg">#FFFFF5DF</color>
+    <color name="widget_stroke">#FF472714</color>
+    <color name="widget_divider">#FFE5CCA9</color>
+    <color name="widget_primary">#FFF06A29</color>
+    <color name="widget_on_primary">#FF27140B</color>
+    <color name="widget_hero_count">#FF774501</color>
+    <color name="widget_text_primary">#FF472714</color>
+    <color name="widget_text_secondary">#FF6D503B</color>
+    <color name="widget_lunar_text">#FF6D503B</color>
+    <color name="widget_snooze_bg">#FFF6E5C8</color>
+    <color name="widget_snooze_text">#FF472714</color>
 </resources>

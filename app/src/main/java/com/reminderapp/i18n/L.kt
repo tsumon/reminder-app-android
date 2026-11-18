@@ -469,18 +469,20 @@ private fun appContext(): Context? =
 
 /** 取多语言文案（无占位符） */
 fun zh(src: String): String {
-    val id = L.ids[src] ?: return src
-    val base = appContext() ?: return src
-    val ctx = LocaleManager.wrap(base)
+    val base = appContext()
+    val ctx = base?.let { LocaleManager.wrap(it) }
+    val id = L.ids[src] ?: return ComicI18n.lookup(ctx, src)
+    if (ctx == null) return src
     return runCatching { ctx.getString(id) }.getOrDefault(src)
 }
 
 /** 取带占位符的多语言文案：src 须为格式串（如 "第%s周" / "%1\$s天%2\$s小时后"） */
 fun zhf(src: String, vararg args: Any?): String {
     val safe = args.map { it ?: "" }.toTypedArray()
-    val id = L.ids[src] ?: return String.format(src, *safe)
-    val base = appContext() ?: return String.format(src, *safe)
-    val ctx = LocaleManager.wrap(base)
+    val base = appContext()
+    val ctx = base?.let { LocaleManager.wrap(it) }
+    val id = L.ids[src] ?: return String.format(ComicI18n.lookup(ctx, src), *safe)
+    if (ctx == null) return String.format(src, *safe)
     return runCatching { ctx.getString(id, *safe) }.getOrDefault(String.format(src, *safe))
 }
 

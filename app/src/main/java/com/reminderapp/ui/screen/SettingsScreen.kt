@@ -1,56 +1,55 @@
 package com.reminderapp.ui.screen
 
-import androidx.compose.foundation.clickable
+import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.ArrowRight
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CloudSync
-import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.FileUpload
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SmartToy
-import androidx.compose.material.icons.filled.Translate
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.reminderapp.BuildConfig
 import com.reminderapp.data.database.AppDatabase
-import com.reminderapp.i18n.LocaleManager
 import com.reminderapp.i18n.zh
 import com.reminderapp.i18n.zhf
-import com.reminderapp.service.BackupService
 import com.reminderapp.service.LocalBackupService
-import com.reminderapp.service.ReminderActions
 import com.reminderapp.service.UpdateService
-import com.reminderapp.ui.theme.Tokens
-import com.reminderapp.ui.theme.softCard
-import com.reminderapp.ui.theme.softCanvas
-import com.reminderapp.ui.theme.softText
+import com.reminderapp.service.WebDavSync
+import com.reminderapp.ui.comic.ComicCard
+import com.reminderapp.ui.comic.ComicHairline
+import com.reminderapp.ui.comic.ComicTopBar
+import com.reminderapp.ui.comic.comicColors
+import com.reminderapp.ui.screen.settings.SettingsAppearanceCard
+import com.reminderapp.ui.screen.settings.SettingsDialogs
+import com.reminderapp.ui.theme.ThemeStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * 设置页：同步/AI/关于（版本号 + 检查更新 + 更新日志）
- */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
@@ -60,636 +59,188 @@ fun SettingsScreen(
     onOpenDiagnostics: () -> Unit
 ) {
     val context = LocalContext.current
+    val colors = comicColors()
     val scope = rememberCoroutineScope()
+
     var checking by remember { mutableStateOf(false) }
     var updateInfo by remember { mutableStateOf<UpdateService.UpdateInfo?>(null) }
     var showChangelog by remember { mutableStateOf(false) }
     var showLocalBackupDialog by remember { mutableStateOf(false) }
     var localBackups by remember { mutableStateOf<List<LocalBackupService.BackupEntry>>(emptyList()) }
-    // 批次3 功能4: 日历订阅链接
     var icsBusy by remember { mutableStateOf(false) }
-    var icsResult by remember { mutableStateOf<com.reminderapp.service.WebDavSync.IcsUploadResult?>(null) }
+    var icsResult by remember { mutableStateOf<WebDavSync.IcsUploadResult?>(null) }
+    var themeMode by remember { mutableIntStateOf(ThemeStore.mode(context)) }
+    val activeColorIdx = ThemeStore.colorIndex(context)
 
-    Box(Modifier.fillMaxSize().background(softCanvas())) {
-    Scaffold(
-        containerColor = Color.Transparent,
-        contentWindowInsets = WindowInsets.statusBars,
-        topBar = {
-            if (!showBack) {
-                com.reminderapp.ui.theme.SoftScreenTitle(title = zh("设置"))
-            } else TopAppBar(
-                title = {
-                    Text(
-                        zh("设置"),
-                        fontSize = Tokens.TitleSize,
-                        lineHeight = Tokens.TitleLine,
-                        fontWeight = FontWeight.SemiBold,
-                        color = softText()
-                    )
-                },
-                navigationIcon = {
-                    if (showBack) {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = zh("返回"))
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent
-                )
-            )
-        }
-    ) { padding ->
+    Column(modifier = Modifier.fillMaxSize().background(colors.canvas)) {
+        ComicTopBar(
+            title = zh("设置"),
+            onBack = if (showBack) onBack else null,
+            showShard = !showBack
+        )
+
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(Tokens.SettingsGroupGap)
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 104.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // === 语言（v2.0.4：手动切换，跟随系统为默认） ===
-            item {
-                SettingsCard {
-                    Row(
-                        modifier = Modifier.settingsSingleRow(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Filled.Translate, contentDescription = null,
-                            tint = Tokens.BrandPrimary, modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(zh("语言"), style = MaterialTheme.typography.bodyLarge)
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(
-                            LocaleManager.displayName(LocaleManager.currentCode(context)),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    HorizontalDivider()
-                    LocaleManager.options.forEach { code ->
-                        Row(
-                            modifier = Modifier
-                                .settingsSingleRow()
-                                .clickableItem { LocaleManager.setLanguage(context, code) },
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                LocaleManager.displayName(code),
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                            Spacer(modifier = Modifier.weight(1f))
-                            if (LocaleManager.currentCode(context) == code) {
-                                Icon(
-                                    Icons.Filled.Check, contentDescription = null,
-                                    tint = Tokens.BrandPrimary, modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    }
-                }
+            item(key = "settings-appearance") {
+                SettingsAppearanceCard(
+                    themeMode = themeMode,
+                    activeColorIdx = activeColorIdx,
+                    onThemeModeChange = { themeMode = it }
+                )
             }
 
-            // === 外观（v2.1.1：手动主题，自签环境常用；0=跟随系统 1=浅色 2=深色） ===
-            item {
-                var themeMode by remember { mutableStateOf(com.reminderapp.ui.theme.ThemeStore.mode(context)) }
+            item(key = "settings-data-ai") {
                 SettingsCard {
-                    Row(
-                        modifier = Modifier.settingsSingleRow(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Filled.Palette, contentDescription = null,
-                            tint = Tokens.BrandPrimary, modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(zh("外观"), style = MaterialTheme.typography.bodyLarge)
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(
-                            when (themeMode) {
-                                1 -> zh("浅色")
-                                2 -> zh("深色")
-                                else -> zh("跟随系统")
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    HorizontalDivider()
-                    // v2.4.0: 主题色板（切换即全局换肤，Activity recreate 立即生效）
-                    Row(
-                        modifier = Modifier.settingsSingleRow(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(zh("主题色"), style = MaterialTheme.typography.bodyLarge)
-                        Spacer(modifier = Modifier.weight(1f))
-                        com.reminderapp.ui.theme.Tokens.Palettes.forEachIndexed { index, palette ->
-                            Box(
-                                modifier = Modifier
-                                    .size(Tokens.SettingsThemeDot)
-                                    .clip(CircleShape)
-                                    .background(palette.primary)
-                                    .clickableItem {
-                                        com.reminderapp.ui.theme.ThemeStore.setColorIndex(context, index)
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (com.reminderapp.ui.theme.ThemeStore.colorIndex(context) == index) {
-                                    Icon(
-                                        Icons.Filled.Check, contentDescription = null,
-                                        tint = Color.White, modifier = Modifier.size(14.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                        }
-                    }
-                    HorizontalDivider()
-                    listOf(0 to zh("跟随系统"), 1 to zh("浅色"), 2 to zh("深色")).forEach { (mode, label) ->
-                        Row(
-                            modifier = Modifier
-                                .settingsSingleRow()
-                                .clickableItem {
-                                    com.reminderapp.ui.theme.ThemeStore.setMode(context, mode)
-                                    themeMode = mode
-                                },
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(label, style = MaterialTheme.typography.bodyLarge)
-                            Spacer(modifier = Modifier.weight(1f))
-                            if (themeMode == mode) {
-                                Icon(
-                                    Icons.Filled.Check, contentDescription = null,
-                                    tint = Tokens.BrandPrimary, modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // === 同步 ===
-            item {
-                SettingsCard {
-                    SettingRow(
-                        icon = Icons.Filled.CloudSync,
+                    ComicSettingRow(
                         title = zh("WebDAV 同步"),
                         subtitle = zh("坚果云/自建服务器备份与多端同步"),
                         onClick = onOpenSyncSettings
                     )
-                    HorizontalDivider()
-                    // 批次3 功能4: 把 .ics 上传到 WebDAV，拿到可订阅链接
-                    SettingRow(
-                        icon = Icons.Filled.CalendarMonth,
+                    ComicSettingRow(
                         title = if (icsBusy) zh("正在上传日历…") else zh("日历订阅链接"),
                         subtitle = zh("上传 .ics 到 WebDAV，供系统日历订阅"),
                         onClick = {
                             if (!icsBusy) {
                                 scope.launch {
                                     icsBusy = true
-                                    val list = try {
-                                        com.reminderapp.data.database.AppDatabase
-                                            .getInstance(context).reminderDao().getAllSync()
-                                    } catch (_: Exception) {
-                                        emptyList()
-                                    }
-                                    icsResult = com.reminderapp.service.WebDavSync.uploadIcs(list)
+                                    val list = runCatching { AppDatabase.getInstance(context).reminderDao().getAllSync() }
+                                        .getOrDefault(emptyList())
+                                    icsResult = WebDavSync.uploadIcs(list)
                                     icsBusy = false
                                 }
                             }
                         }
                     )
-                }
-            }
-
-            // === AI ===
-            item {
-                SettingsCard {
-                    SettingRow(
-                        icon = Icons.Filled.SmartToy,
+                    ComicSettingRow(
                         title = zh("AI 助手设置"),
                         subtitle = zh("API 地址、模型与本地模式"),
                         onClick = onOpenAISettings
                     )
-                }
-            }
-
-            // === 维护（v2.1.1：提醒可靠性诊断 + 本地备份） ===
-            item {
-                SettingsCard {
-                    SettingRow(
-                        icon = Icons.Filled.Build,
+                    ComicHairline(isInner = true)
+                    ComicSettingRow(
                         title = zh("提醒诊断"),
                         subtitle = zh("通知权限 / 排期 / 数据规模检查"),
                         onClick = onOpenDiagnostics
                     )
-                    HorizontalDivider()
-                    // v2.1.1: 本地备份（自签无 iCloud 的兜底；写入「下载」目录，保留最近 5 份）
-                    Row(
-                        modifier = Modifier
-                            .settingsDualRow()
-                            .clickableItem {
-                                val name = com.reminderapp.service.LocalBackupService.backupNow(context)
-                                android.widget.Toast.makeText(
-                                    context,
-                                    if (name != null) zhf("已备份到下载目录：%s", name)
-                                    else zh("备份失败"),
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
-                            },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Filled.FileUpload, contentDescription = null,
-                            tint = Tokens.BrandPrimary, modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(zh("立即备份"), style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                zh("备份到下载目录（保留最近 5 份）"),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                    ComicSettingRow(
+                        title = zh("立即备份"),
+                        subtitle = zh("备份到下载目录（保留最近 5 份）"),
+                        onClick = {
+                            val name = LocalBackupService.backupNow(context)
+                            Toast.makeText(
+                                context,
+                                if (name != null) zhf("已备份到下载目录：%s", name) else zh("备份失败"),
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
-                    }
-                    HorizontalDivider()
-                    Row(
-                        modifier = Modifier
-                            .settingsDualRow()
-                            .clickableItem {
-                                showLocalBackupDialog = true
-                                scope.launch {
-                                    localBackups = withContext(Dispatchers.IO) {
-                                        LocalBackupService.listBackups(context)
-                                    }
-                                }
-                            },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Filled.FileDownload, contentDescription = null,
-                            tint = Tokens.BrandPrimary, modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(zh("恢复本地备份"), style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                zh("从下载目录导入已备份的提醒"),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                    )
+                    ComicSettingRow(
+                        title = zh("恢复本地备份"),
+                        subtitle = zh("从下载目录导入已备份的提醒"),
+                        onClick = {
+                            showLocalBackupDialog = true
+                            scope.launch {
+                                localBackups = withContext(Dispatchers.IO) { LocalBackupService.listBackups(context) }
+                            }
                         }
-                    }
+                    )
                 }
             }
 
-            // === 关于 ===
-            item {
+            item(key = "settings-about") {
                 SettingsCard {
-                    // 版本号
                     Row(
-                        modifier = Modifier.settingsSingleRow(),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Filled.Info, contentDescription = null,
-                            tint = Tokens.BrandPrimary, modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(zh("版本"), style = MaterialTheme.typography.bodyLarge)
-                        Spacer(modifier = Modifier.weight(1f))
+                        Text(zh("版本"), color = colors.ink, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                         Text(
                             "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = colors.muted,
+                            fontSize = 13.sp,
+                            style = TextStyle(fontFeatureSettings = "tnum")
                         )
                     }
-                    HorizontalDivider()
-
-                    // 检查更新
                     Row(
                         modifier = Modifier
-                            .settingsSingleRow()
-                            .clickableItem {
+                            .fillMaxWidth()
+                            .clickable {
                                 checking = true
                                 scope.launch {
                                     val info = UpdateService.checkLatest()
                                     checking = false
                                     when {
-                                        info == null -> android.widget.Toast.makeText(
-                                            context, zh("检查更新失败，请检查网络后重试"),
-                                            android.widget.Toast.LENGTH_SHORT
-                                        ).show()
-                                        UpdateService.isNewer(info.latestVersion, UpdateService.currentVersion()) ->
-                                            updateInfo = info
-                                        else -> android.widget.Toast.makeText(
-                                            context, zhf("当前已是最新版本 v%s", UpdateService.currentVersion()),
-                                            android.widget.Toast.LENGTH_SHORT
-                                        ).show()
+                                        info == null -> Toast.makeText(context, zh("检查更新失败，请检查网络后重试"), Toast.LENGTH_SHORT).show()
+                                        UpdateService.isNewer(info.latestVersion, UpdateService.currentVersion()) -> updateInfo = info
+                                        else -> Toast.makeText(context, zhf("当前已是最新版本 v%s", UpdateService.currentVersion()), Toast.LENGTH_SHORT).show()
                                     }
                                 }
-                            },
+                            }
+                            .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Filled.Refresh, contentDescription = null,
-                            tint = Tokens.BrandPrimary, modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(zh("检查更新"), style = MaterialTheme.typography.bodyLarge)
-                        Spacer(modifier = Modifier.weight(1f))
-                        if (checking) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                        }
+                        Text(zh("检查更新"), color = colors.ink, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        if (checking) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = colors.accent)
+                        else Text("›", color = colors.muted, fontSize = 15.sp)
                     }
-                    HorizontalDivider()
-
-                    // 更新日志
                     Row(
-                        modifier = Modifier
-                            .settingsSingleRow()
-                            .clickableItem { showChangelog = true },
+                        modifier = Modifier.fillMaxWidth().clickable { showChangelog = true }.padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Filled.Build, contentDescription = null,
-                            tint = Tokens.BrandPrimary, modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(zh("更新日志"), style = MaterialTheme.typography.bodyLarge)
-                        Spacer(modifier = Modifier.weight(1f))
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Text(zh("更新日志"), color = colors.ink, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Text("›", color = colors.muted, fontSize = 15.sp)
                     }
                 }
             }
 
-            item {
+            item(key = "settings-footer") {
                 Text(
                     zh("循环提醒 · 支持多端同步与在线升级"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp)
-                        .wrapContentWidth(Alignment.CenterHorizontally)
+                    color = colors.muted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp).wrapContentWidth(Alignment.CenterHorizontally)
                 )
             }
         }
     }
 
-    // 批次3 功能4: 日历订阅链接结果弹窗
-    icsResult?.let { result ->
-        when (result) {
-            is com.reminderapp.service.WebDavSync.IcsUploadResult.Success -> AlertDialog(
-                onDismissRequest = { icsResult = null },
-                title = { Text(zh("日历已上传")) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            zhf("已把 %s 条提醒导出为 reminders.ics 并上传到你的 WebDAV 目录。", result.count),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            result.url,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            zh(
-                                "这个地址需要账号密码，系统日历无法直接订阅。请在网盘网页端找到该文件 → 创建分享链接 →" +
-                                    "把分享直链填进「日历 → 添加订阅日历」。之后每次点这里重新上传，订阅端刷新即可看到最新日程。"
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
-                            as android.content.ClipboardManager
-                        cm.setPrimaryClip(android.content.ClipData.newPlainText("ics", result.url))
-                        android.widget.Toast.makeText(
-                            context, zh("链接已复制"), android.widget.Toast.LENGTH_SHORT
-                        ).show()
-                        icsResult = null
-                    }) { Text(zh("复制链接")) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { icsResult = null }) { Text(zh("关闭")) }
-                }
-            )
-            is com.reminderapp.service.WebDavSync.IcsUploadResult.Error -> AlertDialog(
-                onDismissRequest = { icsResult = null },
-                title = { Text(zh("上传失败")) },
-                text = { Text(result.message) },
-                confirmButton = {
-                    TextButton(onClick = { icsResult = null }) { Text(zh("好")) }
-                }
-            )
-        }
-    }
-
-    // 更新日志弹窗
-    if (showChangelog) {
-        AlertDialog(
-            onDismissRequest = { showChangelog = false },
-            title = { Text(zh("更新日志")) },
-            text = {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    changelog.forEach { (version, items) ->
-                        item {
-                            Column {
-                                Text(version, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                                items.forEach { item ->
-                                    Text("· $item", style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showChangelog = false }) { Text(zh("好")) }
-            }
-        )
-    }
-
-    // 发现新版本弹窗（下载/跳转）
-    updateInfo?.let { info ->
-        AlertDialog(
-            onDismissRequest = { updateInfo = null },
-            title = { Text(zhf("发现新版本 v%s", info.latestVersion)) },
-            text = { Text(zhf("当前版本 v%s，是否下载安装？", UpdateService.currentVersion())) },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        val apkUrl = info.apkUrl
-                        if (apkUrl != null) {
-                            try {
-                                // v2.2.1: 多候选 + 镜像兜底下载（传整个 UpdateInfo 携带 tag）
-                                val apk = UpdateService.downloadApk(context, info)
-                                UpdateService.install(context, apk)
-                            } catch (e: Exception) {
-                                android.widget.Toast.makeText(
-                                    context, zhf("下载失败: %s", e.message), android.widget.Toast.LENGTH_LONG
-                                ).show()
-                            }
-                        } else {
-                            UpdateService.openReleasePage(context, info.releaseUrl)
-                        }
-                        updateInfo = null
-                    }
-                }) { Text(zh("前往下载")) }
-            },
-            dismissButton = {
-                TextButton(onClick = { updateInfo = null }) { Text(zh("稍后再说")) }
-            }
-        )
-    }
-    if (showLocalBackupDialog) {
-        AlertDialog(
-            onDismissRequest = { showLocalBackupDialog = false },
-            title = { Text(zh("恢复本地备份")) },
-            text = {
-                if (localBackups.isEmpty()) {
-                    Text(zh("未找到本地备份文件"), style = MaterialTheme.typography.bodyMedium)
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        localBackups.forEach { entry ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        showLocalBackupDialog = false
-                                        scope.launch {
-                                            val json = withContext(Dispatchers.IO) { entry.readJson() }
-                                            val parsed = json?.let { BackupService.importFromJson(it) }
-                                            if (parsed == null) {
-                                                android.widget.Toast.makeText(context, zh("数据解析失败"), android.widget.Toast.LENGTH_SHORT).show()
-                                                return@launch
-                                            }
-                                            val imported = runCatching {
-                                                ReminderActions(context, AppDatabase.getInstance(context)).importItems(parsed, json)
-                                            }.getOrNull()
-                                            android.widget.Toast.makeText(
-                                                context,
-                                                if (imported != null) zhf("导入完成：新增 %1\$s 条，跳过重复 %2\$s 条", imported.saved.size, imported.skipped) else zh("恢复失败"),
-                                                android.widget.Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    }
-                                    .padding(vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(entry.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                                    Text("${(entry.sizeBytes / 1024L).coerceAtLeast(1L)} KB", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                Text(zh("恢复"), color = Tokens.BrandPrimary, style = MaterialTheme.typography.labelLarge)
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showLocalBackupDialog = false }) { Text(zh("关闭")) }
-            }
-        )
-    }
-    }
-}
-
-/** 更新日志数据（与 iOS 一致） */
-private val changelog: List<Pair<String, List<String>>> = listOf(
-    "v2.10.0" to listOf(
-        "全新 Warm-Paper & Deep-Teal 设计语言，切换主题色与深浅模式实时生效",
-        "修复日期农历跨年与闰日触发、调休补班顺延、规则周期日历标点与统计漏掉口径",
-        "优化首页双层操作栏与列表底部留白，新增卡片快捷跳过与本地备份/同步快照恢复",
-        "WebDAV 增量内容指纹去重（内容一致零冲突）并完善桌面小组件深色模式适配"
-    ),
-    "v2.9.0" to listOf(
-        "双端对齐增量同步代际、删除墓碑与并发动作防护",
-        "支持自定义重试间隔与勿扰时段"
-    ),
-    "v2.5.0" to listOf(
-        "升级多套主题色板、统计热力图、连续打卡追踪与智能频率建议"
-    ),
-    "v1.9.2" to listOf(
-        "修复收不到更新提示（GitHub API 国内超时）",
-        "WebDAV 坚果云友好错误提示 + 测试连接按钮"
-    ),
-    "v1.9.1" to listOf(
-        "AI 支持创建规则提醒（每季度/每月/每年 第N周周X）",
-        "首页菜单新增检查更新入口"
-    ),
-    "v1.9.0" to listOf(
-        "UI 优化：滴答清单风格（渐变概览卡、已完成划线、卡片圆角阴影）",
-        "日历：滑动切月 + 月份选择器 + 回到今天",
-        "在线升级：自动检查 GitHub 最新版本并下载安装",
-        "新增 App 图标（品牌紫 + 铃铛）"
-    ),
-    "v1.8.7" to listOf(
-        "小组件增强：农历日期格、倒计时、完成按钮、大尺寸",
-        "节假日联网补全：日历显示休/班",
-        "统计洞察：完成率、连续打卡、忘记时段、月历热力图",
-        ".ics 日历导出",
-        "设计令牌统一（主色青碧 #159A9C）",
-        "崩溃监控 + 埋点基础设施"
+    SettingsDialogs(
+        icsResult = icsResult,
+        onDismissIcs = { icsResult = null },
+        showChangelog = showChangelog,
+        onDismissChangelog = { showChangelog = false },
+        updateInfo = updateInfo,
+        onDismissUpdate = { updateInfo = null },
+        showLocalBackupDialog = showLocalBackupDialog,
+        localBackups = localBackups,
+        onDismissLocalBackup = { showLocalBackupDialog = false }
     )
-)
+}
 
 @Composable
 internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .softCard(com.reminderapp.ui.theme.SoftKind.Card)
-            .padding(horizontal = Tokens.SettingsGroupPadX, vertical = Tokens.SettingsGroupPadY),
+    ComicCard(
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
         content = content
     )
 }
 
 @Composable
-private fun SettingRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit
-) {
+private fun ComicSettingRow(title: String, subtitle: String, onClick: () -> Unit) {
+    val colors = comicColors()
     Row(
-        modifier = Modifier
-            .settingsDualRow()
-            .clickableItem(onClick),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = Tokens.BrandPrimary, modifier = Modifier.size(22.dp))
-        Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title, color = colors.ink, fontSize = 14.5.sp, fontWeight = FontWeight.Bold)
+            Text(subtitle, color = colors.muted, fontSize = 12.sp)
         }
-        Icon(
-            Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Spacer(Modifier.width(8.dp))
+        Text("›", color = colors.muted, fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
 }
-
-private fun Modifier.settingsSingleRow(): Modifier =
-    this
-        .fillMaxWidth()
-        .heightIn(min = Tokens.SettingsRowH)
-
-private fun Modifier.settingsDualRow(): Modifier =
-    this
-        .fillMaxWidth()
-        .heightIn(min = Tokens.SettingsRowH2)
-
-private fun Modifier.clickableItem(onClick: () -> Unit): Modifier =
-    this.clickable(onClick = onClick)

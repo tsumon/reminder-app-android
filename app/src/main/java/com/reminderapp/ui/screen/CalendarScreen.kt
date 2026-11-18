@@ -1,41 +1,49 @@
 package com.reminderapp.ui.screen
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.reminderapp.data.entity.ReminderEntity
-import com.reminderapp.service.ReminderEngine
-import com.reminderapp.ui.theme.SoftCircleButton
-import com.reminderapp.ui.theme.SoftScreenTitle
-import com.reminderapp.ui.theme.SoftSectionHeader
-import com.reminderapp.ui.theme.StatusOverdue
-import com.reminderapp.ui.theme.StatusReminding
-import com.reminderapp.ui.theme.StatusWaiting
-import com.reminderapp.ui.theme.Tokens
-import com.reminderapp.ui.theme.softCanvas
-import com.reminderapp.ui.theme.softMuted
-import com.reminderapp.ui.theme.softText
-import com.reminderapp.ui.theme.softSurface
-import java.util.*
 import com.reminderapp.i18n.zh
 import com.reminderapp.i18n.zhf
+import com.reminderapp.service.ReminderEngine
+import com.reminderapp.ui.comic.ComicCard
+import com.reminderapp.ui.comic.ComicTextAction
+import com.reminderapp.ui.comic.ComicTopBar
+import com.reminderapp.ui.comic.comicColors
+import com.reminderapp.ui.comic.cycleSummaryLabel
+import java.util.Calendar
+import java.util.Locale
 
-/**
- * 日历 Tab（v1.9.8 UI 对齐设计图）：
- * 整页月历（农历/节假日/任务标记）+ 点击日期展示「当天任务」列表
- * v2.5.0: 传入 streak/weekDone 时日历卡底部展示本周彩虹跑道（默认 null 隐藏）
- */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarScreen(
     reminders: List<ReminderEntity>,
@@ -45,6 +53,7 @@ fun CalendarScreen(
     streak: Int? = null,
     weekDone: Int? = null
 ) {
+    val colors = comicColors()
     var selectedDate by remember { mutableStateOf<Long?>(System.currentTimeMillis()) }
     val todayCal = remember { Calendar.getInstance() }
     var displayYear by remember { mutableIntStateOf(todayCal.get(Calendar.YEAR)) }
@@ -53,51 +62,44 @@ fun CalendarScreen(
     fun shiftMonth(delta: Int) {
         var m = displayMonth + delta
         var y = displayYear
-        if (m < 0) { m = 11; y-- }
-        else if (m > 11) { m = 0; y++ }
+        if (m < 0) {
+            m = 11; y--
+        } else if (m > 11) {
+            m = 0; y++
+        }
         displayYear = y
         displayMonth = m
     }
 
-    Box(Modifier.fillMaxSize().background(softCanvas())) {
-    Scaffold(
-        containerColor = Color.Transparent,
-        contentWindowInsets = WindowInsets.statusBars,
-        topBar = {
-            SoftScreenTitle(
-                title = zh("日历"),
-                leading = {
-                    SoftCircleButton(onClick = { shiftMonth(-1) }, size = 40.dp, contentDescription = zh("上一月")) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                            contentDescription = null,
-                            tint = Tokens.BrandPrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                },
-                trailing = {
-                    SoftCircleButton(onClick = { shiftMonth(1) }, size = 40.dp, contentDescription = zh("下一月")) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = null,
-                            tint = Tokens.BrandPrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-            )
-        }
-    ) { padding ->
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.canvas)
+    ) {
+        ComicTopBar(
+            title = zh("日历"),
+            showShard = true,
+            trailing = {
+                ComicTextAction(
+                    text = "‹ " + zh("上一月"),
+                    onClick = { shiftMonth(-1) },
+                    modifier = Modifier.semantics { contentDescription = zh("上一月") }
+                )
+                ComicTextAction(
+                    text = zh("下一月") + " ›",
+                    onClick = { shiftMonth(1) },
+                    modifier = Modifier.semantics { contentDescription = zh("下一月") }
+                )
+            }
+        )
+
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 104.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 整页月历
-            item {
+            // Card 1 — Clean Unlined Month ComicCard
+            item(key = "calendar-month") {
                 CalendarCard(
                     reminders = reminders,
                     displayYear = displayYear,
@@ -113,66 +115,102 @@ fun CalendarScreen(
                 )
             }
 
-            // 当日任务标题
-            val ts = selectedDate
-            item {
-                if (ts == null) {
-                    SoftSectionHeader(zh("点击日期查看当天任务"), StatusWaiting)
-                } else {
-                    val cal = Calendar.getInstance().apply { timeInMillis = ts }
-                    val names = arrayOf("星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六")
-                    val weekday = names[cal.get(Calendar.DAY_OF_WEEK) - 1]
-                    SoftSectionHeader(
-                        zhf("%1\$s月%2\$s日 · %3\$s的任务", cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH), weekday),
-                        StatusReminding,
-                        count = reminders.count {
-                            it.isActive && ReminderEngine.occursOn(
-                                it,
-                                cal.get(Calendar.YEAR),
-                                cal.get(Calendar.MONTH) + 1,
-                                cal.get(Calendar.DAY_OF_MONTH)
-                            )
-                        }
-                    )
-                }
-            }
-
-            item { OutlinedButton(onClick={onCreateOnDay(selectedDate ?: System.currentTimeMillis())},modifier=Modifier.fillMaxWidth()) { Text(zh("添加当天提醒")) } }
-
-            // 当日任务列表
-            if (ts != null) {
+            // Card 2 — Unlined Day Schedule ComicCard
+            item(key = "calendar-day-list") {
+                val ts = selectedDate ?: System.currentTimeMillis()
                 val cal = Calendar.getInstance().apply { timeInMillis = ts }
                 val y = cal.get(Calendar.YEAR)
                 val m = cal.get(Calendar.MONTH) + 1
                 val d = cal.get(Calendar.DAY_OF_MONTH)
-                val dateReminders = reminders.filter { it.isActive && ReminderEngine.occursOn(it, y, m, d) }
+                val names = arrayOf(zh("周日"), zh("周一"), zh("周二"), zh("周三"), zh("周四"), zh("周五"), zh("周六"))
+                val weekday = names[cal.get(Calendar.DAY_OF_WEEK) - 1]
+                val dateReminders = reminders.filter {
+                    it.isActive && ReminderEngine.occursOn(it, y, m, d)
+                }.sortedBy { it.reminderHour * 60 + it.reminderMinute }
 
-                if (dateReminders.isEmpty()) {
-                    item {
+                ComicCard(
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            zh("这一天没有提醒"),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = softMuted(),
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 30.dp)
+                            text = zhf("%1\$s月%2\$s日", m, d) + " · $weekday",
+                            color = colors.ink,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            modifier = Modifier.weight(1f),
+                            style = TextStyle(fontFeatureSettings = "tnum")
+                        )
+                        ComicTextAction(
+                            text = "+ " + zh("添加当天提醒"),
+                            onClick = { onCreateOnDay(ts) },
+                            accent = true,
+                            fontSize = 12.5.sp
                         )
                     }
-                } else {
-                    items(dateReminders, key = { it.id }) { r ->
-                        val now = System.currentTimeMillis()
-                        val due = r.isActive && r.status != "confirmed" &&
-                            (r.status == "notifying" || r.status == "overdue" || r.status == "snoozed" ||
-                                (r.status == "pending" && r.nextTriggerAt <= now))
-                        ReminderCard(
-                            r,
-                            if (r.status == "overdue") StatusOverdue else StatusReminding,
-                            onDelete = {},
-                            onClick = { onReminderClick(r.id) },
-                            onConfirm = if (due) ({ onConfirm(r) }) else null
+
+                    if (dateReminders.isEmpty()) {
+                        Text(
+                            text = zh("这一天没有提醒"),
+                            color = colors.muted,
+                            fontSize = 13.5.sp,
+                            modifier = Modifier.padding(vertical = 8.dp)
                         )
+                    } else {
+                        val now = System.currentTimeMillis()
+                        dateReminders.forEach { r ->
+                            val due = r.isActive && r.status != "confirmed" &&
+                                (r.status == "notifying" || r.status == "overdue" || r.status == "snoozed" ||
+                                    (r.status == "pending" && r.nextTriggerAt <= now))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onReminderClick(r.id) }
+                                    .padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = String.format(Locale.US, "%02d:%02d", r.reminderHour, r.reminderMinute),
+                                    color = colors.muted,
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    style = TextStyle(fontFeatureSettings = "tnum"),
+                                    modifier = Modifier.width(52.dp)
+                                )
+                                Text(
+                                    text = r.title,
+                                    color = colors.ink,
+                                    fontSize = 14.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = cycleSummaryLabel(r),
+                                    color = colors.muted,
+                                    fontSize = 12.sp
+                                )
+                                if (due) {
+                                    Spacer(Modifier.width(10.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = zh("确认完成"),
+                                        tint = colors.accent,
+                                        modifier = Modifier
+                                            .size(17.dp)
+                                            .clickable { onConfirm(r) }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
-    }
     }
 }

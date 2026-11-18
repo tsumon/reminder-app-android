@@ -112,7 +112,7 @@ class ReminderWidgetProvider : AppWidgetProvider() {
         views.setTextViewText(R.id.widget_next_label, locCtx.getString(R.string.widget_next_label))
         views.setTextViewText(R.id.widget_complete_btn, locCtx.getString(R.string.confirm_action))
         views.setTextViewText(R.id.widget_snooze_btn, locCtx.getString(R.string.snooze_action))
-        views.setTextViewText(R.id.widget_unhandled_count, data.unhandledCount.toString())
+        views.setTextViewText(R.id.widget_unhandled_count, String.format(Locale.US, "#%02d", data.unhandledCount))
         views.setTextViewText(R.id.widget_lunar, data.lunarText)
 
         if (data.nextTitle != null) {

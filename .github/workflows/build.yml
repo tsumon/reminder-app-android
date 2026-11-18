@@ -112,11 +112,11 @@ jobs:
           CERT=$("$TOOLS/apksigner" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
           test "$CERT" = "0ea509a1dc9461c291a2db47caf5f055d83e4108fb28c3e87ed4fa62bead7038"
           "$TOOLS/aapt" dump badging "$APK" > /tmp/reminder-package.txt
-          grep -q "package: name='com.reminderapp' versionCode='73' versionName='2.10.0'" /tmp/reminder-package.txt
+          grep -q "package: name='com.reminderapp' versionCode='74' versionName='2.11.0'" /tmp/reminder-package.txt
           grep -q "sdkVersion:'26'" /tmp/reminder-package.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: app-release-2.10.0.apk
+          name: app-release-2.11.0.apk
           path: app/build/outputs/apk/release/*.apk
           retention-days: 30
       - name: Prepare versioned release assets
@@ -131,6 +131,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: app/build/outputs/apk/release/app-release-${{ env.VERSION }}.apk
-          body_path: docs/releases/v2.10.0.md
+          body_path: docs/releases/v2.11.0.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

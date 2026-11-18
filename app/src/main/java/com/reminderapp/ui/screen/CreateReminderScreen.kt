@@ -1,80 +1,61 @@
 package com.reminderapp.ui.screen
 
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import android.app.NotificationManager
+import android.os.Build
+import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Alarm
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Cake
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.EventRepeat
-import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.WbSunny
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationManagerCompat
+import com.reminderapp.ReminderApp
 import com.reminderapp.data.entity.ReminderEntity
+import com.reminderapp.data.entity.ReminderRecordEntity
+import com.reminderapp.i18n.zh
 import com.reminderapp.model.Cycle
 import com.reminderapp.model.DateReminderType
 import com.reminderapp.model.RulePeriod
-import com.reminderapp.model.weekLabels
-import com.reminderapp.model.weekdayLabels
-import com.reminderapp.service.HolidayService
-import com.reminderapp.service.LunarCalendar
-import com.reminderapp.service.NaturalDateParser
-import com.reminderapp.service.ReminderEngine
-import com.reminderapp.ui.theme.Playful
-import com.reminderapp.ui.theme.Tokens
-import com.reminderapp.ui.theme.isSoftDark
-import com.reminderapp.ui.theme.softBorder
-import com.reminderapp.ui.theme.softCanvas
-import com.reminderapp.ui.theme.softMuted
-import com.reminderapp.ui.theme.softSurface
-import com.reminderapp.ui.theme.softText
-import java.util.*
-import com.reminderapp.i18n.zh
-import com.reminderapp.i18n.zhf
-import com.reminderapp.ReminderApp
-import com.reminderapp.data.entity.ReminderRecordEntity
 import com.reminderapp.service.FrequencySuggester
+import com.reminderapp.service.HolidayService
+import com.reminderapp.service.ReminderEditorMapper
+import com.reminderapp.service.ReminderEngine
+import com.reminderapp.service.ReminderScheduler
+import com.reminderapp.service.ReminderTemplate
+import com.reminderapp.ui.comic.ComicButton
+import com.reminderapp.ui.comic.ComicTopBar
+import com.reminderapp.ui.comic.comicColors
+import com.reminderapp.ui.screen.editor.EditorAdvancedDrawer
+import com.reminderapp.ui.screen.editor.EditorDateTimeAndPermissionDialogs
+import com.reminderapp.ui.screen.editor.EditorMainCard
+import com.reminderapp.ui.screen.editor.EditorQuickAndTemplatesStrip
+import com.reminderapp.ui.screen.editor.buildEditorFirstTriggerAt
+import com.reminderapp.ui.screen.editor.buildSavedReminderPair
+import com.reminderapp.ui.screen.editor.parseEditorNaturalLanguage
+import java.util.Calendar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import android.app.NotificationManager
-import android.content.Intent
-import android.net.Uri
-import android.os.Build
-import android.provider.Settings
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateReminderScreen(
     onSave: (ReminderEntity) -> Unit,
@@ -82,21 +63,25 @@ fun CreateReminderScreen(
     initial: ReminderEntity? = null,
     onSaveAll: ((List<ReminderEntity>) -> Unit)? = null
 ) {
+    val colors = comicColors()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
+
     var saving by remember { mutableStateOf(false) }
     var policyValid by remember { mutableStateOf(true) }
-    val seeded=remember(initial) { initial?.let(com.reminderapp.service.ReminderEditorMapper::seed) }
-    var policy by remember { mutableStateOf(initial ?: ReminderEntity(title="",firstTriggerAt=0,nextTriggerAt=0)) }
+    var showAdvanced by remember { mutableStateOf(false) }
+    val seeded = remember(initial) { initial?.let(ReminderEditorMapper::seed) }
+    var policy by remember { mutableStateOf(initial ?: ReminderEntity(title = "", firstTriggerAt = 0, nextTriggerAt = 0)) }
 
-    // 表单状态
     var title by remember { mutableStateOf(seeded?.title ?: "") }
     var note by remember { mutableStateOf(seeded?.note ?: "") }
     var isDateMode by remember { mutableStateOf(seeded?.kind == "date") }
     var isRuleMode by remember { mutableStateOf(seeded?.kind == "rule") }
-    var selectedCycle by remember { mutableStateOf(Cycle.values().find { it.name.lowercase()==seeded?.cycle } ?: Cycle.WEEKLY) }
-    // v2.4.1: 每周提醒的星期选择（0=今天，1-7=周一..周日）——修复「每周日」锚点错位
-    var weeklyWeekday by remember { mutableStateOf(seeded?.weeklyWeekday ?: 0) }
-    var weeklyWeekdayExpanded by remember { mutableStateOf(false) }
+    var selectedCycle by remember {
+        mutableStateOf(Cycle.entries.find { it.name.lowercase() == seeded?.cycle } ?: Cycle.WEEKLY)
+    }
+    var weeklyWeekday by remember { mutableIntStateOf(seeded?.weeklyWeekday ?: 0) }
     var customDays by remember { mutableIntStateOf(seeded?.customDays?.coerceAtLeast(1) ?: 1) }
     var customDaysText by remember(initial?.id) { mutableStateOf(customDays.toString()) }
     LaunchedEffect(customDays) {
@@ -104,7 +89,10 @@ fun CreateReminderScreen(
             customDaysText = customDays.toString()
         }
     }
-    var selectedDateType by remember { mutableStateOf<DateReminderType?>(DateReminderType.values().find { it.name.lowercase()==seeded?.dateType }) }
+
+    var selectedDateType by remember {
+        mutableStateOf(DateReminderType.entries.find { it.name.lowercase() == seeded?.dateType })
+    }
     var targetMonth by remember { mutableIntStateOf(seeded?.targetMonth ?: 1) }
     var targetMonthText by remember(initial?.id) { mutableStateOf(targetMonth.toString()) }
     LaunchedEffect(targetMonth) {
@@ -119,1119 +107,260 @@ fun CreateReminderScreen(
             targetDayText = targetDay.toString()
         }
     }
-    var selectedHolidayName by remember { mutableStateOf<String?>(seeded?.holidayName) }
+    var selectedHolidayName by remember { mutableStateOf(seeded?.holidayName) }
     var advanceDays by remember { mutableIntStateOf(seeded?.advanceDays ?: 3) }
-    // 规则提醒字段
-    var rulePeriod by remember { mutableStateOf(RulePeriod.values().find { it.name.lowercase()==seeded?.rulePeriod } ?: RulePeriod.QUARTERLY) }
+
+    var rulePeriod by remember {
+        mutableStateOf(RulePeriod.entries.find { it.name.lowercase() == seeded?.rulePeriod } ?: RulePeriod.QUARTERLY)
+    }
     var ruleWeek by remember { mutableIntStateOf(seeded?.ruleWeek ?: 2) }
-    var ruleWeekday by remember { mutableIntStateOf(seeded?.ruleWeekday ?: 2) } // 周二
-
-    // 优先级
-    var priority by remember { mutableStateOf(seeded?.priority ?: "normal") } // high / normal / low
-
-    // 批次3 功能5: 关键提醒开关（触发更高优先级渠道 + 全屏弹窗）
+    var ruleWeekday by remember { mutableIntStateOf(seeded?.ruleWeekday ?: 2) }
+    var priority by remember { mutableStateOf(seeded?.priority ?: "normal") }
     var isCritical by remember { mutableStateOf(seeded?.isCritical ?: false) }
-    // v2.4.8: 避开节假日/周末自动顺延
     var holidayAware by remember { mutableStateOf(seeded?.holidayAware ?: false) }
-
-    // H2: 关键提醒全屏权限引导对话框（Android 14+ 未授予时弹出）
     var showFullScreenPermissionDialog by remember { mutableStateOf(false) }
-
-    // 功能8 智能频率建议：建议文案（点击「智能建议频率」后回填周期选择）
     var suggestionText by remember { mutableStateOf<String?>(null) }
 
-    // 自然语言快速创建
     var nlText by remember { mutableStateOf("") }
     var nlHint by remember { mutableStateOf<String?>(null) }
     var nlError by remember { mutableStateOf(false) }
-    // v2.4.9: 新历+旧历并存 → 保存时拆两条
     var nlDualBirthday by remember { mutableStateOf(false) }
-    var nlExtraLunar by remember { mutableStateOf<ReminderEntity?>(null) }
 
-    // 日期时间选择
-    val now = Calendar.getInstance().apply { if(initial!=null) { timeInMillis=initial.firstTriggerAt;set(Calendar.HOUR_OF_DAY,seeded!!.reminderHour);set(Calendar.MINUTE,seeded.reminderMinute) } else { set(Calendar.HOUR_OF_DAY,9);set(Calendar.MINUTE,0) } }
+    val now = remember(initial) {
+        Calendar.getInstance().apply {
+            if (initial != null && seeded != null) {
+                timeInMillis = initial.firstTriggerAt
+                set(Calendar.HOUR_OF_DAY, seeded.reminderHour)
+                set(Calendar.MINUTE, seeded.reminderMinute)
+            } else {
+                set(Calendar.HOUR_OF_DAY, 9)
+                set(Calendar.MINUTE, 0)
+            }
+        }
+    }
     var triggerYear by remember { mutableIntStateOf(now.get(Calendar.YEAR)) }
     var triggerMonth by remember { mutableIntStateOf(now.get(Calendar.MONTH) + 1) }
     var triggerDay by remember { mutableIntStateOf(now.get(Calendar.DAY_OF_MONTH)) }
     var triggerHour by remember { mutableIntStateOf(now.get(Calendar.HOUR_OF_DAY)) }
     var triggerMinute by remember { mutableIntStateOf(now.get(Calendar.MINUTE)) }
-
-    // 下拉展开状态
-    var dateTypeExpanded by remember { mutableStateOf(false) }
-    var holidayExpanded by remember { mutableStateOf(false) }
-    var rulePeriodExpanded by remember { mutableStateOf(false) }
-    var ruleWeekExpanded by remember { mutableStateOf(false) }
-
-    // 日期/时间选择弹窗状态
     var showDateDialog by remember { mutableStateOf(false) }
     var showTimeDialog by remember { mutableStateOf(false) }
 
     fun scheduleValues(): List<Any?> = listOf(
-        isDateMode,isRuleMode,if(!isDateMode && !isRuleMode) selectedCycle else null,
-        if(selectedCycle==Cycle.CUSTOM) customDays else 0,weeklyWeekday,
-        if(isDateMode) selectedDateType else null,if(isDateMode) targetMonth else null,
-        if(isDateMode || selectedCycle==Cycle.MONTHLY) targetDay else null,if(isDateMode) selectedHolidayName else null,
-        if(isRuleMode) rulePeriod else null,if(isRuleMode) ruleWeek else null,if(isRuleMode) ruleWeekday else null,
-        if(!isDateMode && !isRuleMode) triggerYear else 0,if(!isDateMode && !isRuleMode) triggerMonth else 0,
-        if(!isDateMode && !isRuleMode) triggerDay else 0,triggerHour,triggerMinute,holidayAware)
-    val originalSchedule=remember { scheduleValues() }
+        isDateMode, isRuleMode, if (!isDateMode && !isRuleMode) selectedCycle else null,
+        if (selectedCycle == Cycle.CUSTOM) customDays else 0, weeklyWeekday,
+        if (isDateMode) selectedDateType else null, if (isDateMode) targetMonth else null,
+        if (isDateMode || selectedCycle == Cycle.MONTHLY) targetDay else null,
+        if (isDateMode) selectedHolidayName else null,
+        if (isRuleMode) rulePeriod else null, if (isRuleMode) ruleWeek else null,
+        if (isRuleMode) ruleWeekday else null,
+        if (!isDateMode && !isRuleMode) triggerYear else 0,
+        if (!isDateMode && !isRuleMode) triggerMonth else 0,
+        if (!isDateMode && !isRuleMode) triggerDay else 0,
+        triggerHour, triggerMinute, holidayAware
+    )
+    val originalSchedule = remember { scheduleValues() }
 
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val scope = rememberCoroutineScope()
-
-    // H2 + I6: 关键提醒需要「全屏弹窗」(Android14+) 与「勿扰访问」两项权限；
-    // 首次开启关键提醒时若任一未授予，弹引导对话框（用户需在设置中手动开启）。
-    fun ensureCriticalPermissions() {
-        val nm = context.getSystemService(NotificationManager::class.java)
-        val needFullScreen = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
-            (nm == null || !nm.canUseFullScreenIntent())
-        // I6: 勿扰访问权限用框架 NotificationManager（核心库 NotificationManagerCompat 该属性在
-        // 本项目 core 版本未暴露）；nm 可空，null 时视为需引导。
-        val needPolicy = nm?.isNotificationPolicyAccessGranted != true
-        if (needFullScreen || needPolicy) {
-            showFullScreenPermissionDialog = true
-        }
-    }
-
-    fun buildFirstTriggerAt(): Long {
-        val cal = Calendar.getInstance()
-        // v1.9.6 fix: 每月X号锚点必须用 targetDay（自然语言「每月15号」不能落在今天日期）。
-        // 从今天起逐月找「有 targetDay 且时间在未来」的月份作为锚点，
-        // 避免锚点被钳到短月末（2月31号→28号）导致永久漂移。
-        if (selectedCycle == Cycle.MONTHLY && !isDateMode && !isRuleMode && targetDay in 1..31) {
-            var tries = 0
-            while (tries < 12) {
-                val maxD = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-                if (targetDay <= maxD) {
-                    cal.set(Calendar.DAY_OF_MONTH, targetDay)
-                    cal.set(Calendar.HOUR_OF_DAY, triggerHour)
-                    cal.set(Calendar.MINUTE, triggerMinute)
-                    cal.set(Calendar.SECOND, 0)
-                    cal.set(Calendar.MILLISECOND, 0)
-                    if (cal.timeInMillis > System.currentTimeMillis()) return cal.timeInMillis
-                }
-                cal.add(Calendar.MONTH, 1)
-                tries++
-            }
-        }
-        cal.set(triggerYear, triggerMonth - 1, triggerDay, triggerHour, triggerMinute, 0)
-        cal.set(Calendar.MILLISECOND, 0)
-        // v2.4.1: 每周提醒锚点对齐所选星期（1=周一..7=周日），已过则推到下周
-        if (selectedCycle == Cycle.WEEKLY && weeklyWeekday in 1..7) {
-            val cur = ((cal.get(Calendar.DAY_OF_WEEK) + 5) % 7) + 1
-            var diff = (weeklyWeekday - cur + 7) % 7
-            if (diff == 0 && cal.timeInMillis <= System.currentTimeMillis()) diff = 7
-            cal.add(Calendar.DAY_OF_MONTH, diff)
-        }
-        return cal.timeInMillis
-    }
-
-    fun applyTemplate(tpl: com.reminderapp.service.ReminderTemplate) {
-        title = tpl.title
-        note = tpl.note
-        holidayAware = tpl.holidayAware
+    fun applyTemplate(tpl: ReminderTemplate) {
+        title = tpl.title; note = tpl.note; holidayAware = tpl.holidayAware
         when (tpl.kind) {
-            com.reminderapp.service.ReminderTemplate.Kind.CYCLE -> {
-                isDateMode = false
-                isRuleMode = false
-                selectedCycle = if (tpl.cycle == com.reminderapp.service.ReminderTemplate.Cycle.YEARLY) {
-                    Cycle.YEARLY
-                } else {
-                    Cycle.MONTHLY
-                }
+            ReminderTemplate.Kind.CYCLE -> {
+                isDateMode = false; isRuleMode = false
+                selectedCycle = if (tpl.cycle == ReminderTemplate.Cycle.YEARLY) Cycle.YEARLY else Cycle.MONTHLY
             }
-            com.reminderapp.service.ReminderTemplate.Kind.DATE -> {
-                isDateMode = true
-                isRuleMode = false
-                selectedDateType = if (tpl.dateType == com.reminderapp.service.ReminderTemplate.DateKind.LUNAR_BIRTHDAY) {
+            ReminderTemplate.Kind.DATE -> {
+                isDateMode = true; isRuleMode = false
+                selectedDateType = if (tpl.dateType == ReminderTemplate.DateKind.LUNAR_BIRTHDAY) {
                     DateReminderType.LUNAR_BIRTHDAY
-                } else {
-                    DateReminderType.SOLAR_BIRTHDAY
-                }
-                selectedCycle = Cycle.YEARLY
-                advanceDays = tpl.advanceDays
+                } else DateReminderType.SOLAR_BIRTHDAY
+                selectedCycle = Cycle.YEARLY; advanceDays = tpl.advanceDays
             }
         }
     }
 
-    Scaffold(
-        containerColor = softCanvas(),
-        topBar = {
-            TopAppBar(
-                title = { Text(zh(if (initial != null && initial.id > 0L) "编辑提醒" else "新建提醒")) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = zh("返回"))
-                    }
-                },
-                actions = {
-                    TextButton(
-                        onClick = {
-                            if (title.isBlank()) return@TextButton
-                            // v1.9.6 fix: date 模式必须选类型、holiday 必须选节日名——
-                            // 否则 computeDateForYear 返回 null → 一年后随机时刻触发的幽灵提醒
-                            if (isDateMode && selectedDateType == null) {
-                                android.widget.Toast.makeText(
-                                    context,
-                                    zh("请选择日期类型（公历生日/农历生日/节假日）"),
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
-                                return@TextButton
-                            }
-                            if (isDateMode && selectedDateType == DateReminderType.HOLIDAY && selectedHolidayName.isNullOrBlank()) {
-                                android.widget.Toast.makeText(
-                                    context,
-                                    zh("请选择节假日"),
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
-                                return@TextButton
-                            }
-
-                            val firstTrigger = buildFirstTriggerAt()
-
-                            val entity = if (isDateMode) {
-                                ReminderEntity(
-                                    kind = "date",
-                                    cycle = "yearly",
-                                    dateType = selectedDateType?.name?.lowercase(),
-                                    targetMonth = targetMonth,
-                                    targetDay = targetDay,
-                                    holidayName = selectedHolidayName,
-                                    holidayId = com.reminderapp.service.HolidayService.allHolidays.find { it.name == selectedHolidayName }?.id,
-                                    advanceDays = advanceDays,
-                                    // P1 修复：date-mode 之前漏存用户选的钟点，
-                                    // 实体默认 09:00；首次触发后 confirm/Worker 重算
-                                    // 每年都在 09:00 响，无视用户挑的时间。
-                                    reminderHour = triggerHour,
-                                    reminderMinute = triggerMinute,
-                                    priority = priority,
-                                    title = title.trim(),
-                                    note = note.trim(),
-                                    firstTriggerAt = firstTrigger,
-                                    nextTriggerAt = firstTrigger,
-                                    isCritical = isCritical,
-                                    holidayAware = holidayAware
-                                )
-                            } else if (isRuleMode) {
-                                ReminderEntity(
-                                    kind = "rule",
-                                    cycle = "monthly",
-                                    rulePeriod = rulePeriod.name.lowercase(),
-                                    ruleWeek = ruleWeek,
-                                    ruleWeekday = ruleWeekday,
-                                    reminderHour = triggerHour,
-                                    reminderMinute = triggerMinute,
-                                    priority = priority,
-                                    title = title.trim(),
-                                    note = note.trim(),
-                                    firstTriggerAt = firstTrigger,
-                                    nextTriggerAt = firstTrigger,
-                                    isCritical = isCritical,
-                                    holidayAware = holidayAware
-                                )
-                            } else {
-                                ReminderEntity(
-                                    kind = "cycle",
-                                    cycle = selectedCycle.name.lowercase(),
-                                    customDays = customDays,
-                                    priority = priority,
-                                    title = title.trim(),
-                                    note = note.trim(),
-                                    firstTriggerAt = firstTrigger,
-                                    nextTriggerAt = firstTrigger,
-                                    isCritical = isCritical,
-                                    holidayAware = holidayAware,
-                                    weeklyWeekday = if (selectedCycle == Cycle.WEEKLY) weeklyWeekday.takeIf { it in 1..7 } else null
-                                )
-                            }
-
-                            val baseTitle = title.trim()
-                            val cleanTitle = baseTitle.removeSuffix("（公历）").removeSuffix("(公历)").trim().ifBlank { baseTitle }
-                            val lunarPair = if (nlDualBirthday) parseLunarMonthDayFromText(nlText) else null
-                            val isDualSave = nlDualBirthday && entity.kind == "date" && entity.dateType == "solar_birthday" && lunarPair != null && (initial == null || initial.id <= 0L)
-                            val primaryBase = if (isDualSave && !baseTitle.endsWith("（公历）")) "$cleanTitle（公历）" else baseTitle
-                            val proposed = entity.copy(
-                                title = primaryBase,
-                                reminderHour = triggerHour,
-                                reminderMinute = triggerMinute,
-                                recurrenceMode = policy.recurrenceMode,
-                                reminderStyle = policy.reminderStyle,
-                                isCritical = policy.reminderStyle == "important",
-                                retryIntervalsMinutes = policy.retryIntervalsMinutes,
-                                maxReminderAttempts = policy.maxReminderAttempts,
-                                quietStartMinute = policy.quietStartMinute,
-                                quietEndMinute = policy.quietEndMinute
-                            )
-                            val mappedPrimary = com.reminderapp.service.ReminderEditorMapper.map(
-                                initial,
-                                proposed,
-                                scheduleValues() != originalSchedule,
-                                System.currentTimeMillis()
-                            ) { reminder, from ->
-                                com.reminderapp.service.ReminderEngine.calculateNextTrigger(reminder, context, from)
-                            }
-                            if (isDualSave && lunarPair != null) {
-                                val (lmM, lmD) = lunarPair
-                                val lunarDraft = proposed.copy(
-                                    id = 0L,
-                                    syncId = null,
-                                    title = "$cleanTitle（农历）",
-                                    dateType = "lunar_birthday",
-                                    targetMonth = lmM,
-                                    targetDay = lmD
-                                )
-                                val lunarTrigger = com.reminderapp.service.ReminderEngine.calculateNextTrigger(lunarDraft, context)
-                                nlExtraLunar = lunarDraft.copy(
-                                    firstTriggerAt = lunarTrigger,
-                                    nextTriggerAt = lunarTrigger
-                                )
-                            } else {
-                                nlExtraLunar = null
-                            }
-                            saving = true
-                            val extra = nlExtraLunar
-                            nlExtraLunar = null
-                            if (extra != null && onSaveAll != null) {
-                                onSaveAll(listOf(mappedPrimary, extra))
-                            } else {
-                                onSave(mappedPrimary)
-                                if (extra != null) onSave(extra)
-                            }
-                        },
-                        enabled = title.isNotBlank() && !saving && policyValid
-                    ) {
-                        Text(zh("保存"), color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-            )
+    fun performSave() {
+        if (title.isBlank()) return
+        if (isDateMode && selectedDateType == null) {
+            Toast.makeText(context, zh("请选择日期类型（公历生日/农历生日/节假日）"), Toast.LENGTH_SHORT).show()
+            return
         }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(scrollState)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            if(!com.reminderapp.service.ReminderScheduler(context).canScheduleExact()) Text(zh("当前为非精确提醒，可能延迟。可在设置 → 提醒诊断中授权精确闹钟。"),style=MaterialTheme.typography.bodySmall)
-            if(!androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()) Text(zh("通知未开启。保存后请到设置 → 提醒诊断中开启通知并测试。"),style=MaterialTheme.typography.bodySmall)
-            Text(if(initial?.id != null && initial.id > 0) zh("编辑提醒") else zh("检查规则后保存"),style=MaterialTheme.typography.titleMedium)
-            // === 模板 ===
-            Text(zh("从模板开始"), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                com.reminderapp.service.ReminderTemplate.all.forEach { tpl ->
-                    AssistChip(
-                        onClick = { applyTemplate(tpl) },
-                        label = { Text(tpl.title) },
-                        modifier = Modifier.testTag("reminder-template-${tpl.id}")
-                    )
-                }
-            }
-            Text(
-                zh("一键填入标题和周期，保存前仍可改。"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            // === 自然语言快速创建 ===
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.AutoAwesome,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            zh("一句话创建"),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    }
-                    OutlinedTextField(
-                        value = nlText,
-                        onValueChange = { nlText = it; nlHint = null; nlError = false },
-                        placeholder = { Text(zh("明天下午3点开会 / 每周一9点晨会 / 农历8月15 中秋")) },
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 2
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Button(
-                            onClick = {
-                                val p = NaturalDateParser.parse(nlText)
-                                if (p == null) {
-                                    nlError = true
-                                    nlHint = zh("没听懂，换个说法试试～")
-                                } else {
-                                    nlError = false
-                                    // 标题
-                                    if (title.isBlank()) title = p.title
-                                    // 触发时间
-                                    val c = Calendar.getInstance().apply { timeInMillis = p.nextTriggerAt }
-                                    triggerYear = c.get(Calendar.YEAR)
-                                    triggerMonth = c.get(Calendar.MONTH) + 1
-                                    triggerDay = c.get(Calendar.DAY_OF_MONTH)
-                                    triggerHour = c.get(Calendar.HOUR_OF_DAY)
-                                    triggerMinute = c.get(Calendar.MINUTE)
-                                    // 重复模式 → 表单
-                                    when (p.repeatMode) {
-                                        "lunar" -> {
-                                            isDateMode = true; isRuleMode = false
-                                            selectedDateType = DateReminderType.LUNAR_BIRTHDAY
-                                            p.targetMonth?.let { targetMonth = it }
-                                            p.targetDay?.let { targetDay = it }
-                                        }
-                                        "yearly" -> {
-                                            if (p.dateType == "solar_birthday") {
-                                                isDateMode = true; isRuleMode = false
-                                                selectedDateType = DateReminderType.SOLAR_BIRTHDAY
-                                                p.targetMonth?.let { targetMonth = it }
-                                                p.targetDay?.let { targetDay = it }
-                                            } else {
-                                                isDateMode = false; isRuleMode = false
-                                                selectedCycle = Cycle.YEARLY
-                                            }
-                                        }
-                                        "daily" -> {
-                                            isDateMode = false; isRuleMode = false
-                                            selectedCycle = Cycle.DAILY
-                                        }
-                                        "weekly" -> {
-                                            isDateMode = false; isRuleMode = false
-                                            selectedCycle = Cycle.WEEKLY
-                                            // v2.4.9: 对齐 AI——「每周日」自动填星期
-                                            p.weekday?.let { weeklyWeekday = it }
-                                        }
-                                        "quarterly" -> {
-                                            isDateMode = false; isRuleMode = false
-                                            selectedCycle = Cycle.QUARTERLY
-                                        }
-                                        "biweekly" -> {
-                                            isDateMode = false; isRuleMode = false
-                                            selectedCycle = Cycle.BIWEEKLY
-                                        }
-                                        "monthly" -> {
-                                            isDateMode = false; isRuleMode = false
-                                            selectedCycle = Cycle.MONTHLY
-                                            // v1.9.6 fix: 应用「每月X号」的 targetDay（否则锚点落今天日期）
-                                            val nlDay = p.targetDay; if (nlDay != null && nlDay in 1..31) targetDay = nlDay
-                                        }
-                                        else -> {
-                                            isDateMode = false; isRuleMode = false
-                                            selectedCycle = Cycle.ONCE
-                                        }
-                                    }
-                                    val cycleText = when (p.repeatMode) {
-                                        "lunar" -> zh("农历每年")
-                                        "yearly" -> zh("每年")
-                                        "daily" -> zh("每天")
-                                        "weekly" -> zh("每周")
-                                        "biweekly" -> zh("每两周")
-                                        "quarterly" -> zh("每季度")
-                                        "monthly" -> zh("每月")
-                                        else -> zh("仅一次")
-                                    }
-                                    // v2.4.9: 对齐 AI——事务类自动开启「避开节假日/周末」
-                                    holidayAware = p.holidayAware
-                                    // v2.4.9: 对齐 AI——新历+旧历并存时提示将拆两条创建
-                                    val hasSolar = Regex("""(\d{1,2}|[正冬腊一二三四五六七八九十]{1,3})\s*月\s*(\d{1,2}|[初十廿卅一二三四五六七八九]{1,3})\s*[号日]""").containsMatchIn(nlText)
-                                    val hasLunar = parseLunarMonthDayFromText(nlText) != null
-                                    nlDualBirthday = hasSolar && hasLunar && (initial == null || initial.id <= 0L)
-                                    nlHint = "「${p.title}」· $cycleText · ${p.label}" + (if (nlDualBirthday) " · " + zh("检测到新旧历两个生日，将创建两条") else "") + (if (p.holidayAware) " · " + zh("已开启避开节假日/周末") else "")
-                                }
-                            },
-                            enabled = nlText.isNotBlank()
-                        ) {
-                            Text(zh("智能识别"))
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        nlHint?.let {
-                            Text(
-                                it,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (nlError) MaterialTheme.colorScheme.error
-                                        else MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                        }
-                    }
-                }
-            }
-
-            // 标题
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                label = { Text(zh("标题")) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            // 备注
-            OutlinedTextField(
-                value = note,
-                onValueChange = { note = it },
-                label = { Text(zh("备注（可选）")) },
-                modifier = Modifier.fillMaxWidth(),
-                maxLines = 3
-            )
-
-            // 提醒类型切换
-            Text(zh("提醒类型"), style = MaterialTheme.typography.labelLarge)
-            Row {
-                FilterChip(
-                    selected = !isDateMode && !isRuleMode,
-                    onClick = { isDateMode = false; isRuleMode = false },
-                    label = { Text(zh("周期提醒")) },
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-                FilterChip(
-                    selected = isDateMode,
-                    onClick = { isDateMode = true; isRuleMode = false },
-                    label = { Text(zh("日期提醒")) },
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-                FilterChip(
-                    selected = isRuleMode,
-                    onClick = { isDateMode = false; isRuleMode = true },
-                    label = { Text(zh("规则提醒")) }
-                )
-            }
-
-            if (isRuleMode) {
-                // === 规则提醒：每月/每季度/每年 第N周 周X ===
-                Text(zh("频率"), style = MaterialTheme.typography.labelLarge)
-                ExposedDropdownMenuBox(
-                    expanded = rulePeriodExpanded,
-                    onExpandedChange = { rulePeriodExpanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = rulePeriod.label,
-                        onValueChange = {},
-                        readOnly = true,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = rulePeriodExpanded) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = rulePeriodExpanded,
-                        onDismissRequest = { rulePeriodExpanded = false }
-                    ) {
-                        RulePeriod.entries.forEach { period ->
-                            DropdownMenuItem(
-                                text = { Text(period.label) },
-                                onClick = {
-                                    rulePeriod = period
-                                    rulePeriodExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                Text(zh("第几周"), style = MaterialTheme.typography.labelLarge)
-                ExposedDropdownMenuBox(
-                    expanded = ruleWeekExpanded,
-                    onExpandedChange = { ruleWeekExpanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = weekLabels.getOrElse(ruleWeek - 1) { zhf("第%s周", ruleWeek) },
-                        onValueChange = {},
-                        readOnly = true,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = ruleWeekExpanded) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = ruleWeekExpanded,
-                        onDismissRequest = { ruleWeekExpanded = false }
-                    ) {
-                        (1..5).forEach { w ->
-                            DropdownMenuItem(
-                                text = { Text(zhf("第%s周", w)) },
-                                onClick = {
-                                    ruleWeek = w
-                                    ruleWeekExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // v2.5.0 星期灯泡：点亮=选中（金色光晕+金底），熄灭=灰色；仍写 ruleWeekday
-                Text(zh("星期几"), style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    (1..7).forEach { w ->
-                        WeekdayBulb(
-                            label = weekdayLabels[w - 1],
-                            isOn = ruleWeekday == w,
-                            onClick = { ruleWeekday = w },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            } else if (!isDateMode) {
-                // === 周期提醒 ===
-                // v2.5.0 治愈游戏化：emoji 卡片网格（选中=彩虹描边+紫渐变底+spring 放大）
-                Text(zh("周期"), style = MaterialTheme.typography.labelLarge)
-                val cycleOptions = listOf(
-                    Cycle.ONCE to Icons.Default.Alarm,
-                    Cycle.DAILY to Icons.Default.WbSunny,
-                    Cycle.WEEKLY to Icons.Default.DateRange,
-                    Cycle.BIWEEKLY to Icons.Default.EventRepeat,
-                    Cycle.MONTHLY to Icons.Default.CalendarMonth,
-                    Cycle.QUARTERLY to Icons.Default.Explore,
-                    Cycle.YEARLY to Icons.Default.Cake,
-                    Cycle.CUSTOM to Icons.Default.Tune
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    cycleOptions.chunked(4).forEach { rowOptions ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            rowOptions.forEach { (option, icon) ->
-                                CycleOptionCard(
-                                    icon = icon,
-                                    label = if (option == Cycle.CUSTOM) zh("自定义") else option.label,
-                                    isSelected = selectedCycle == option,
-                                    onClick = { selectedCycle = option },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // 功能8 智能频率建议入口
-                Button(
-                    onClick = {
-                        suggestionText = null
-                        scope.launch(Dispatchers.IO) {
-                            val db = ReminderApp.instance.database
-                            val all = db.reminderDao().getAllSyncBlocking()
-                            val recs = db.reminderRecordDao().getAll()
-                            val confirmByReminder = recs
-                                .filter { it.action == ReminderRecordEntity.ACTION_CONFIRMED }
-                                .groupBy { it.reminderId }
-                                .mapValues { (_, v) -> v.map { it.timestamp } }
-                            val s = FrequencySuggester.suggest(title, all, confirmByReminder)
-                            withContext(Dispatchers.Main) {
-                                selectedCycle = s.cycle
-                                customDays = s.customDays
-                                suggestionText = s.reason
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Filled.AutoAwesome, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text(zh("智能建议频率"))
-                }
-                suggestionText?.let {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-
-                if (selectedCycle == Cycle.WEEKLY) {
-                    // v2.4.1: 每周几（默认今天；明确选择后锚点对齐，修复周日错位）
-                    Text(zh("星期几（可选）"), style = MaterialTheme.typography.labelLarge)
-                    ExposedDropdownMenuBox(
-                        expanded = weeklyWeekdayExpanded,
-                        onExpandedChange = { weeklyWeekdayExpanded = it }
-                    ) {
-                        OutlinedTextField(
-                            value = if (weeklyWeekday == 0) zh("今天") else weekdayLabels.getOrElse(weeklyWeekday - 1) { "" },
-                            onValueChange = {},
-                            readOnly = true,
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = weeklyWeekdayExpanded) },
-                            modifier = Modifier.fillMaxWidth().menuAnchor()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = weeklyWeekdayExpanded,
-                            onDismissRequest = { weeklyWeekdayExpanded = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text(zh("今天")) },
-                                onClick = { weeklyWeekday = 0; weeklyWeekdayExpanded = false }
-                            )
-                            (1..7).forEach { w ->
-                                DropdownMenuItem(
-                                    text = { Text(weekdayLabels[w - 1]) },
-                                    onClick = { weeklyWeekday = w; weeklyWeekdayExpanded = false }
-                                )
-                            }
-                        }
-                    }
-                }
-                if (selectedCycle == Cycle.CUSTOM) {
-                    OutlinedTextField(
-                        value = customDaysText,
-                        onValueChange = { input ->
-                            val filtered = input.filter(Char::isDigit).take(4)
-                            customDaysText = filtered
-                            filtered.toIntOrNull()?.let { customDays = maxOf(1, it) }
-                        },
-                        label = { Text(zh("自定义天数")) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                }
-            } else {
-                // === 日期提醒 ===
-                Text(zh("日期类型"), style = MaterialTheme.typography.labelLarge)
-                ExposedDropdownMenuBox(
-                    expanded = dateTypeExpanded,
-                    onExpandedChange = { dateTypeExpanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = selectedDateType?.label ?: zh("请选择"),
-                        onValueChange = {},
-                        readOnly = true,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dateTypeExpanded) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = dateTypeExpanded,
-                        onDismissRequest = { dateTypeExpanded = false }
-                    ) {
-                        DateReminderType.entries.forEach { type ->
-                            DropdownMenuItem(
-                                text = { Text(type.label) },
-                                onClick = {
-                                    selectedDateType = type
-                                    dateTypeExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                when {
-                    selectedDateType == DateReminderType.HOLIDAY -> {
-                        ExposedDropdownMenuBox(
-                            expanded = holidayExpanded,
-                            onExpandedChange = { holidayExpanded = it }
-                        ) {
-                            OutlinedTextField(
-                                value = selectedHolidayName ?: zh("选择节日"),
-                                onValueChange = {},
-                                readOnly = true,
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = holidayExpanded) },
-                                modifier = Modifier.fillMaxWidth().menuAnchor()
-                            )
-                            ExposedDropdownMenu(
-                                expanded = holidayExpanded,
-                                onDismissRequest = { holidayExpanded = false }
-                            ) {
-                                HolidayService.allHolidays.forEach { holiday ->
-                                    DropdownMenuItem(
-                                        text = { Text("${holiday.name}（${if (holiday.isLunar) "农历" else "公历"}）") },
-                                        onClick = {
-                                            selectedHolidayName = holiday.name
-                                            targetMonth = holiday.month
-                                            targetDay = holiday.day
-                                            holidayExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    selectedDateType == DateReminderType.LUNAR_BIRTHDAY -> {
-                        Text(zh("农历月日"), style = MaterialTheme.typography.labelLarge)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = targetMonthText,
-                                onValueChange = { input ->
-                                    val filtered = input.filter(Char::isDigit).take(2)
-                                    targetMonthText = filtered
-                                    filtered.toIntOrNull()?.let { targetMonth = it.coerceIn(1, 12) }
-                                },
-                                label = { Text(zh("月")) },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-                            OutlinedTextField(
-                                value = targetDayText,
-                                onValueChange = { input ->
-                                    val filtered = input.filter(Char::isDigit).take(2)
-                                    targetDayText = filtered
-                                    filtered.toIntOrNull()?.let { targetDay = it.coerceIn(1, 30) }
-                                },
-                                label = { Text(zh("日")) },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-                        }
-                        // 显示当年对应的公历日期
-                        val solarDate = remember(targetMonth, targetDay, triggerYear) {
-                            LunarCalendar.lunarToSolar(triggerYear, targetMonth, targetDay)
-                        }
-                        if (solarDate != null) {
-                            val sdf = java.text.SimpleDateFormat(zh("yyyy年MM月dd日"), Locale.getDefault())
-                            Text(
-                                zhf("%1\$s年对应公历：%2\$s", triggerYear, sdf.format(Date(solarDate))),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    else -> {
-                        Text(zh("月日"), style = MaterialTheme.typography.labelLarge)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = targetMonthText,
-                                onValueChange = { input ->
-                                    val filtered = input.filter(Char::isDigit).take(2)
-                                    targetMonthText = filtered
-                                    filtered.toIntOrNull()?.let { targetMonth = it.coerceIn(1, 12) }
-                                },
-                                label = { Text(zh("月")) },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-                            OutlinedTextField(
-                                value = targetDayText,
-                                onValueChange = { input ->
-                                    val filtered = input.filter(Char::isDigit).take(2)
-                                    targetDayText = filtered
-                                    filtered.toIntOrNull()?.let { targetDay = it.coerceIn(1, 31) }
-                                },
-                                label = { Text(zh("日")) },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-                        }
-                    }
-                }
-
-                // 提前提醒天数
-                Text(zh("提前提醒"), style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(1, 3, 7, 14, 30).forEach { days ->
-                        FilterChip(
-                            selected = advanceDays == days,
-                            onClick = { advanceDays = days },
-                            label = { Text(zhf("%s天", days)) }
-                        )
-                    }
-                }
-            }
-
-            // 优先级
-            Text(zh("优先级"), style = MaterialTheme.typography.labelLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(
-                    Triple("high", "高", Color(0xFFDC2626)),
-                    Triple("normal", "中", Tokens.BrandPrimary),
-                    Triple("low", "低", Color(0xFF9CA3AF))
-                ).forEach { (key, label, dotColor) ->
-                    FilterChip(
-                        selected = priority == key,
-                        onClick = { priority = key },
-                        leadingIcon = {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(dotColor)
-                            )
-                        },
-                        label = { Text(zh(label)) }
-                    )
-                }
-            }
-
-            // v2.4.8: 避开节假日/周末自动顺延（报税/缴费等工作日事务）
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(zh("避开节假日/周末"), style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            zh("触发日期落在周六日或法定节假日时，自动顺延到下一个工作日再提醒（报税、缴费等需工作日办理的事务用）"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = holidayAware,
-                        onCheckedChange = { holidayAware = it },
-                        modifier = Modifier.semantics {
-                            contentDescription = zh("避开节假日周末开关：触发日期落在周六日或法定节假日时顺延到下一个工作日")
-                        }
-                    )
-                }
-            }
-
-            // 提醒时间
-            Text(zh("提醒时间（点击选择）"), style = MaterialTheme.typography.labelLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Card(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { showDateDialog = true },
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(
-                            zh("日期"),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            zhf("%1\$s年%2\$s月%3\$s日", triggerYear, triggerMonth, triggerDay),
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                    }
-                }
-                Card(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { showTimeDialog = true },
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(
-                            zh("时间"),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            String.format("%02d:%02d", triggerHour, triggerMinute),
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                    }
-                }
-            }
-
-            com.reminderapp.ui.component.ReminderPolicyEditor(policy.copy(kind=if(isDateMode) "date" else if(isRuleMode) "rule" else "cycle",cycle=selectedCycle.name.lowercase()),onChange={policy=it;isCritical=it.isCritical;if(it.isCritical) ensureCriticalPermissions()},onValidityChange={policyValid=it})
-            val previewAnchor=buildFirstTriggerAt()
-            val previewDraft=policy.copy(title=title,kind=if(isDateMode) "date" else if(isRuleMode) "rule" else "cycle",
-                cycle=selectedCycle.name.lowercase(),customDays=customDays,
-                dateType=selectedDateType?.name?.lowercase(),targetMonth=targetMonth,targetDay=targetDay,
-                holidayId=com.reminderapp.service.HolidayService.allHolidays.find { it.name==selectedHolidayName }?.id,holidayName=selectedHolidayName,rulePeriod=rulePeriod.name.lowercase(),ruleWeek=ruleWeek,ruleWeekday=ruleWeekday,
-                reminderHour=triggerHour,reminderMinute=triggerMinute,firstTriggerAt=previewAnchor,nextTriggerAt=previewAnchor,holidayAware=holidayAware)
-            val firstPreview=if(isDateMode || isRuleMode) ReminderEngine.calculateNextTrigger(previewDraft,context) else previewAnchor
-            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer,androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                Text(zh("提醒预览"),style=MaterialTheme.typography.titleSmall)
-                ReminderEngine.futureTriggers(previewDraft.copy(nextTriggerAt=firstPreview),count=3,context=context).forEachIndexed { index,date ->
-                    Text(com.reminderapp.i18n.zhf("第 %s 次周期 · %s",index+1,java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM,java.text.DateFormat.SHORT).format(java.util.Date(date))))
-                }
-                if(previewDraft.reminderStyle!="gentle") {
-                    var retryAt=com.reminderapp.service.ReminderPolicy.adjustQuiet(previewDraft,firstPreview)
-                    val gaps=com.reminderapp.service.ReminderPolicy.intervals(previewDraft)
-                    for(index in 0 until minOf(3,previewDraft.maxReminderAttempts-1)) {
-                        retryAt=com.reminderapp.service.ReminderPolicy.adjustQuiet(previewDraft,retryAt+gaps[minOf(index,gaps.lastIndex)]*60000L)
-                        val formatted = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(retryAt))
-                        Text(formatted + com.reminderapp.i18n.zhf(" · 第%s次重试", index + 1), style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-                Text(zh("按设备日历计算；更换时区不改写原始时间戳，请检查下次时间。预览假设按时确认，节假日数据更新后可能调整。"),style=MaterialTheme.typography.bodySmall)
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
+        if (isDateMode && selectedDateType == DateReminderType.HOLIDAY && selectedHolidayName.isNullOrBlank()) {
+            Toast.makeText(context, zh("请选择节假日"), Toast.LENGTH_SHORT).show()
+            return
         }
-
-        // 日期选择弹窗
-        if (showDateDialog) {
-            val initialMillis = Calendar.getInstance().apply {
-                set(triggerYear, triggerMonth - 1, triggerDay)
-            }.timeInMillis
-            val dateState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
-            DatePickerDialog(
-                onDismissRequest = { showDateDialog = false },
-                confirmButton = {
-                    TextButton(onClick = {
-                        dateState.selectedDateMillis?.let { millis ->
-                            val cal = Calendar.getInstance().apply { timeInMillis = millis }
-                            triggerYear = cal.get(Calendar.YEAR)
-                            triggerMonth = cal.get(Calendar.MONTH) + 1
-                            triggerDay = cal.get(Calendar.DAY_OF_MONTH)
-                            if(selectedCycle==Cycle.MONTHLY && !isDateMode && !isRuleMode) targetDay=triggerDay
-                        }
-                        showDateDialog = false
-                    }) { Text(zh("确定")) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showDateDialog = false }) { Text(zh("取消")) }
-                }
-            ) {
-                DatePicker(state = dateState)
-            }
-        }
-
-        // 时间选择弹窗
-        if (showTimeDialog) {
-            val timeState = rememberTimePickerState(
-                initialHour = triggerHour,
-                initialMinute = triggerMinute
-            )
-            AlertDialog(
-                onDismissRequest = { showTimeDialog = false },
-                confirmButton = {
-                    TextButton(onClick = {
-                        triggerHour = timeState.hour
-                        triggerMinute = timeState.minute
-                        showTimeDialog = false
-                    }) { Text(zh("确定")) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showTimeDialog = false }) { Text(zh("取消")) }
-                },
-                text = { TimePicker(state = timeState) }
-            )
-        }
-
-        // H2 + I6: 关键提醒全屏 / 勿扰访问权限引导（任一未授予时弹出）
-        if (showFullScreenPermissionDialog) {
-            val nm = context.getSystemService(NotificationManager::class.java)
-            val needFullScreen = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
-                (nm == null || !nm.canUseFullScreenIntent())
-            // I6: 勿扰访问权限用框架 NotificationManager（同上）
-            val needPolicy = nm?.isNotificationPolicyAccessGranted != true
-            AlertDialog(
-                onDismissRequest = { showFullScreenPermissionDialog = false },
-                title = { Text(zh("开启关键提醒所需权限")) },
-                text = {
-                    Text(
-                        zh(
-                            "关键提醒需要以下权限才能正常弹出并穿透勿扰：" +
-                                (if (needFullScreen) "\n· 全屏界面（Android 14+ 默认不授予，需手动开启）" else "") +
-                                (if (needPolicy) "\n· 勿扰访问（允许关键提醒在勿扰模式下响铃）" else "")
-                        )
-                    )
-                },
-                confirmButton = {
-                    if (needFullScreen) {
-                        TextButton(onClick = {
-                            showFullScreenPermissionDialog = false
-                            val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
-                                data = Uri.fromParts("package", context.packageName, null)
-                            }
-                            context.startActivity(intent)
-                        }) { Text(zh("去设置（全屏）")) }
-                    } else if (needPolicy) {
-                        TextButton(onClick = {
-                            showFullScreenPermissionDialog = false
-                            context.startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
-                        }) { Text(zh("去设置（勿扰）")) }
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showFullScreenPermissionDialog = false }) { Text(zh("稍后")) }
-                }
-            )
-        }
+        val firstTrigger = buildEditorFirstTriggerAt(
+            selectedCycle, isDateMode, isRuleMode, targetDay, weeklyWeekday,
+            triggerYear, triggerMonth, triggerDay, triggerHour, triggerMinute
+        )
+        val (mappedPrimary, extraLunar) = buildSavedReminderPair(
+            context = context, initial = initial, scheduleChanged = scheduleValues() != originalSchedule,
+            isDateMode = isDateMode, isRuleMode = isRuleMode, selectedCycle = selectedCycle,
+            customDays = customDays, weeklyWeekday = weeklyWeekday, selectedDateType = selectedDateType,
+            targetMonth = targetMonth, targetDay = targetDay, selectedHolidayName = selectedHolidayName,
+            advanceDays = advanceDays, rulePeriod = rulePeriod, ruleWeek = ruleWeek, ruleWeekday = ruleWeekday,
+            triggerHour = triggerHour, triggerMinute = triggerMinute, priority = priority,
+            title = title, note = note, firstTrigger = firstTrigger, isCritical = isCritical,
+            holidayAware = holidayAware, policy = policy, nlDualBirthday = nlDualBirthday, nlText = nlText
+        )
+        saving = true
+        if (extraLunar != null && onSaveAll != null) onSaveAll(listOf(mappedPrimary, extraLunar))
+        else { onSave(mappedPrimary); if (extraLunar != null) onSave(extraLunar) }
     }
-}
 
-/**
- * v2.5.0 周期选择卡片：emoji + 标签；选中 = sweepGradient 彩虹描边 + 紫渐变底 + spring 1.05 放大。
- * 仅展示层，选择仍写原 selectedCycle 状态。
- */
-@Composable
-private fun CycleOptionCard(icon: ImageVector, label: String, isSelected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Column(
-        modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (isSelected) Tokens.BrandPrimary.copy(alpha = if (isSoftDark()) 0.22f else 0.12f) else softSurface())
-            .border(
-                width = 1.dp,
-                color = if (isSelected) Tokens.BrandPrimary else softBorder(),
-                shape = RoundedCornerShape(14.dp)
-            )
-            .clickable(onClick = onClick, onClickLabel = label)
-            .padding(vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(5.dp)
+        modifier = Modifier.fillMaxSize().background(colors.canvas).navigationBarsPadding()
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (isSelected) Tokens.BrandPrimary else softMuted(),
-            modifier = Modifier.size(20.dp)
+        ComicTopBar(
+            title = zh(if (initial != null && initial.id > 0L) "编辑提醒" else "新建提醒"),
+            onBack = onBack,
+            backText = zh("取消"),
+            trailing = {
+                ComicButton(
+                    text = zh("保存"),
+                    onClick = ::performSave,
+                    enabled = title.isNotBlank() && !saving && policyValid,
+                    cut = 5.5.dp,
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 7.dp),
+                    fontSize = 13.5.sp
+                )
+            }
         )
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            color = if (isSelected) Tokens.BrandPrimary else softText(),
-            maxLines = 2
-        )
-    }
-}
 
-private fun parseLunarMonthDayFromText(text: String): Pair<Int, Int>? {
-    val m = Regex("""(?:农历|旧历|阴历)\s*(?:闰)?\s*([正冬腊一二三四五六七八九十\d]{1,3})\s*月\s*([初十廿卅一二三四五六七八九\d]{1,3})\s*[日号]?""").find(text)
-        ?: return null
-    val month = parseChineseNumeral(m.groupValues[1], isMonth = true)?.coerceIn(1, 12) ?: return null
-    val day = parseChineseNumeral(m.groupValues[2], isMonth = false)?.coerceIn(1, 30) ?: return null
-    return month to day
-}
+        Column(
+            modifier = Modifier.fillMaxSize().verticalScroll(scrollState)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            if (!ReminderScheduler(context).canScheduleExact()) {
+                Text(zh("当前为非精确提醒，可能延迟。可在设置 → 提醒诊断中授权精确闹钟。"), color = colors.warn, fontSize = 12.sp)
+            }
+            if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+                Text(zh("通知未开启。保存后请到设置 → 提醒诊断中开启通知并测试。"), color = colors.danger, fontSize = 12.sp)
+            }
 
-private fun parseChineseNumeral(raw: String, isMonth: Boolean): Int? {
-    val token = raw.trim()
-    token.toIntOrNull()?.let { return it }
-    if (isMonth) {
-        when (token) {
-            "正" -> return 1
-            "冬" -> return 11
-            "腊" -> return 12
+            EditorQuickAndTemplatesStrip(
+                nlText = nlText,
+                onNlTextChange = { nlText = it; nlHint = null; nlError = false },
+                nlHint = nlHint,
+                nlError = nlError,
+                onParseNl = {
+                    val parsed = parseEditorNaturalLanguage(nlText, title, selectedDateType, initial == null || initial.id <= 0L)
+                    if (parsed == null) {
+                        nlError = true; nlHint = zh("没听懂，换个说法试试～")
+                    } else {
+                        nlError = false; title = parsed.title
+                        triggerYear = parsed.triggerYear; triggerMonth = parsed.triggerMonth; triggerDay = parsed.triggerDay
+                        triggerHour = parsed.triggerHour; triggerMinute = parsed.triggerMinute
+                        isDateMode = parsed.isDateMode; isRuleMode = parsed.isRuleMode
+                        selectedCycle = parsed.selectedCycle; selectedDateType = parsed.selectedDateType
+                        parsed.targetMonth?.let { targetMonth = it }
+                        parsed.targetDay?.let { if (it in 1..31) targetDay = it }
+                        parsed.weeklyWeekday?.let { weeklyWeekday = it }
+                        holidayAware = parsed.holidayAware
+                        nlDualBirthday = parsed.dualBirthday; nlHint = parsed.hint
+                    }
+                },
+                onApplyTemplate = ::applyTemplate
+            )
+
+            EditorMainCard(
+                title = title, onTitleChange = { title = it },
+                note = note, onNoteChange = { note = it },
+                isDateMode = isDateMode, isRuleMode = isRuleMode,
+                onModeChange = { d, r -> isDateMode = d; isRuleMode = r },
+                selectedCycle = selectedCycle, onCycleChange = { selectedCycle = it },
+                weeklyWeekday = weeklyWeekday, onWeeklyWeekdayChange = { weeklyWeekday = it },
+                customDaysText = customDaysText,
+                onCustomDaysTextChange = { input ->
+                    val filtered = input.filter(Char::isDigit).take(4)
+                    customDaysText = filtered; filtered.toIntOrNull()?.let { customDays = maxOf(1, it) }
+                },
+                suggestionText = suggestionText,
+                onSuggestFrequency = {
+                    suggestionText = null
+                    scope.launch(Dispatchers.IO) {
+                        val db = ReminderApp.instance.database
+                        val all = db.reminderDao().getAllSyncBlocking()
+                        val confirmByReminder = db.reminderRecordDao().getAll()
+                            .filter { it.action == ReminderRecordEntity.ACTION_CONFIRMED }
+                            .groupBy { it.reminderId }.mapValues { (_, v) -> v.map { it.timestamp } }
+                        val s = FrequencySuggester.suggest(title, all, confirmByReminder)
+                        withContext(Dispatchers.Main) {
+                            selectedCycle = s.cycle; customDays = s.customDays; suggestionText = s.reason
+                        }
+                    }
+                },
+                selectedDateType = selectedDateType, onDateTypeChange = { selectedDateType = it },
+                selectedHolidayName = selectedHolidayName,
+                onHolidaySelect = { name, m, d -> selectedHolidayName = name; targetMonth = m; targetDay = d },
+                targetMonthText = targetMonthText,
+                onTargetMonthTextChange = { input ->
+                    val filtered = input.filter(Char::isDigit).take(2)
+                    targetMonthText = filtered; filtered.toIntOrNull()?.let { targetMonth = it.coerceIn(1, 12) }
+                },
+                targetDayText = targetDayText,
+                onTargetDayTextChange = { input ->
+                    val filtered = input.filter(Char::isDigit).take(2)
+                    targetDayText = filtered
+                    val maxD = if (selectedDateType == DateReminderType.LUNAR_BIRTHDAY) 30 else 31
+                    filtered.toIntOrNull()?.let { targetDay = it.coerceIn(1, maxD) }
+                },
+                targetMonth = targetMonth, targetDay = targetDay,
+                advanceDays = advanceDays, onAdvanceDaysChange = { advanceDays = it },
+                rulePeriod = rulePeriod, onRulePeriodChange = { rulePeriod = it },
+                ruleWeek = ruleWeek, onRuleWeekChange = { ruleWeek = it },
+                ruleWeekday = ruleWeekday, onRuleWeekdayChange = { ruleWeekday = it },
+                triggerYear = triggerYear, triggerMonth = triggerMonth, triggerDay = triggerDay,
+                triggerHour = triggerHour, triggerMinute = triggerMinute,
+                onOpenDatePicker = { showDateDialog = true }, onOpenTimePicker = { showTimeDialog = true },
+                priority = priority, onPriorityChange = { priority = it },
+                holidayAware = holidayAware, onHolidayAwareChange = { holidayAware = it }
+            )
+
+            val previewAnchor = buildEditorFirstTriggerAt(
+                selectedCycle, isDateMode, isRuleMode, targetDay, weeklyWeekday,
+                triggerYear, triggerMonth, triggerDay, triggerHour, triggerMinute
+            )
+            val currentKind = if (isDateMode) "date" else if (isRuleMode) "rule" else "cycle"
+            val previewDraft = policy.copy(
+                title = title, kind = currentKind, cycle = selectedCycle.name.lowercase(), customDays = customDays,
+                dateType = selectedDateType?.name?.lowercase(), targetMonth = targetMonth, targetDay = targetDay,
+                holidayId = HolidayService.allHolidays.find { it.name == selectedHolidayName }?.id,
+                holidayName = selectedHolidayName, rulePeriod = rulePeriod.name.lowercase(),
+                ruleWeek = ruleWeek, ruleWeekday = ruleWeekday, reminderHour = triggerHour, reminderMinute = triggerMinute,
+                firstTriggerAt = previewAnchor, nextTriggerAt = previewAnchor, holidayAware = holidayAware
+            )
+            val firstPreview = if (isDateMode || isRuleMode) ReminderEngine.calculateNextTrigger(previewDraft, context) else previewAnchor
+
+            EditorAdvancedDrawer(
+                expanded = showAdvanced, onToggle = { showAdvanced = !showAdvanced },
+                policyEntity = policy.copy(kind = currentKind, cycle = selectedCycle.name.lowercase()),
+                previewDraft = previewDraft, firstPreview = firstPreview,
+                onPolicyChange = {
+                    policy = it; isCritical = it.isCritical
+                    if (it.isCritical) {
+                        val nm = context.getSystemService(NotificationManager::class.java)
+                        val needFs = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && (nm == null || !nm.canUseFullScreenIntent())
+                        if (needFs || nm?.isNotificationPolicyAccessGranted != true) showFullScreenPermissionDialog = true
+                    }
+                },
+                onValidityChange = { policyValid = it }
+            )
+            Spacer(Modifier.height(24.dp))
         }
     }
-    val digits = mapOf('零' to 0, '一' to 1, '二' to 2, '三' to 3, '四' to 4, '五' to 5, '六' to 6, '七' to 7, '八' to 8, '九' to 9)
-    if (token == "十" || token == "初十") return 10
-    if (token == "二十") return 20
-    if (token == "三十" || token == "卅") return 30
-    if (token.startsWith("初") && token.length == 2) return digits[token[1]]
-    if (token.startsWith("廿")) {
-        if (token.length == 1) return 20
-        if (token.length == 2) return 20 + (digits[token[1]] ?: return null)
-    }
-    if (token.startsWith("十") && token.length == 2) return 10 + (digits[token[1]] ?: return null)
-    if (token.startsWith("二十") && token.length == 3) return 20 + (digits[token[2]] ?: return null)
-    return if (token.length == 1) digits[token[0]] else null
-}
 
-/**
- * v2.5.0 星期灯泡：点亮=选中（金色光晕+金 18% 底），熄灭=灰色 40%。
- * emoji 无法做真灰度，用 alpha 0.4 近似（iOS grayscale 1 + opacity 0.4）。
- */
-@Composable
-private fun WeekdayBulb(label:String,isOn:Boolean,onClick:()->Unit,modifier:Modifier=Modifier) {
-    Box(modifier.heightIn(min=48.dp).clip(RoundedCornerShape(12.dp)).background(if(isOn) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-        .clickable(onClick=onClick,onClickLabel=label),contentAlignment=Alignment.Center) {
-        Text(label,style=MaterialTheme.typography.labelMedium,color=if(isOn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-    }
+    EditorDateTimeAndPermissionDialogs(
+        showDateDialog = showDateDialog, triggerYear = triggerYear, triggerMonth = triggerMonth, triggerDay = triggerDay,
+        onDatePicked = { y, m, d ->
+            triggerYear = y; triggerMonth = m; triggerDay = d
+            if (selectedCycle == Cycle.MONTHLY && !isDateMode && !isRuleMode) targetDay = d
+        },
+        onDismissDate = { showDateDialog = false },
+        showTimeDialog = showTimeDialog, triggerHour = triggerHour, triggerMinute = triggerMinute,
+        onTimePicked = { h, m -> triggerHour = h; triggerMinute = m },
+        onDismissTime = { showTimeDialog = false },
+        showFullScreenPermissionDialog = showFullScreenPermissionDialog,
+        onDismissPermission = { showFullScreenPermissionDialog = false }
+    )
 }
